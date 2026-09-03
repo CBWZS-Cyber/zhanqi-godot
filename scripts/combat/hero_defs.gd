@@ -136,17 +136,17 @@ const ALL := {
 		"death_revive": {"rounds": 1, "hp_pct": 50, "per_game": 1},
 		"skills": {"passive": "nie_pan", "actives": ["wu_xing_zhi_li", "shu_fu_zhi_ling", "zhuan_jia_kui_lei", "wan_jian_gui_zong"]},
 	},
-	# —— 剧情英雄 · 灵虚数影（辛子祺老师不离谱版 · 神秘 4/32/甲0/234；90%闪避/增伤/破甲）——
+	# —— 剧情英雄 · 灵虚数影（辛子祺老师不离谱版 · 神秘 6/32/甲0/234；60%闪避/增伤/破甲）——
 	"ling_xu": {
 		"name": "灵虚数影", "element": "神秘",
-		"hp": 4, "energy": 32, "armor": 0, "speed": 234, "evasion_pct": 90,
+		"hp": 6, "energy": 32, "armor": 0, "speed": 234, "evasion_pct": 60,
 		"skills": {"passive": "shu_yu", "actives": ["tian_ji", "jie_xi", "ji_dian", "shu_hai_teng_nuo"]},
 	},
-	# —— 剧情英雄 · 辛克莱（火 35血/理智体系0..45；数值为草案，待对表确认）——
+	# —— 剧情英雄 · 辛克莱（新表：火 6血/理智机制 上限25/甲1/136）——
 	"xin_kelai": {
 		"name": "辛克莱", "element": "火",
-		"hp": 35, "energy": 0, "energy_max": -1, "armor": 0, "speed": 120,
-		"turn_end_effects": [{"kind": "sanity", "min_gain": 1, "spread": 14}],
+		"hp": 6, "energy": 0, "energy_max": -1, "armor": 1, "speed": 136, "sanity_cap": 25,
+		"turn_end_effects": [{"kind": "sanity", "ratio": 0.3}],
 		"skills": {"passive": "he_bi", "actives": ["po_bu_de_yi", "hei_bai", "zi_wo_destroy", "xuan_zhong"]},
 	},
 

@@ -84,6 +84,7 @@ func _init(def: Dictionary) -> void:
 	_revive_rounds = int(def.get("death_revive", {}).get("rounds", 0))
 	_revive_hp_pct = int(def.get("death_revive", {}).get("hp_pct", 50))
 	_revive_uses = int(def.get("death_revive", {}).get("per_game", 1))
+	sanity_cap = int(def.get("sanity_cap", 45))
 	var sk: Dictionary = def.get("skills", {})
 	var passive_id := str(sk.get("passive", ""))
 	if passive_id != "":
@@ -148,7 +149,8 @@ var _reflect_pct := 0        # 反伤%（阳状态50%）：把所受实际伤害
 var _mitig := {}             # 免伤栈：属性id或"all" -> pct（防守态/血狱等全局）
 var _mitig_att := {}         # 针对攻击者的免伤：攻击者instance_id -> {pct, who}（孤狼锻体按“人”）
 var _invuln := false         # 无敌（rapper 锁血）
-var sanity := 0              # 理智（辛克莱 -45..45，0 初始）
+var sanity := 0              # 理智（辛克莱 上限25 初始0，可为负）
+var sanity_cap := 45         # 理智上限（辛克莱 def sanity_cap=25）
 var _revive_rounds := 0      # 死亡复活回合数（>0 启用死亡复活；仙尊3）
 var _revive_hp_pct := 0
 var _revive_uses := 1
@@ -218,17 +220,15 @@ func _apply_tefx() -> String:
 			add_shield(int(f.get("shield", 1)))
 			out += "；%s 膏腴：回复 %d 生命、%d 护盾" % [name, h, int(f.get("shield", 1))]
 		elif kind == "sanity":
-			# 辛克莱：每回合末回复理智 1~15（越接近 -45 回复越多）
-			var gain := int(f.get("min_gain", 1)) + int(floor(float(45 - sanity) * int(f.get("spread", 14)) / 90.0))
-			gain_sanity(gain)
-			out += "；%s 恢复 %d 理智（现 %d）" % [name, gain, sanity]
-			if sanity <= -45 and not has_flag("sanity_break"):
-				add_flag("sanity_break")
-				out += "，理智失控（下回合无法控制）"
-			elif has_flag("sanity_break") and sanity > -45:
+			if has_flag("sanity_break"):
 				clear_flag("sanity_break")
 				sanity = 0
-				out += "，失控结束，理智归零"
+				out += "；%s 失控回合结束，理智归零" % name
+			else:
+				var deficit := sanity_cap - sanity
+				var gain := ceili(float(maxi(0, deficit)) * float(f.get("ratio", 0.3)))
+				gain_sanity(gain)
+				out += "；%s 回复 30%%缺损理智 +%d（现 %d/%d）" % [name, gain, sanity, sanity_cap]
 	return out
 
 func _tick_timers() -> String:
@@ -358,6 +358,13 @@ func take_damage(amount: int, info := {}) -> Dictionary:
 		if back > 0:
 			attacker.lose_hp(back)
 			result["reflected"] = back
+	# 4b) 重伤：受击后额外受 0.5×层 真伤（每回合末层数-1，见 tick_end）
+	if result["hp_lost"] > 0 and status_stacks("heavy_wound") > 0:
+		var extra := ceili(float(status_stacks("heavy_wound")) * 0.5)
+		var b3 := hp
+		lose_hp(extra)
+		result["hp_lost"] += b3 - hp
+		result["killed"] = not alive
 	# 5) 受击事件（锻体/防守状态机等监听）
 	for ev in hit_events:
 		var cb: Callable = ev
@@ -444,11 +451,13 @@ func set_dmg_mult(v: float) -> void:
 	dmg_mult = v
 
 func lose_sanity(amount: int) -> int:
-	sanity = clampi(sanity - amount, -45, 45)
+	sanity = clampi(sanity - amount, -200, sanity_cap)
+	if sanity < 0:
+		add_flag("sanity_break")   # 使用技能把理智打成负 → 下回合失控（随机放技，由战斗层）
 	return sanity
 
 func gain_sanity(amount: int) -> int:
-	sanity = clampi(sanity + amount, -45, 45)
+	sanity = clampi(sanity + amount, -200, sanity_cap)
 	return sanity
 
 func mark_skill_lost(skill_id: String) -> void:

@@ -268,17 +268,19 @@ const DATA := {
 	"shu_hai_teng_nuo": {"name": "数海腾挪", "element": "神秘", "kind": "ultimate", "energy_cost": 24,
 		"desc": "同时释放天机与解析，且本回合及下回合无法被选中。"},
 
-	# ===== 辛克莱（数值草案待对表）=====
+	# ===== 辛克莱（新表已定稿：理智上限25 初始0，可为负）=====
 	"he_bi": {"name": "何必如此", "element": "火", "kind": "passive",
-		"desc": "每回合末回复 1~15 理智，理智越低回复越高；降至 -45 时失控。"},
+		"desc": "无能量机制，专属理智值（上限25，初始0）。每回合末回复30%缺损理智；使用技能使理智变负时下回合失控（随机放技不分敌我），随后回合末理智归0。"},
 	"po_bu_de_yi": {"name": "迫不得已的审判", "element": "火", "kind": "active", "energy_cost": 0,
-		"desc": "突进两格（战斗层）命中目标：造成 2 点伤害、2 层灼烧；自身理智 -7。"},
-	"hei_bai": {"name": "黑白不分的执行", "element": "物理", "kind": "active", "energy_cost": 0,
-		"desc": "向前冲刺，目标方向敌人越多伤害越高（草案：1+2×途中敌数）；目标获得 2×途中敌数 层流血与 2 层灼烧；理智 -10。"},
-	"zi_wo_destroy": {"name": "自我毁灭的审判", "element": "火", "kind": "active", "energy_cost": 0,
-		"desc": "传送至 5×5 内一点（战斗层），对 3×3 敌人造成 4 伤与 3 层流血；理智 -3.5×命中数。"},
+		"desc": "向一个方向突进2格（战斗层）：穿过棋子则造成 2 点伤害，目标获得烧伤（持续中再获得则刷新时长）；理智 -7。"},
+	"hei_bai": {"name": "黑白不分的执行", "element": "火", "kind": "active", "energy_cost": 0,
+		"desc": "向一个方向快速突进直到碰壁（人或障碍）：对撞到的棋子造成 3 点伤害并施加 2 层重伤；理智 -10。"},
+	"zi_wo_destroy": {"name": "自我毁灭的审判", "element": "物理", "kind": "active", "energy_cost": 0,
+		"desc": "向周围3格内某地点传送（战斗层），对周围格子敌人造成 2 点伤害、施加 3 层重伤；自身失去 3×命中数 理智。"},
 	"xuan_zhong": {"name": "因为我是被选中的", "element": "物理", "kind": "ultimate", "energy_cost": 0,
-		"desc": "冲刺 3 格命中目标：造成其最大生命 15% 的伤害；若其流血≥5 层再施加 5 层灼烧；理智 -15。"},
+		"desc": "向前冲刺3格（战斗层）：对被穿过的棋子造成其已损生命 20% 的真伤；若其身上重伤≥4 层，再施加烧伤；理智 -15。"},
+	# 状态规则（烧伤：速度-10，每回合末1真伤，持续2回合，刷新式。重伤：受击额外 0.5×层真伤，回合末层-1）
+
 
 	# ===== 追猎（孙广泽 · 新版本表；创伤/流血/灼烧体系示范）=====
 	"zhuilie_ymxb": {
@@ -706,16 +708,9 @@ static func tick_action_statuses(u: BattleUnit) -> String:
 	u.lose_hp(b)
 	return "%s 行动触发流血：失去 %d 点生命（%d/%d）" % [u.name, before - u.hp, u.hp, u.max_hp]
 
-## 回合开始触发：灼烧 —— 造成层数伤害后层数 -2
+## 回合开始触发：原灼烧逻辑改为回合末结算（新表备注：每回合末1真伤，持续2回合）
 static func tick_start_of_turn_statuses(u: BattleUnit) -> String:
-	var b := u.status_stacks("burn")
-	if b <= 0:
-		return ""
-	var dmg := b
-	u.set_status("burn", b - 2)
-	var before := u.hp
-	u.lose_hp(dmg)
-	return "%s 被灼烧：失去 %d 点生命，灼烧层 %d→%d" % [u.name, before - u.hp, b, u.status_stacks("burn")]
+	return ""
 
 ## 回合末触发：流血层数 -1；冻伤每回合末 1 真伤
 static func tick_end_of_turn_statuses(u: BattleUnit) -> String:
@@ -729,11 +724,35 @@ static func tick_end_of_turn_statuses(u: BattleUnit) -> String:
 		var before := u.hp
 		u.lose_hp(fz)
 		out += "；%s 受冻伤 %d 真伤" % [u.name, before - u.hp]
+	var bn := u.status_stacks("burn")
+	if bn > 0:
+		var bbefore := u.hp
+		u.lose_hp(1)
+		u.set_status("burn", bn - 1)
+		out += "；%s 被烧伤失去 %d 生命（余 %d 回合）" % [u.name, bbefore - u.hp, bn - 1]
+		if bn - 1 <= 0:
+			u.remove_speed_mod_src("灼烧")
+	var hw := u.status_stacks("heavy_wound")
+	if hw > 0:
+		u.set_status("heavy_wound", hw - 1)
+		out += "；%s 重伤衰减 %d→%d 层" % [u.name, hw, hw - 1]
 	if u.status_stacks("sword_field") > 0:
 		var b2 := u.hp
 		u.lose_hp(2)
 		out += "；%s 受剑域 2 真伤" % u.name
 	return out
+
+## 施加烧伤/灼烧（新表备注：速度-10，每回合末1真伤，持续2回合；再次施加刷新时长）
+static func apply_burn(t: BattleUnit, _stacks := 2) -> void:
+	t.set_speed_mod_src("灼烧", -10)
+	if t.status_stacks("burn") <= 0:
+		t.set_status("burn", _stacks)
+	else:
+		t.set_status("burn", maxi(t.status_stacks("burn"), _stacks))  # 刷新/重置
+
+## 施加重伤（heavy_wound）：受击额外 0.5×层真伤，回合末层-1
+static func apply_heavy_wound(t: BattleUnit, stacks: int) -> void:
+	t.add_status("heavy_wound", stacks)
 
 ## 施加创伤印记（wound）：满 3 层清空并触发「流血2级」
 static func add_wound(t: BattleUnit, n: int) -> String:
@@ -803,8 +822,8 @@ static func _ef_meteor_shot(user: BattleUnit, ctx: Dictionary) -> String:
 			tu.set_status("bleed", 3)
 			out += "，流血升级为3级"
 		else:
-			tu.add_status("burn", 1)
-			out += "，附加灼烧1级"
+			apply_burn(tu, 2)
+			out += "，附加灼烧"
 		tu.remove_armor(1)
 		out += "，护甲-1"
 		hit += 1
@@ -1396,64 +1415,86 @@ static func _ef_shuhai(user: BattleUnit, ctx: Dictionary) -> String:
 	out += "；本回合及下回合无法被选中"
 	return out
 
-## ========== 辛克莱（数值草案）效果 ==========
+## ========== 辛克莱（新表）效果 ==========
 static func _ef_hebi(user: BattleUnit, _ctx: Dictionary) -> String:
-	return "%s 的【何必如此】生效：理智 %d" % [user.name, user.sanity]
+	return "%s 的【何必如此】生效：理智 %d/%d（可为负；失控下回合自动行动）" % [user.name, user.sanity, user.sanity_cap]
 
+## 迫不得已的审判：突进2格穿过目标 → 2伤 + 烧伤（刷新）；理智-7
 static func _ef_pbdy(user: BattleUnit, ctx: Dictionary) -> String:
 	var targets: Array = ctx.get("targets", [])
-	if targets.is_empty():
-		return "%s 释放【迫不得已的审判】（无目标）" % user.name
-	var tu := targets[0] as BattleUnit
-	var r: Dictionary = tu.take_damage(2, {"attacker": user, "element": "火"})
-	tu.add_status("burn", 2)
-	user.lose_sanity(7)
-	return "%s 释放【迫不得已的审判】：%s 受 %d 伤、灼烧+2；理智 -7（现 %d）" % [user.name, tu.name, r["hp_lost"] + r["absorbed"], user.sanity]
-
-static func _ef_heibai(user: BattleUnit, ctx: Dictionary) -> String:
-	var targets: Array = ctx.get("targets", [])
-	var n := targets.size()
-	if n <= 0:
-		return "%s 释放【黑白不分的执行】（无目标）" % user.name
-	var tu := targets[0] as BattleUnit
-	var dmg := 1 + 2 * n
-	var r: Dictionary = tu.take_damage(dmg, {"attacker": user, "element": "火"})
-	tu.add_status("bleed", 2 * n)
-	tu.add_status("burn", 2)
-	user.lose_sanity(10)
-	return "%s 释放【黑白不分的执行】：命中 %d 个敌人，%s 受 %d 伤、流血+%d、灼烧+2；理智 -10（现 %d）" % [user.name, n, tu.name, r["hp_lost"] + r["absorbed"], 2 * n, user.sanity]
-
-static func _ef_zishu(user: BattleUnit, ctx: Dictionary) -> String:
-	var targets: Array = ctx.get("targets", [])
-	var out := "%s 释放【自我毁灭的审判】" % user.name
+	var out := "%s 释放【迫不得已的审判】（突进2格）" % user.name
 	var n := 0
 	for t in targets:
 		var tu := t as BattleUnit
 		if tu == null:
 			continue
-		var r: Dictionary = tu.take_damage(4, {"attacker": user, "element": "火"})
-		tu.add_status("bleed", 3)
-		out += "；%s 受 %d 伤、流血+3" % [tu.name, r["hp_lost"] + r["absorbed"]]
+		var r: Dictionary = tu.take_damage(2, {"attacker": user, "element": "火"})
+		apply_burn(tu)
+		out += "；%s 受 %d 伤、获烧伤" % [tu.name, r["hp_lost"] + r["absorbed"]]
 		n += 1
-	var cost := ceili(float(n) * 3.5)
-	user.lose_sanity(cost)
-	out += "；理智 -%d（现 %d）" % [cost, user.sanity]
+	user.lose_sanity(7)
+	out += "；理智 -7（现 %d）" % user.sanity
 	if n == 0:
-		out += "（无目标）"
+		out += "（未穿过棋子）"
 	return out
 
+## 黑白不分的执行：突进撞墙/撞人 → 撞到棋子3伤 + 2层重伤；理智-10
+static func _ef_heibai(user: BattleUnit, ctx: Dictionary) -> String:
+	var targets: Array = ctx.get("targets", [])
+	var out := "%s 释放【黑白不分的执行】（快速突进）" % user.name
+	var n := 0
+	for t in targets:
+		var tu := t as BattleUnit
+		if tu == null:
+			continue
+		var r: Dictionary = tu.take_damage(3, {"attacker": user, "element": "火"})
+		apply_heavy_wound(tu, 2)
+		out += "；撞到 %s：受 %d 伤、重伤+2" % [tu.name, r["hp_lost"] + r["absorbed"]]
+		n += 1
+	user.lose_sanity(10)
+	out += "；理智 -10（现 %d）" % user.sanity
+	if n == 0:
+		out += "（未撞到棋子）"
+	return out
+
+## 自我毁灭的审判：传送后对周围敌人 2伤+3重伤；理智 -3×命中数
+static func _ef_zishu(user: BattleUnit, ctx: Dictionary) -> String:
+	var targets: Array = ctx.get("targets", [])
+	var out := "%s 释放【自我毁灭的审判】（传送）" % user.name
+	var n := 0
+	for t in targets:
+		var tu := t as BattleUnit
+		if tu == null:
+			continue
+		var r: Dictionary = tu.take_damage(2, {"attacker": user, "element": "物理"})
+		apply_heavy_wound(tu, 3)
+		out += "；%s 受 %d 伤、重伤+3" % [tu.name, r["hp_lost"] + r["absorbed"]]
+		n += 1
+	user.lose_sanity(3 * n)
+	out += "；理智 -%d（现 %d）" % [3 * n, user.sanity]
+	if n == 0:
+		out += "（周围无敌人）"
+	return out
+
+## 因为我是被选中的：冲刺3格穿过 → 已损生命20%真伤；重伤≥4再获烧伤；理智-15
 static func _ef_xuanzhong(user: BattleUnit, ctx: Dictionary) -> String:
 	var targets: Array = ctx.get("targets", [])
-	if targets.is_empty():
-		return "%s 释放【因为我是被选中的】（无目标）" % user.name
-	var tu := targets[0] as BattleUnit
-	var dmg := ceili(float(tu.max_hp) * 0.15)
-	var before := tu.hp
-	tu.lose_hp(dmg)
-	var out := "%s 释放【因为我是被选中的】：%s 失去 %d 点生命（最大生命的15%%）" % [user.name, tu.name, before - tu.hp]
-	if tu.status_stacks("bleed") >= 5:
-		tu.add_status("burn", 5)
-		out += "，流血≥5层 → 灼烧+5"
+	var out := "%s 释放【因为我是被选中的】（冲刺3格）" % user.name
+	var n := 0
+	for t in targets:
+		var tu := t as BattleUnit
+		if tu == null:
+			continue
+		var dmg := ceili(float(maxi(0, tu.max_hp - tu.hp)) * 0.2)
+		var before := tu.hp
+		tu.lose_hp(dmg)
+		out += "；%s 失去 %d 真伤（已损生命20%%）" % [tu.name, before - tu.hp]
+		if tu.status_stacks("heavy_wound") >= 4:
+			apply_burn(tu)
+			out += "，重伤≥4层 → 获烧伤"
+		n += 1
 	user.lose_sanity(15)
 	out += "；理智 -15（现 %d）" % user.sanity
+	if n == 0:
+		out += "（未穿过棋子）"
 	return out

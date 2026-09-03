@@ -1,10 +1,12 @@
 class_name Battle
 extends RefCounted
 ## 战棋 · 战斗管理器（1V1，3×3 主区 + 左右出生格）
-## 回合结构（用户规则 2026-09-04）：
-##   每棋每回合 = 移动权 + 技能权；行动时先移动再放技能；两者都可跳过；
-##   一旦移动，本回合禁用位移技能（突进/冲刺/传送/位移后攻击）。
-## 回合流程：round 开始全体 on_turn_start → 动态行动序（实时速度）逐棋两阶段决策 → 全场 end_turn。
+## 回合结构：每棋每回合 = 移动权 + 技能权（先移后放、各自可选；移过禁用位移技）
+## 驱动方式：
+##   - run_step() 自动结算直到“轮到人类/分出胜负”，返回状态
+##   - 人类回合：human_move(cell) → human_cast(slot, enemy) / human_done()
+##   - AI 回合：BattleAI 自动决策（plan_move + plan_skill）
+## simulate() = 全自动（测试用）
 
 const SPAWN_RED := Vector2i(0, 2)
 const SPAWN_BLUE := Vector2i(4, 2)
@@ -14,16 +16,20 @@ var units: Array[BattleUnit] = []
 var log: Array[String] = []
 var round := 0
 var winner := ""
+var human_mode := false
+var human_team := 0
 var _hd: GDScript
 var _se: GDScript
+var _queue: Array = []
+var _wait := false
+var _cur: BattleUnit = null
+var _h_moved := false
 
 func _init(red_hero_id: String, blue_hero_id: String) -> void:
 	_hd = load("res://scripts/combat/hero_defs.gd")
 	_se = load("res://scripts/combat/skill_effects.gd")
-	var a := _make(red_hero_id, 0, SPAWN_RED)
-	var b := _make(blue_hero_id, 1, SPAWN_BLUE)
-	units = [a, b]
-	log.push_back("对局开始：红方 %s（速%d）vs 蓝方 %s（速%d）" % [a.name, a.speed, b.name, b.speed])
+	units = [_make(red_hero_id, 0, SPAWN_RED), _make(blue_hero_id, 1, SPAWN_BLUE)]
+	log.push_back("对局开始：红方 %s（速%d）vs 蓝方 %s（速%d）" % [units[0].name, units[0].speed, units[1].name, units[1].speed])
 
 func _make(hero_id: String, team: int, cell: Vector2i) -> BattleUnit:
 	var u := BattleUnit.new(_hd.ALL[hero_id].duplicate(true))
@@ -31,36 +37,61 @@ func _make(hero_id: String, team: int, cell: Vector2i) -> BattleUnit:
 	u.cell = cell
 	return u
 
-func simulate(round_hook: Callable = Callable()) -> String:
+## 全自动跑完整局（测试用）
+func simulate() -> String:
 	while winner == "" and round < MAX_ROUNDS:
-		round += 1
-		if not round_hook.is_null():
-			round_hook.call(round)
-		log.push_back("—— 第 %d 回合 ——" % round)
-		for u in units:
-			var s: String = u.on_turn_start()
-			if s != "":
-				log.push_back(s)
-		var remaining: Array = []
-		for u in units:
-			if u.alive:
-				remaining.append(u)
-		while not remaining.is_empty() and winner == "":
-			var actor: BattleUnit = _se.next_actor(remaining)
-			remaining.erase(actor)
-			_take_turn(actor)
-		for u in units:
-			var r: String = u.end_turn()
-			if r != "":
-				log.push_back(r)
-		_check_win()
+		if run_step().has("over"):
+			break
+	return winner
+
+## 步进：结算至“人类待操作”或“对局结束”。
+func run_step() -> Dictionary:
+	while winner == "" and round < MAX_ROUNDS:
+		if _queue.is_empty():
+			_start_round()
+		var actor := _poll_next()
+		if actor == null:
+			_end_round()
+			continue
+		if human_mode and actor.team == human_team:
+			_wait = true
+			_h_moved = false
+			_cur = actor
+			return {"wait": actor}
+		_turn_ai(actor)
 	if winner == "":
 		winner = "僵局（%d 回合超时）" % MAX_ROUNDS
 		log.push_back("== %s ==" % winner)
-	return winner
+	return {"over": winner}
 
-## 一名棋子的完整回合：移动 → 技能（可各自跳过）
-func _take_turn(u: BattleUnit) -> void:
+func _start_round() -> void:
+	round += 1
+	log.push_back("—— 第 %d 回合 ——" % round)
+	for u in units:
+		var s: String = u.on_turn_start()
+		if s != "":
+			log.push_back(s)
+	_queue = []
+	for u in units:
+		if u.alive:
+			_queue.append(u)
+
+func _poll_next() -> BattleUnit:
+	if _queue.is_empty():
+		return null
+	var lst: Array = _se.speed_order(_queue)
+	var actor: BattleUnit = lst[0]
+	_queue.erase(actor)
+	return actor
+
+func _end_round() -> void:
+	for u in units:
+		var r: String = u.end_turn()
+		if r != "":
+			log.push_back(r)
+	_check_win()
+
+func _turn_ai(u: BattleUnit) -> void:
 	if not u.alive:
 		return
 	if u.has_flag("stun"):
@@ -80,30 +111,7 @@ func _take_turn(u: BattleUnit) -> void:
 	var sk: Dictionary = BattleAI.plan_skill(self, u, moved)
 	if sk.get("act", "") == "skill":
 		_exec_skill(u, int(sk.get("slot", 1)), sk.get("targets", []), moved)
-	# 移动了没放技能 / 放完了都合法结束；无任何操作 = 待机（不刷日志）
 
-func _exec_skill(u: BattleUnit, slot: int, targets: Array, moved: bool) -> void:
-	var sk := u.get_skill(slot)
-	if sk == null:
-		return
-	if is_dash(u, slot) and moved:
-		log.push_back("%s 已移动，本回合无法使用位移技【%s】" % [u.name, sk.display_name])
-		return
-	# 目标护栏：只能打射程内敌方；自身类技能不需要目标
-	if not self_skill(u, slot):
-		var legal := targets_in_range(u, slot)
-		var valid: Array = []
-		for t in targets:
-			if t in legal:
-				valid.append(t)
-		if valid.is_empty():
-			return
-		targets = valid
-	var res: String = u.use_active(slot, {"targets": targets, "mode": "1v1"})
-	if res != "":
-		log.push_back(res)
-
-## 辛克莱失控：随机放技能，目标敌我不分
 func _crazy(u: BattleUnit) -> void:
 	var all: Array = []
 	for x in units:
@@ -113,7 +121,65 @@ func _crazy(u: BattleUnit) -> void:
 	var res: String = u.use_active(slot, {"targets": all, "mode": "1v1"})
 	log.push_back("【失控】%s 不受控制地释放技能：%s" % [u.name, res])
 
-## ---- AI/执行共享查询 ----
+## =============== 人类操作接口 ===============
+func waiting() -> bool:
+	return _wait
+
+func current() -> BattleUnit:
+	return _cur
+
+func human_moved() -> bool:
+	return _h_moved
+
+func human_move(cell: Vector2i) -> String:
+	if not _wait or _cur == null:
+		return "!当前不在你的回合"
+	if _h_moved:
+		return "!本回合已移动"
+	if not (cell in move_cells_of(_cur)):
+		return "!非法移动格"
+	_cur.cell = cell
+	_h_moved = true
+	log.push_back("%s 移动 → %s" % [_cur.name, cell])
+	return "%s 移动 → %s" % [_cur.name, cell]
+
+func human_cast(slot: int, enemy: BattleUnit = null) -> String:
+	if not _wait or _cur == null:
+		return "!当前不在你的回合"
+	var u := _cur
+	var sk := u.get_skill(slot)
+	if sk == null:
+		return "!技能槽无效"
+	if u.is_skill_lost(sk.id):
+		return "!该技能已被掠夺/禁用"
+	if u.has_flag("no_skill") or (slot == 4 and u.has_flag("no_ult")) or u.has_flag("no_damage"):
+		return "!当前状态禁止使用技能"
+	if sk.current_cd > 0:
+		return "!技能冷却中"
+	if u.energy < sk.energy_cost:
+		return "!能量不足"
+	if is_dash(u, slot) and _h_moved:
+		return "!已移动，本回合不能使用位移技能"
+	var targets: Array = []
+	if not self_skill(u, slot):
+		if enemy == null or not (enemy in targets_in_range(u, slot)):
+			return "!请选择射程内的敌人作为目标"
+		targets = [enemy]
+	var res: String = u.use_active(slot, {"targets": targets, "mode": "1v1"})
+	if res != "":
+		log.push_back(res)
+	_finish_human()
+	return res
+
+func human_done() -> void:
+	if _wait:
+		_finish_human()
+
+func _finish_human() -> void:
+	_wait = false
+	_cur = null
+
+## =============== 查询（AI 与 UI 共用） ===============
 func alive_enemies_of(u: BattleUnit) -> Array:
 	var out: Array = []
 	for x in units:
@@ -180,6 +246,26 @@ func move_cells_of(u: BattleUnit) -> Array:
 		if not occ:
 			out.append(c)
 	return out
+
+func _exec_skill(u: BattleUnit, slot: int, targets: Array, moved: bool) -> void:
+	var sk := u.get_skill(slot)
+	if sk == null:
+		return
+	if is_dash(u, slot) and moved:
+		log.push_back("%s 已移动，本回合无法使用位移技【%s】" % [u.name, sk.display_name])
+		return
+	if not self_skill(u, slot):
+		var legal := targets_in_range(u, slot)
+		var valid: Array = []
+		for t in targets:
+			if t in legal:
+				valid.append(t)
+		if valid.is_empty():
+			return
+		targets = valid
+	var res: String = u.use_active(slot, {"targets": targets, "mode": "1v1"})
+	if res != "":
+		log.push_back(res)
 
 func _check_win() -> void:
 	if winner != "":

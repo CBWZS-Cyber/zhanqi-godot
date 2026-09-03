@@ -157,7 +157,11 @@ func _on_quit() -> void:
 func _on_enter_board() -> void:
 	var battle: String = _config.get("battle", "")
 	Global.battle_mode = battle if battle == "4v4" else "1v1"
-	get_tree().change_scene_to_file(BOARD_SCENE)
+	# 1V1 = 可玩对局（选英雄 + 人机操作）；4V4 暂用展示棋盘
+	if battle == "1v1":
+		get_tree().change_scene_to_file("res://scenes/Duel.tscn")
+	else:
+		get_tree().change_scene_to_file(BOARD_SCENE)
 
 func _show_result() -> void:
 	var mode: String = _config.get("mode", "")

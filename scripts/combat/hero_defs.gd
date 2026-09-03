@@ -41,17 +41,17 @@ static func make(def_id: String) -> BattleUnit:
 
 ## 全部英雄注册表（剧情名单由用户随后提供；demo_hero 仅用于链路验证）
 const ALL := {
-	# —— 剧情英雄 · 曹博文 = 元晶龙王（表格 2026-09-03 导出，小数值制；速度 128）——
+	# —— 剧情英雄 · 元晶龙王（老方案 = 英雄资料汇总 01：血7/能12/速175；元晶印记 第2回合起 +1）——
 	"crystal_dragon": {
 		"name": "元晶龙王",
 		"element": "元",
-		"hp": 5, "energy": 15, "armor": 2, "speed": 128,
+		"hp": 7, "energy": 12, "armor": 2, "speed": 175,
 		"counters": {
-			"元晶": {"start": 2, "per_turn": 1, "max": 0},
+			"元晶": {"start": 3, "per_turn": 1, "start_round": 2, "max": 0},
 		},
 		"skills": {
-			"passive": "yuan_jing",
-			"actives": ["jing_kai", "jing_ren", "ning_jing", "jing_long"],
+			"passive": "yuan_jing_mark",
+			"actives": ["ning_cheng_jian_ren", "hua_jing_kai", "sui_jing_zhan", "yu_jing_wei_long"],
 		},
 	},
 	# —— 剧情英雄 · 王泽 = 邪神（同学设计 + 用户改版 2026-09-03；hp4/armor1/speed174）——

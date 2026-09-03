@@ -58,44 +58,45 @@ const DATA := {
 		"desc": "占位大招，效果待填写。",
 	},
 
-	# ===== 元晶龙王（曹博文）· 表格 2026-09-03 =====
-	"yuan_jing": {
-		"name": "元晶",
+	# ===== 元晶龙王（老方案 = 英雄资料汇总 01）=====
+	## 元晶：开局 3 枚，从第 2 回合起每回合初 +1（引擎 counters start_round 自动处理）
+	"yuan_jing_mark": {
+		"name": "元晶印记",
 		"element": "元",
 		"kind": "passive",
-		"desc": "开始时有 3 枚元晶，每回合开始时获得 1 枚（引擎自动增长）。",
+		"desc": "初始持有 3 枚元晶，从第 2 回合起每回合初获得 1 枚元晶。",
 	},
-	"jing_kai": {
-		"name": "晶凯",
+	"ning_cheng_jian_ren": {
+		"name": "凝元晶为刃",
 		"element": "元",
 		"kind": "active",
-		"energy_cost": 4,
+		"energy_cost": 3,
 		"cooldown": 0,
-		"desc": "当元晶 ≥ 3 时，消耗所有元晶，每枚转化为 1 点护盾。",
+		"desc": "消耗 1 枚元晶，对 1 个目标造成 3 点伤害。",
 	},
-	"jing_ren": {
-		"name": "晶刃",
-		"element": "元",
-		"kind": "active",
-		"energy_cost": 5,
-		"cooldown": 0,
-		"desc": "对附近格子内的敌人造成 3 点伤害；当元晶 ≥ 4 时，消耗 4 枚改为造成 5 点伤害。",
-	},
-	"ning_jing": {
-		"name": "凝晶",
+	"hua_jing_kai": {
+		"name": "化晶为铠",
 		"element": "元",
 		"kind": "active",
 		"energy_cost": 0,
 		"cooldown": 0,
-		"desc": "回复 4 点能量；回合末额外获得 1 枚元晶。",
+		"desc": "消耗 2 枚元晶，获得 3 点护盾并回复 2 点能量。",
 	},
-	"jing_long": {
-		"name": "晶龙",
+	"sui_jing_zhan": {
+		"name": "碎晶斩",
 		"element": "元",
 		"kind": "active",
-		"energy_cost": 10,
+		"energy_cost": 3,
 		"cooldown": 0,
-		"desc": "对两格距离内的 2 个敌人各造成 3 点伤害；当元晶 ≥ 5 时，消耗 5 枚使伤害变为真伤。",
+		"desc": "自身有护盾时，清空护盾，对 1 个目标造成 3 点真实伤害（无护盾无法发动）。",
+	},
+	"yu_jing_wei_long": {
+		"name": "御晶为龙",
+		"element": "元",
+		"kind": "ultimate",
+		"energy_cost": 9,
+		"cooldown": 0,
+		"desc": "消耗 3 枚元晶，对最多 3 个目标各造成 2 点伤害，并获得 1 枚元晶。",
 	},
 
 	# ===== 邪神（王泽）· 同学设计 + 用户改版 2026-09-03 =====
@@ -147,12 +148,12 @@ const EFFECTS := {
 	"stub_skill_2": Callable(SkillEffects, "_ef_stub_shield"),
 	"stub_skill_3": Callable(SkillEffects, "_ef_stub_heal"),
 	"stub_skill_4": Callable(SkillEffects, "_ef_stub_burst"),
-	# 元晶龙王（曹博文）
-	"yuan_jing": Callable(SkillEffects, "_ef_yuan_jing"),
-	"jing_kai": Callable(SkillEffects, "_ef_jing_kai"),
-	"jing_ren": Callable(SkillEffects, "_ef_jing_ren"),
-	"ning_jing": Callable(SkillEffects, "_ef_ning_jing"),
-	"jing_long": Callable(SkillEffects, "_ef_jing_long"),
+	# 元晶龙王（老方案）
+	"yuan_jing_mark": Callable(SkillEffects, "_ef_yuan_jing_mark"),
+	"ning_cheng_jian_ren": Callable(SkillEffects, "_ef_ning_cheng_jian_ren"),
+	"hua_jing_kai": Callable(SkillEffects, "_ef_hua_jing_kai"),
+	"sui_jing_zhan": Callable(SkillEffects, "_ef_sui_jing_zhan"),
+	"yu_jing_wei_long": Callable(SkillEffects, "_ef_yu_jing_wei_long"),
 	# 邪神（王泽）
 	"ji_sheng": Callable(SkillEffects, "_ef_ji_sheng"),
 	"hun_qi": Callable(SkillEffects, "_ef_hun_qi"),
@@ -202,72 +203,80 @@ static func _ef_stub_burst(user: BattleUnit, _ctx: Dictionary) -> String:
 	# TODO: 大招效果
 	return "%s 释放【模板爆发】（效果待填写）" % user.name
 
-## ========== 元晶龙王（曹博文）效果 ==========
-## 元晶 = 计数资源池（BattleUnit.counter / grant_counter / consume_counter），
-## 数量由 def counters{"元晶": start2, per_turn1} 引擎自动维护。
+## ========== 元晶龙王（老方案）效果 ==========
+## 元晶 = 计数资源池（BattleUnit.counter / grant_counter / consume_counter）；
+## 自动增长由 counters{"元晶": start3, per_turn1, start_round2} 引擎维护（第 2 回合起 +1）。
 
-## 被动（展示用途；自动增长由 BattleUnit.on_turn_start 完成）
-static func _ef_yuan_jing(user: BattleUnit, _ctx: Dictionary) -> String:
-	return "%s 的【元晶】被动生效：当前元晶 %d 枚（每回合 +1）" % [user.name, user.counter("元晶")]
+## 被动（展示；增长由引擎处理）
+static func _ef_yuan_jing_mark(user: BattleUnit, _ctx: Dictionary) -> String:
+	return "%s 的【元晶印记】生效：当前元晶 %d 枚（第 2 回合起每回合 +1）" % [user.name, user.counter("元晶")]
 
-## 晶凯：元晶≥3 → 消耗全部，每枚 +1 护盾
-static func _ef_jing_kai(user: BattleUnit, _ctx: Dictionary) -> String:
-	var n := user.counter("元晶")
-	if n < 3:
-		return "%s 元晶不足 3 枚（当前 %d），【晶凯】无效" % [user.name, n]
-	var before := user.shield
-	user.consume_counter("元晶", n)
-	user.add_shield(n)
-	return "%s 消耗 %d 枚元晶，护盾 %d → %d" % [user.name, n, before, user.shield]
-
-## 晶刃：附近敌人 3 伤；元晶≥4 → 消耗4 → 5 伤
-static func _ef_jing_ren(user: BattleUnit, ctx: Dictionary) -> String:
+## 凝元晶为刃：耗 1 元晶 → 单体 3 伤
+static func _ef_ning_cheng_jian_ren(user: BattleUnit, ctx: Dictionary) -> String:
+	if user.counter("元晶") < 1:
+		return "%s 元晶不足，【凝元晶为刃】无法发动" % user.name
+	user.consume_counter("元晶", 1)
 	var targets: Array = ctx.get("targets", [])
-	var dmg := 3
-	var enhanced := false
-	if user.counter("元晶") >= 4:
-		if user.consume_counter("元晶", 4):
-			dmg = 5
-			enhanced = true
-	var out := "%s 释放【晶刃】" % user.name
-	if enhanced:
-		out += "（消耗 4 元晶强化）"
+	var out := "%s 释放【凝元晶为刃】" % user.name
 	for t in targets:
-		var r: Dictionary = t.take_damage(dmg)
-		out += "，对 %s 造成 %d 伤害" % [t.name, r["hp_lost"] + r["absorbed"]]
-	if targets.is_empty():
-		out += "（范围内无目标）"
-	return out
-
-## 凝晶：回 4 能量；回合末 +1 元晶
-static func _ef_ning_jing(user: BattleUnit, _ctx: Dictionary) -> String:
-	var gained := user.add_energy(4)
-	user.grant_end_of_turn("元晶", 1)
-	return "%s 回复 %d 能量（%d/%d），回合末 +1 元晶" % [user.name, gained, user.energy, user.max_energy]
-
-## 晶龙：两格内 2 敌各 3 伤；元晶≥5 → 消耗5 → 真伤（无视护盾护甲）
-static func _ef_jing_long(user: BattleUnit, ctx: Dictionary) -> String:
-	var targets: Array = ctx.get("targets", [])
-	var true_dmg := false
-	if user.counter("元晶") >= 5:
-		if user.consume_counter("元晶", 5):
-			true_dmg = true
-	var out := "%s 释放【晶龙】" % user.name
-	if true_dmg:
-		out += "（消耗 5 元晶 → 真伤）"
-	for t in targets:
-		var tu: BattleUnit = t as BattleUnit
+		var tu := t as BattleUnit
 		if tu == null:
 			continue
-		if true_dmg:
-			var before_hp := tu.hp
-			tu.lose_hp(3)
-			out += "，对 %s 造成 %d 真伤" % [tu.name, before_hp - tu.hp]
-		else:
-			var r: Dictionary = tu.take_damage(3)
-			out += "，对 %s 造成 %d 伤害" % [tu.name, r["hp_lost"] + r["absorbed"]]
+		var r: Dictionary = tu.take_damage(3)
+		out += "；%s 受 %d 伤" % [tu.name, r["hp_lost"] + r["absorbed"]]
 	if targets.is_empty():
-		out += "（范围内无目标）"
+		out += "（无目标）"
+	return out
+
+## 化晶为铠：耗 2 元晶 → 3 盾 + 回 2 能
+static func _ef_hua_jing_kai(user: BattleUnit, _ctx: Dictionary) -> String:
+	if user.counter("元晶") < 2:
+		return "%s 元晶不足 2 枚，【化晶为铠】无法发动" % user.name
+	user.consume_counter("元晶", 2)
+	user.add_shield(3)
+	var got := user.add_energy(2)
+	return "%s 消耗 2 枚元晶：护盾 +3（现 %d），回复 %d 能量（%d/%d）" % [user.name, user.shield, got, user.energy, user.max_energy]
+
+## 碎晶斩：自身有盾 → 清空护盾，单体 3 真伤（无盾无法发动）
+static func _ef_sui_jing_zhan(user: BattleUnit, ctx: Dictionary) -> String:
+	if user.shield <= 0:
+		return "%s 没有护盾，【碎晶斩】无法发动（先用化晶为铠等获取护盾）" % user.name
+	var before_shield := user.shield
+	user.clear_shield()
+	var targets: Array = ctx.get("targets", [])
+	var out := "%s 释放【碎晶斩】（清空 %d 点护盾）" % [user.name, before_shield]
+	for t in targets:
+		var tu := t as BattleUnit
+		if tu == null:
+			continue
+		var before := tu.hp
+		tu.lose_hp(3)
+		out += "；%s 受 %d 真伤" % [tu.name, before - tu.hp]
+	if targets.is_empty():
+		out += "（无目标）"
+	return out
+
+## 御晶为龙（终极）：耗 3 元晶 → 至多 3 目标各 2 伤 + 回 1 元晶
+static func _ef_yu_jing_wei_long(user: BattleUnit, ctx: Dictionary) -> String:
+	if user.counter("元晶") < 3:
+		return "%s 元晶不足 3 枚，【御晶为龙】无法发动" % user.name
+	user.consume_counter("元晶", 3)
+	var targets: Array = ctx.get("targets", [])
+	var out := "%s 释放【御晶为龙】" % user.name
+	var hit := 0
+	for t in targets:
+		if hit >= 3:
+			break
+		var tu := t as BattleUnit
+		if tu == null:
+			continue
+		var r: Dictionary = tu.take_damage(2)
+		out += "；%s 受 %d 伤" % [tu.name, r["hp_lost"] + r["absorbed"]]
+		hit += 1
+	user.grant_counter("元晶", 1)
+	out += "；收回 1 枚元晶（现 %d）" % user.counter("元晶")
+	if hit == 0:
+		out += "（无目标）"
 	return out
 
 ## ========== 邪神（王泽）效果 ==========

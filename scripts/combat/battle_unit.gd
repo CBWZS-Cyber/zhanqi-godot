@@ -25,11 +25,12 @@ var cell := Vector2i.ZERO       # 单位所在棋盘格（由战斗层摆放时�
 var flags: Dictionary = {}      # 状态标志："失神"/"被支配"/"永久支配"/"本回合均摊"…（战斗层/效果读写）
 
 # ---- 通用计数资源池（叠层/攒资源，如“元晶”/“污染”）----
-# counters_cfg : name -> {"start":n,"per_turn":n(可选),"max":n(0=不限)}
+# counters_cfg : name -> {"start":n,"per_turn":n(可选),"start_round":n(可选,从第n回合起自动加,默认1),"max":n(0=不限)}
 # 运行时值存 counters；每回合开始自动 +per_turn；end_turn 结算 pending 加值
 var counters: Dictionary = {}              # name -> 当前值
 var _counters_cfg: Dictionary = {}         # name -> 配置
 var _pending_grant: Dictionary = {}        # end_turn 待发放
+var _rounds: int = 0                       # 已进行的自身回合数（on_turn_start 计数，资源延迟生效用）
 
 # ---- 层数规则（声明式，def["layer_rules"] 驱动，供所有“叠层型”英雄复用）----
 # 例：{ "污染": { "speed_per_layer": 15, "flag_threshold": {"失神": 3} } }
@@ -243,12 +244,16 @@ func _settle_share_drain() -> String:
 		out += "%s 回合末吸取 %s：流失 %d 生命，邪神回 %d 血" % [name, tu.name, loss, got]
 	return out
 
-## 回合开始（战斗层调用）：被动资源 per_turn 自动增长
+## 回合开始（战斗层调用）：被动资源 per_turn 自动增长（支持 start_round 延迟生效）
 func on_turn_start() -> void:
+	_rounds += 1
 	for k in _counters_cfg:
 		var cfg: Dictionary = _counters_cfg[k]
-		if int(cfg.get("per_turn", 0)) > 0:
-			grant_counter(str(k), int(cfg["per_turn"]))
+		if int(cfg.get("per_turn", 0)) <= 0:
+			continue
+		if _rounds < int(cfg.get("start_round", 1)):
+			continue
+		grant_counter(str(k), int(cfg["per_turn"]))
 
 ## ---------- 计数资源池（叠层/元晶等） ----------
 func counter(name: String) -> int:

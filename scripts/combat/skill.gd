@@ -6,7 +6,7 @@ extends RefCounted
 
 var id: String = ""
 var display_name: String = "技能"
-var kind: String = "active"        # "passive" | "active"
+var kind: String = "active"        # "passive" | "active" | "ultimate"
 var element: String = ""          # 元素：火/冰/雷/风/土/光/暗/物理…（空=无属性）
 var energy_cost: int = 0               # 主动技能能量消耗
 var desc: String = ""
@@ -20,10 +20,10 @@ func trigger_passive(user: BattleUnit, ctx: Dictionary) -> String:
 		return ""
 	return String(effect.call(user, ctx))
 
-## 主动技能：校验冷却/能量 → 扣能量 → 上冷却 → 执行效果。
+## 主动/终极技能：校验冷却/能量 → 扣能量 → 上冷却 → 执行效果。
 ## ctx 约定（由战斗层传入）：{ "targets": [BattleUnit...], "battle": 任意战斗上下文, ... }
 func activate(user: BattleUnit, ctx: Dictionary) -> String:
-	if kind != "active":
+	if kind != "active" and kind != "ultimate":
 		return "这不是主动技能"
 	if current_cd > 0:
 		return "%s 还在冷却中（%d 回合）" % [display_name, current_cd]
@@ -46,7 +46,7 @@ func to_summary() -> String:
 	if element != "":
 		head = "[%s·%s] %s" % [kind, element, display_name]
 	var parts: Array[String] = [head]
-	if kind == "active":
+	if kind == "active" or kind == "ultimate":
 		parts.append("耗能 %d" % energy_cost)
 		if cooldown > 0:
 			parts.append("冷却 %d 回合" % cooldown)

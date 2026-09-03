@@ -94,6 +94,7 @@ func _init(def: Dictionary) -> void:
 	for i in range(4):
 		var sid := str(act_ids[i]) if i < act_ids.size() else ""
 		actives.append(_make_skill(sid) if sid != "" else null)
+	actives.append(_make_skill("basic_attack"))   # 槽5：通用普攻（无技能时的兜底输出）
 
 func _make_skill(sid: String) -> Skill:
 	var s := Skill.new()
@@ -522,9 +523,9 @@ func spend_energy(amount: int) -> bool:
 func get_skill(i: int) -> Skill:
 	return actives[i - 1] if i >= 1 and i <= actives.size() else null
 
-## 使用第 i 个主动技能（1..4）
+## 使用第 i 个主动技能（1..4 + 5=普攻）
 func use_active(i: int, ctx: Dictionary) -> String:
-	if i < 1 or i > 4:
+	if i < 1 or i > 5:
 		return "技能槽位无效（1-4）"
 	var sk := actives[i - 1]
 	if sk == null:

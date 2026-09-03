@@ -58,6 +58,9 @@ static func plan_skill(battle, actor: BattleUnit, moved: bool) -> Dictionary:
 				return _skill_action(battle, actor, i)
 		else:
 			return _skill_action(battle, actor, i)
+	# 兜底：贴脸普攻（槽5）
+	if battle.base_usable(actor, 5) and not battle.targets_in_range(actor, 5).is_empty():
+		return {"act": "skill", "slot": 5, "targets": battle.targets_in_range(actor, 5)}
 	return {}
 
 static func _castable(battle, actor: BattleUnit, slot: int, moved: bool) -> bool:

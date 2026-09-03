@@ -59,6 +59,7 @@ func run_step() -> Dictionary:
 			_cur = actor
 			return {"wait": actor}
 		_turn_ai(actor)
+		_check_win()   # 每次行动后立刻判胜负（避免“已全灭仍继续”）
 	if winner == "":
 		winner = "僵局（%d 回合超时）" % MAX_ROUNDS
 		log.push_back("== %s ==" % winner)

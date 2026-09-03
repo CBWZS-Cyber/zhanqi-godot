@@ -40,6 +40,7 @@ var _cells: Array = []                 # 与 _board 子按钮对应 (列x 行 y)
 var _cell_coords: Array = []
 var _cell_buttons: Array = []
 var _end_turn_btn: Button
+var _again_btn: Button
 
 func _ready() -> void:
 	var bg := Panel.new()
@@ -146,6 +147,11 @@ func _build_main() -> VBoxContainer:
 	_over.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_over.add_theme_color_override("font_color", Color(1.0, 0.9, 0.6))
 	right.add_child(_over)
+	_again_btn = Button.new()
+	_again_btn.text = "再来一局（重选英雄）"
+	_again_btn.visible = false
+	_again_btn.pressed.connect(_on_again)
+	right.add_child(_again_btn)
 	return v
 
 func _build_board(holder: CenterContainer) -> void:
@@ -269,7 +275,8 @@ func _step() -> void:
 		_phase = "over"
 		_over.text = "对局结束：%s" % str(st["over"])
 		_end_turn_btn.visible = false
-		_hint.text = "点击「返回菜单」可再来一局"
+		_again_btn.visible = true
+		_hint.text = "可再来一局或返回菜单"
 	elif st.has("wait"):
 		_hint.text = "轮到你了（红方 %s）：点己方棋子走位 / 点技能行动" % _battle.current().name
 		_title.text = "第 %d 回合 · 你的回合" % _battle.round
@@ -301,7 +308,7 @@ func _refresh_ui() -> void:
 		_skill_row.visible = false
 		return
 	_skill_row.visible = true
-	for i in range(1, 5):
+	for i in range(1, 6):
 		var sk := me.get_skill(i)
 		if sk == null:
 			continue
@@ -361,6 +368,14 @@ func _on_skill(i: int) -> void:
 			_cast_slot = i
 			_hint.text = "请点击一个高亮敌人作为目标（右键取消）"
 	_refresh_ui()
+
+func _on_again() -> void:
+	var ov := get_node_or_null("SelectOverlay")
+	if ov != null:
+		ov.queue_free()
+	_again_btn.visible = false
+	_battle = null
+	_select_screen()
 
 func _on_end_turn() -> void:
 	if _battle != null and _battle.waiting():

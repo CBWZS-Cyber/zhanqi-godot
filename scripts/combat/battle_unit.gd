@@ -78,6 +78,12 @@ func _init(def: Dictionary) -> void:
 		_refresh_layer(str(layer))   # 让初始层数立即生效（速度/阈值状态）
 	_tsfx = (def.get("turn_start_effects", []) as Array).duplicate()
 	_tefx = (def.get("turn_end_effects", []) as Array).duplicate()
+	_hp_flags = (def.get("hp_threshold_flags", []) as Array).duplicate()
+	_evasion_pct_default = int(def.get("evasion_pct", 0))
+	evasion_pct = _evasion_pct_default
+	_revive_rounds = int(def.get("death_revive", {}).get("rounds", 0))
+	_revive_hp_pct = int(def.get("death_revive", {}).get("hp_pct", 50))
+	_revive_uses = int(def.get("death_revive", {}).get("per_game", 1))
 	var sk: Dictionary = def.get("skills", {})
 	var passive_id := str(sk.get("passive", ""))
 	if passive_id != "":
@@ -135,6 +141,21 @@ func set_speed_buff(n: int) -> void:
 ## ---------- 伤害加成栈（按技能槽 1..4 / 0=全技能） ----------
 ## 用法：剑舞剑意“每次使用技能1后 技能1伤害+1（上限4）” → add_slot_damage(1, 1, 4)
 var _dmg_slot := {}          # slot(int) -> 加成值
+var dmg_mult := 1.0          # 伤害倍率（狂怒×2 / 天机1.5 等）
+var _evasion_pct_default := 0
+var evasion_pct := 0         # 闪避率%（灵虚数影90%；攻击必中技除外）
+var _reflect_pct := 0        # 反伤%（阳状态50%）：把所受实际伤害按%弹回攻击者
+var _mitig := {}             # 免伤栈：属性id或"all" -> pct（防守态/血狱等全局）
+var _mitig_att := {}         # 针对攻击者的免伤：攻击者instance_id -> {pct, who}（孤狼锻体按“人”）
+var _invuln := false         # 无敌（rapper 锁血）
+var sanity := 0              # 理智（辛克莱 -45..45，0 初始）
+var _revive_rounds := 0      # 死亡复活回合数（>0 启用死亡复活；仙尊3）
+var _revive_hp_pct := 0
+var _revive_uses := 1
+var _corpse := false         # 死亡待复活中
+var _lost_skills := {}       # 被掠夺/禁用的技能 id -> true（无法使用）
+var _hp_flags := []          # def["hp_threshold_flags"]：生命跨阈值自动置/清 flag
+var hit_events: Array = []   # 受击回调：[Callable(attacker, element)]（锻体/防守计数等注册用）
 
 func add_slot_damage(slot: int, amount: int, cap: int = -1) -> int:
 	if amount <= 0:
@@ -196,6 +217,18 @@ func _apply_tefx() -> String:
 			var h := heal(int(f.get("hp", 1)))
 			add_shield(int(f.get("shield", 1)))
 			out += "；%s 膏腴：回复 %d 生命、%d 护盾" % [name, h, int(f.get("shield", 1))]
+		elif kind == "sanity":
+			# 辛克莱：每回合末回复理智 1~15（越接近 -45 回复越多）
+			var gain := int(f.get("min_gain", 1)) + int(floor(float(45 - sanity) * int(f.get("spread", 14)) / 90.0))
+			gain_sanity(gain)
+			out += "；%s 恢复 %d 理智（现 %d）" % [name, gain, sanity]
+			if sanity <= -45 and not has_flag("sanity_break"):
+				add_flag("sanity_break")
+				out += "，理智失控（下回合无法控制）"
+			elif has_flag("sanity_break") and sanity > -45:
+				clear_flag("sanity_break")
+				sanity = 0
+				out += "，失控结束，理智归零"
 	return out
 
 func _tick_timers() -> String:
@@ -230,41 +263,106 @@ func heal(amount: int) -> int:
 
 ## 直接扣血（已算护盾吸收后）；由 take_damage 调用，也可用于无视护盾的伤害
 func lose_hp(amount: int) -> void:
-	if not alive:
+	if not alive and not _corpse:
 		return
 	hp -= amount
 	if hp <= 0:
 		hp = 0
 		if has_flag("lock_min_hp"):
 			hp = 1
+		elif _revive_rounds > 0 and _revive_uses > 0 and not _corpse:
+			_corpse = true
+			_revive_uses -= 1
+			alive = false
+			add_flag("corpse")
+			add_timer("revive", _revive_rounds, Callable(func(): _do_revive()))
 		else:
 			alive = false
+	_update_hp_flags()
+
+func _do_revive() -> void:
+	if not _corpse:
+		return
+	_corpse = false
+	clear_flag("corpse")
+	alive = true
+	hp = ceili(float(max_hp) * float(_revive_hp_pct) / 100.0)
+	clear_statuses()
+	_speed_mods = {}
+	flags.clear()
+	speed_buff = 0
+	shield = 0
+
+func _update_hp_flags() -> void:
+	for rule in _hp_flags:
+		var pct := int(rule.get("pct", 20))
+		var f := str(rule.get("flag", ""))
+		if max_hp <= 0:
+			continue
+		var on := hp * 100 <= max_hp * pct
+		if on:
+			add_flag(f)
+		else:
+			clear_flag(f)
+		if rule.has("dmg_mult"):
+			set_dmg_mult(float(rule["dmg_mult"]) if on else 1.0)
 
 ## 受击总入口：护盾先吸收 → 剩余按护甲减免 → 扣生命。
-## 返回 { "absorbed": 盾吸收量, "reduced": 护甲减免量, "hp_lost": 最终掉血, "killed": bool }
-func take_damage(amount: int, _dmg_type := "physical") -> Dictionary:
+## 返回 { "absorbed", "reduced", "hp_lost", "killed", "missed", "reflected", "invuln" }
+## info: { "attacker": BattleUnit, "element": "物理/火/…", "sure_hit": bool }（可省）
+func take_damage(amount: int, info := {}) -> Dictionary:
 	var result := {
 		"absorbed": 0, "reduced": 0, "hp_lost": 0, "killed": false,
+		"missed": false, "reflected": 0, "invuln": false,
 	}
 	if not alive or amount <= 0:
 		return result
+	if has_flag("invuln"):
+		result["invuln"] = true
+		result["absorbed"] = amount
+		return result
+	var sure := bool(info.get("sure_hit", false))
+	if not sure and evasion_pct > 0 and randi() % 100 < evasion_pct:
+		result["missed"] = true
+		return result
+	var attacker := info.get("attacker", null) as BattleUnit if info.has("attacker") else null
+	var element := str(info.get("element", ""))
 	var rest := amount
+	# 0) 免伤百分比（全局/该属性；来自锻体/防守态/血狱等）
+	var mit := int(_mitig.get("all", 0)) + int(_mitig.get(element, 0))
+	if attacker != null:
+		mit += int(_mitig_att.get(attacker.get_instance_id(), {}).get("pct", 0))
+	if mit > 0:
+		var cut := ceili(float(rest) * float(mit) / 100.0)
+		rest -= cut
+		result["reduced"] += cut
 	# 1) 护盾吸收
 	if shield > 0:
 		var absorb := mini(shield, rest)
 		shield -= absorb
 		rest -= absorb
 		result["absorbed"] = absorb
-	# 2) 护甲减免（占位公式：减固定值；正式公式待定义）
+	# 2) 护甲减免（减固定值）
 	var reduced := mini(armor, rest)
 	rest -= reduced
-	result["reduced"] = reduced
+	result["reduced"] += reduced
 	# 3) 剩余扣血
 	if rest > 0:
 		var before := hp
 		lose_hp(rest)
 		result["hp_lost"] = before - hp
 	result["killed"] = not alive
+	# 4) 反伤弹回攻击者（实际造成伤害按比例）
+	if attacker != null and _reflect_pct > 0 and result["hp_lost"] > 0:
+		var back := ceili(float(result["hp_lost"]) * float(_reflect_pct) / 100.0)
+		if back > 0:
+			attacker.lose_hp(back)
+			result["reflected"] = back
+	# 5) 受击事件（锻体/防守状态机等监听）
+	for ev in hit_events:
+		var cb: Callable = ev
+		if not cb.is_null():
+			cb.call(attacker, element)
 	return result
 
 ## ---------- 护盾（默认初始为 0；只由效果加） ----------
@@ -296,6 +394,68 @@ func remove_armor(amount: int) -> void:
 
 func set_armor(amount: int) -> void:
 	armor = maxi(0, amount)
+
+## 免伤栈：element "all" 或具体属性（火/物理…）；每来源调 add（自动按 cap 封顶）
+func set_mitigation(element: String, pct: int) -> void:
+	_mitig[element] = clampi(pct, 0, 100)
+
+func add_mitigation(element: String, pct: int, cap: int = -1) -> void:
+	var cur := int(_mitig.get(element, 0))
+	var added := pct
+	if cap > 0 and cur + added > cap:
+		added = cap - cur
+	if added > 0:
+		_mitig[element] = cur + added
+
+func mitigation_of(element: String) -> int:
+	return int(_mitig.get("all", 0)) + int(_mitig.get(element, 0))
+
+## 针对“某攻击者”的免伤（孤狼锻体：同一个人打你越多次越抗）
+func add_mitigation_att(attacker: BattleUnit, pct: int, cap: int = -1) -> int:
+	if attacker == null or pct <= 0:
+		return 0
+	var id := attacker.get_instance_id()
+	var entry: Dictionary = _mitig_att.get(id, {"pct": 0, "who": attacker.name})
+	var cur := int(entry["pct"])
+	var added := pct
+	if cap > 0 and cur + added > cap:
+		added = cap - cur
+	if added > 0:
+		entry["pct"] = cur + added
+		entry["who"] = attacker.name
+		_mitig_att[id] = entry
+	return added
+
+func mitigation_att(attacker: BattleUnit) -> int:
+	if attacker == null:
+		return 0
+	return int(_mitig_att.get(attacker.get_instance_id(), {}).get("pct", 0))
+
+func reset_mitigation_att() -> void:
+	_mitig_att = {}
+
+func set_reflect(pct: int) -> void:
+	_reflect_pct = clampi(pct, 0, 100)
+
+func set_evasion(pct: int) -> void:
+	evasion_pct = clampi(pct, 0, 100)
+
+func set_dmg_mult(v: float) -> void:
+	dmg_mult = v
+
+func lose_sanity(amount: int) -> int:
+	sanity = clampi(sanity - amount, -45, 45)
+	return sanity
+
+func gain_sanity(amount: int) -> int:
+	sanity = clampi(sanity + amount, -45, 45)
+	return sanity
+
+func mark_skill_lost(skill_id: String) -> void:
+	_lost_skills[skill_id] = true
+
+func is_skill_lost(skill_id: String) -> bool:
+	return _lost_skills.has(skill_id)
 
 ## ---------- 状态/印记（层数制：bleed 流血 / burn 灼烧 / wound 创伤…） ----------
 ## 层数 = 等级（“流血2级”=bleed 2 层）。tick 规则见 SkillEffects.tick_* 系列。
@@ -357,6 +517,23 @@ func use_active(i: int, ctx: Dictionary) -> String:
 	var sk := actives[i - 1]
 	if sk == null:
 		return "%s 第 %d 个技能未配置" % [name, i]
+	# 行动门禁：被掠夺/禁用
+	if is_skill_lost(sk.id):
+		return "%s 的【%s】被掠夺/禁用，无法使用" % [name, sk.display_name]
+	# 行动门禁：魅惑（本回合无法造成伤害）
+	if has_flag("no_damage"):
+		return "%s 本回合被魅惑，无法造成伤害" % name
+	# 行动门禁：无法使用技能（束缚之灵沉默）
+	if has_flag("no_skill"):
+		return "%s 被束缚之灵沉默，本回合无法使用技能" % name
+	# 行动门禁：大招被封（伸缩拳远击嘲讽）
+	if i == 4 and has_flag("no_ult"):
+		return "%s 大招被封印，无法使用" % name
+	# 行动门禁：失明（每层失明 20% 施放打空；战斗层可细化）
+	var blind_layers := status_stacks("blind")
+	if blind_layers > 0 and randf() < float(blind_layers) * 0.2:
+		statuses["blind"] = maxi(0, blind_layers - 1)
+		return "%s 失明打空（失明层 -1）" % name
 	# 行动前结算自身“流血”（移动/施放技能时触发），流血可能致死
 	var action_log := SkillEffects.tick_action_statuses(self)
 	if not alive:

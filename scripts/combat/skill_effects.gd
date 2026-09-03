@@ -219,6 +219,67 @@ const DATA := {
 		"desc": "生命降至1并获得等同于消耗生命值一半的护盾，本回合内血量最低为1（锁血），并对相邻敌人造成等同于当前护盾量的伤害。",
 	},
 
+
+	# ===== 孤狼（叶麟）=====
+	"duan_ti": {"name": "锻体", "element": "物理", "kind": "passive",
+		"desc": "每次受到伤害，对该攻击者的伤害免伤 +5%（对同一人最高 20%）。"},
+	"yin_yang_san_shou": {"name": "阴阳散手", "element": "物理", "kind": "active", "energy_cost": 4,
+		"desc": "进入阴状态防守：获得 15% 减伤并嘲讽相邻目标；受击 3 次后转阳，阳持续 2 回合，期间 50% 反伤。"},
+	"shen_suo_quan": {"name": "伸缩拳", "element": "物理", "kind": "active", "energy_cost": 6,
+		"desc": "相邻目标 4 伤，或两格目标 2 伤。击中两格目标使其禁大招 2 回合（嘲讽）；击中相邻目标时自身获得对该目标的 5% 免伤（对同一人上限 30%）。"},
+	"pu_tong_quan": {"name": "普通拳", "element": "物理", "kind": "active", "energy_cost": 0,
+		"desc": "对目标造成 2 点伤害；对被嘲讽的目标追加 1 点真实伤害。回复 2 能量。"},
+	"xue_yu": {"name": "血狱", "element": "物理", "kind": "ultimate", "energy_cost": 10,
+		"desc": "对两格内一个目标造成其已损生命 15% 的伤害；范围内每有 1 个目标自身获得 5% 免伤（总上限 40%）。"},
+
+	# ===== rapper睡神（何至高）=====
+	"kuang_nu": {"name": "狂怒", "element": "神秘", "kind": "passive",
+		"desc": "生命值低于 20% 时伤害翻倍（hp_threshold_flags 自动管理）。"},
+	"lve_duo": {"name": "掠夺", "element": "神秘", "kind": "active", "energy_cost": 8,
+		"desc": "掠夺相邻一个敌人身上的一个技能（大招除外）：该敌人本局无法再使用它，自己下回合起可使用（技能槽由战斗层替换显示）。"},
+	"mei_huo": {"name": "魅惑", "element": "毒", "kind": "active", "energy_cost": 5,
+		"desc": "选择两格内 2 个目标，使其本回合无法造成伤害。"},
+	"suo_xue": {"name": "锁血", "element": "火", "kind": "active", "energy_cost": 0,
+		"desc": "本回合内无敌，回复 1 点生命、2 点能量。"},
+	"wan_li_bing_feng": {"name": "万里冰封", "element": "冰", "kind": "ultimate", "energy_cost": 12,
+		"desc": "三格内所有敌人进入冻伤1级（速度-20，每回合末受1真伤，持续2回合）并受到 3 点伤害。"},
+
+	# ===== 仙尊（陈雨晴）=====
+	"nie_pan": {"name": "涅槃", "element": "圣灵", "kind": "passive",
+		"desc": "死亡后复活，回复一半生命（每局一次，引擎 death_revive）。每回合末回复 4 能量。"},
+	"wu_xing_zhi_li": {"name": "五行之力", "element": "五行", "kind": "active", "energy_cost": 9,
+		"desc": "随机发射一道五行法力（金木水火土），对相邻格最多 3 个敌人各造成 2 点伤害。"},
+	"shu_fu_zhi_ling": {"name": "束缚之灵", "element": "木", "kind": "active", "energy_cost": 13,
+		"desc": "至本回合末，相邻格子内的敌人无法使用技能。"},
+	"zhuan_jia_kui_lei": {"name": "转嫁傀儡", "element": "土", "kind": "active", "energy_cost": 15,
+		"desc": "指定敌方一人转移到仙尊相邻空格（位移由战斗层执行），并对其造成已损生命 20% 的伤害。"},
+	"wan_jian_gui_zong": {"name": "万剑归宗", "element": "金", "kind": "ultimate", "energy_cost": 18,
+		"desc": "两格范围内所有敌人每回合末受 2 点真伤，持续 3 回合（剑域）。"},
+
+	# ===== 灵虚数影（辛子祺）=====
+	"shu_yu": {"name": "数域", "element": "神秘", "kind": "passive",
+		"desc": "对一切攻击（必中除外）90% 闪避；相邻友军 +5% 闪避（aura 由战斗层提供）。"},
+	"tian_ji": {"name": "天机", "element": "神秘", "kind": "active", "energy_cost": 6,
+		"desc": "识破弱点：下回合自身（及周围棋子，aura 由战斗层）伤害 1.5 倍。"},
+	"jie_xi": {"name": "解析", "element": "神秘", "kind": "active", "energy_cost": 8,
+		"desc": "两格内单目标 3 点伤害，并造成破甲二级（护甲-2，持续3回合）。"},
+	"ji_dian": {"name": "极点", "element": "神秘", "kind": "active", "energy_cost": 0,
+		"desc": "推演极点，获得启发：回复 5 点能量、1 点护盾。"},
+	"shu_hai_teng_nuo": {"name": "数海腾挪", "element": "神秘", "kind": "ultimate", "energy_cost": 24,
+		"desc": "同时释放天机与解析，且本回合及下回合无法被选中。"},
+
+	# ===== 辛克莱（数值草案待对表）=====
+	"he_bi": {"name": "何必如此", "element": "火", "kind": "passive",
+		"desc": "每回合末回复 1~15 理智，理智越低回复越高；降至 -45 时失控。"},
+	"po_bu_de_yi": {"name": "迫不得已的审判", "element": "火", "kind": "active", "energy_cost": 0,
+		"desc": "突进两格（战斗层）命中目标：造成 2 点伤害、2 层灼烧；自身理智 -7。"},
+	"hei_bai": {"name": "黑白不分的执行", "element": "物理", "kind": "active", "energy_cost": 0,
+		"desc": "向前冲刺，目标方向敌人越多伤害越高（草案：1+2×途中敌数）；目标获得 2×途中敌数 层流血与 2 层灼烧；理智 -10。"},
+	"zi_wo_destroy": {"name": "自我毁灭的审判", "element": "火", "kind": "active", "energy_cost": 0,
+		"desc": "传送至 5×5 内一点（战斗层），对 3×3 敌人造成 4 伤与 3 层流血；理智 -3.5×命中数。"},
+	"xuan_zhong": {"name": "因为我是被选中的", "element": "物理", "kind": "ultimate", "energy_cost": 0,
+		"desc": "冲刺 3 格命中目标：造成其最大生命 15% 的伤害；若其流血≥5 层再施加 5 层灼烧；理智 -15。"},
+
 	# ===== 追猎（孙广泽 · 新版本表；创伤/流血/灼烧体系示范）=====
 	"zhuilie_ymxb": {
 		"name": "以命相搏",
@@ -332,6 +393,28 @@ const EFFECTS := {
 	"shou_wan_huo_zu": Callable(SkillEffects, "_ef_shou_wan_huo_zu"),
 	"shi_zhe_yi_xin": Callable(SkillEffects, "_ef_shi_zhe_yi_xin"),
 	"yao_ling": Callable(SkillEffects, "_ef_yao_ling"),
+
+	# 孤狼（叶麟）
+	"duan_ti": Callable(SkillEffects, "_ef_duan_ti"), "yin_yang_san_shou": Callable(SkillEffects, "_ef_yyss"),
+	"shen_suo_quan": Callable(SkillEffects, "_ef_ssq"), "pu_tong_quan": Callable(SkillEffects, "_ef_ptq"),
+	"xue_yu": Callable(SkillEffects, "_ef_xue_yu"),
+	# rapper睡神（何至高）
+	"kuang_nu": Callable(SkillEffects, "_ef_kn"), "lve_duo": Callable(SkillEffects, "_ef_lve"),
+	"mei_huo": Callable(SkillEffects, "_ef_meihuo"), "suo_xue": Callable(SkillEffects, "_ef_suoxue"),
+	"wan_li_bing_feng": Callable(SkillEffects, "_ef_wanli"),
+	# 仙尊（陈雨晴）
+	"nie_pan": Callable(SkillEffects, "_ef_niepan"), "wu_xing_zhi_li": Callable(SkillEffects, "_ef_wuxing"),
+	"shu_fu_zhi_ling": Callable(SkillEffects, "_ef_shufu"), "zhuan_jia_kui_lei": Callable(SkillEffects, "_ef_zhuanjia"),
+	"wan_jian_gui_zong": Callable(SkillEffects, "_ef_wanjian"),
+	# 灵虚数影
+	"shu_yu": Callable(SkillEffects, "_ef_shuyu"), "tian_ji": Callable(SkillEffects, "_ef_tianji"),
+	"jie_xi": Callable(SkillEffects, "_ef_jiexi"), "ji_dian": Callable(SkillEffects, "_ef_jidian"),
+	"shu_hai_teng_nuo": Callable(SkillEffects, "_ef_shuhai"),
+	# 辛克莱
+	"he_bi": Callable(SkillEffects, "_ef_hebi"), "po_bu_de_yi": Callable(SkillEffects, "_ef_pbdy"),
+	"hei_bai": Callable(SkillEffects, "_ef_heibai"), "zi_wo_destroy": Callable(SkillEffects, "_ef_zishu"),
+	"xuan_zhong": Callable(SkillEffects, "_ef_xuanzhong"),
+
 	# 追猎（孙广泽）
 	"zhuilie_ymxb": Callable(SkillEffects, "_ef_zl_ymxb"),
 	"snap_shot": Callable(SkillEffects, "_ef_snap_shot"),
@@ -634,13 +717,23 @@ static func tick_start_of_turn_statuses(u: BattleUnit) -> String:
 	u.lose_hp(dmg)
 	return "%s 被灼烧：失去 %d 点生命，灼烧层 %d→%d" % [u.name, before - u.hp, b, u.status_stacks("burn")]
 
-## 回合末触发：流血层数 -1
+## 回合末触发：流血层数 -1；冻伤每回合末 1 真伤
 static func tick_end_of_turn_statuses(u: BattleUnit) -> String:
-	if u.status_stacks("bleed") <= 0:
-		return ""
+	var out := ""
 	var b := u.status_stacks("bleed")
-	u.set_status("bleed", b - 1)
-	return "%s 流血衰减：%d→%d 层" % [u.name, b, u.status_stacks("bleed")]
+	if b > 0:
+		u.set_status("bleed", b - 1)
+		out += "%s 流血衰减：%d→%d 层" % [u.name, b, u.status_stacks("bleed")]
+	var fz := u.status_stacks("freeze")
+	if fz > 0:
+		var before := u.hp
+		u.lose_hp(fz)
+		out += "；%s 受冻伤 %d 真伤" % [u.name, before - u.hp]
+	if u.status_stacks("sword_field") > 0:
+		var b2 := u.hp
+		u.lose_hp(2)
+		out += "；%s 受剑域 2 真伤" % u.name
+	return out
 
 ## 施加创伤印记（wound）：满 3 层清空并触发「流血2级」
 static func add_wound(t: BattleUnit, n: int) -> String:
@@ -758,6 +851,8 @@ static func cut_if_under_pct(t: BattleUnit, pct: int) -> bool:
 ## 伤害结算走“技能槽伤害加成”：user.slot_damage(slot, base) 后统一打
 static func hit_group_slot(user: BattleUnit, slot: int, targets: Array, base: int, true_dmg := false) -> String:
 	var dmg := user.slot_damage(slot, base)
+	if absf(user.dmg_mult - 1.0) > 0.001:
+		dmg = maxi(1, ceili(float(dmg) * user.dmg_mult))
 	return hit_group(targets, dmg, true_dmg)
 
 ## 按当前 effective_speed 降序（同速保持数组原顺序）。用于：每轮初始排列，
@@ -1022,4 +1117,343 @@ static func _ef_yao_ling(user: BattleUnit, ctx: Dictionary) -> String:
 		out += "；%s 受 %d 真伤" % [tu.name, before - tu.hp]
 	if targets.is_empty():
 		out += "（相邻无敌人）"
+	return out
+
+## ========== 孤狼（叶麟）效果 ==========
+static func _ef_duan_ti(user: BattleUnit, _ctx: Dictionary) -> String:
+	if not user.has_flag("duanti_reg"):
+		user.add_flag("duanti_reg")
+		var u := user
+		user.hit_events.append(Callable(func(atk, _el): u.add_mitigation_att(atk, 5, 20)))
+	return "%s 的【锻体】生效：每次受击，对该攻击者的伤害免伤 +5%%（对同一人上限20%%）" % user.name
+
+## 阴阳散手：进入防守阴态（15%减伤），受击3次转阳（2回合50%反伤）
+static func _ef_yyss(user: BattleUnit, _ctx: Dictionary) -> String:
+	user.add_flag("yin")
+	user.set_mitigation("all", 15)
+	user.set_counter("受击", 0)
+	if not user.has_flag("yyss_reg"):
+		user.add_flag("yyss_reg")
+		var u := user
+		user.hit_events.append(Callable(func(_atk, _el): _yyss_on_hit(u)))
+	return "%s 释放【阴阳散手】：进入阴状态（减伤15%%），受击3次后转阳" % user.name
+
+static func _yyss_on_hit(u: BattleUnit) -> void:
+	if not u.has_flag("yin"):
+		return
+	u.grant_counter("受击", 1)
+	if u.counter("受击") >= 3:
+		u.clear_flag("yin")
+		u.set_mitigation("all", 0)
+		u.add_flag("yang")
+		u.set_reflect(50)
+		u.remove_timer("yang_end")
+		u.add_timer("yang_end", 2, Callable(func():
+			u.clear_flag("yang")
+			u.set_reflect(0)))
+
+## 伸缩拳：相邻4伤 / 两格2伤；远击嘲讽禁大2回合，近击获得对方属性免伤5%(上限30%)
+static func _ef_ssq(user: BattleUnit, ctx: Dictionary) -> String:
+	var targets: Array = ctx.get("targets", [])
+	if targets.is_empty():
+		return "%s 释放【伸缩拳】（无目标）" % user.name
+	var tu := targets[0] as BattleUnit
+	var dist := int(ctx.get("dist", 1))
+	var dmg := 4 if dist <= 1 else 2
+	var r: Dictionary = tu.take_damage(dmg, {"attacker": user, "element": user.element})
+	var out := "%s 释放【伸缩拳】%s：%s 受 %d 伤" % [user.name, "（远击）" if dist >= 2 else "（近击）", tu.name, r["hp_lost"] + r["absorbed"]]
+	if dist >= 2:
+		tu.add_flag("taunted")
+		tu.add_flag("no_ult")
+		tu.remove_timer("taunt_end")
+		tu.add_timer("taunt_end", 2, Callable(func():
+			tu.clear_flag("taunted")
+			tu.clear_flag("no_ult")))
+		out += "；%s 被嘲讽：大招封印2回合" % tu.name
+	else:
+		user.add_mitigation_att(tu, 5, 30)
+		out += "；习得对 %s 的免伤+5%%（对 %s 共 %d%%）" % [tu.name, tu.name, user.mitigation_att(tu)]
+	return out
+
+## 普通拳：2伤 + 对被嘲讽目标1真伤；回2能
+static func _ef_ptq(user: BattleUnit, ctx: Dictionary) -> String:
+	var targets: Array = ctx.get("targets", [])
+	if targets.is_empty():
+		return "%s 释放【普通拳】（无目标）" % user.name
+	var tu := targets[0] as BattleUnit
+	var r: Dictionary = tu.take_damage(2, {"attacker": user, "element": user.element})
+	var out := "%s 释放【普通拳】：%s 受 %d 伤" % [user.name, tu.name, r["hp_lost"] + r["absorbed"]]
+	if tu.has_flag("taunted"):
+		var before := tu.hp
+		tu.lose_hp(1)
+		out += "，嘲讽目标额外 %d 真伤" % (before - tu.hp)
+	user.add_energy(2)
+	return out
+
+## 血狱：首个目标已损15%伤害；范围内每目标 +5%免伤(总40)
+static func _ef_xue_yu(user: BattleUnit, ctx: Dictionary) -> String:
+	var targets: Array = ctx.get("targets", [])
+	var out := "%s 释放【血狱】" % user.name
+	if not targets.is_empty():
+		var tu := targets[0] as BattleUnit
+		var dmg := ceili(float(maxi(0, tu.max_hp - tu.hp)) * 0.15)
+		var r: Dictionary = tu.take_damage(dmg, {"attacker": user, "element": user.element})
+		out += "；%s 受 %d 伤" % [tu.name, r["hp_lost"] + r["absorbed"]]
+	for t in targets:
+		user.add_mitigation("all", 5, 40)
+	out += "；免伤 +%d%%（总 %d%%）" % [targets.size() * 5, user.mitigation_of("all")]
+	return out
+
+## ========== rapper睡神（何至高）效果 ==========
+static func _ef_kn(user: BattleUnit, _ctx: Dictionary) -> String:
+	return "%s 的【狂怒】生效：生命≤20%% 时伤害翻倍（当前倍率 %.1f）" % [user.name, user.dmg_mult]
+
+## 掠夺：目标失去一个主动技能（本局）；自身获得其 id（技能栏替换由战斗层）
+static func _ef_lve(user: BattleUnit, ctx: Dictionary) -> String:
+	var targets: Array = ctx.get("targets", [])
+	if targets.is_empty():
+		return "%s 释放【掠夺】（无目标）" % user.name
+	var tu := targets[0] as BattleUnit
+	for s in tu.actives:
+		if s == null:
+			continue
+		var slot_i := tu.actives.find(s) + 1
+		if slot_i >= 4:
+			continue
+		if not tu.is_skill_lost(s.id):
+			tu.mark_skill_lost(s.id)
+			user.set_meta("stolen_skill", s.id)
+			user.add_flag("has_stolen")
+			return "%s 掠夺了 %s 的【%s】（目标本局无法再用；下回合起可释放掠夺技）" % [user.name, tu.name, s.display_name]
+	return "%s 释放【掠夺】：%s 没有可掠夺的技能（大招除外）" % [user.name, tu.name]
+
+## 魅惑：≤2 目标本回合无法造成伤害
+static func _ef_meihuo(user: BattleUnit, ctx: Dictionary) -> String:
+	var targets: Array = ctx.get("targets", [])
+	var out := "%s 释放【魅惑】" % user.name
+	var n := 0
+	for t in targets:
+		if n >= 2:
+			break
+		var tu := t as BattleUnit
+		if tu == null:
+			continue
+		tu.add_flag("no_damage")
+		tu.remove_timer("meihuo_end")
+		tu.add_timer("meihuo_end", 1, Callable(func(): tu.clear_flag("no_damage")))
+		out += "；%s 本回合无法造成伤害" % tu.name
+		n += 1
+	if n == 0:
+		out += "（无目标）"
+	return out
+
+## 锁血：本回合无敌 + 回1血2能
+static func _ef_suoxue(user: BattleUnit, _ctx: Dictionary) -> String:
+	user.add_flag("invuln")
+	user.remove_timer("invuln_end")
+	user.add_timer("invuln_end", 1, Callable(func(): user.clear_flag("invuln")))
+	var h := user.heal(1)
+	var e := user.add_energy(2)
+	return "%s 释放【锁血】：本回合无敌，回复 %d 生命、%d 能量" % [user.name, h, e]
+
+## 万里冰封：三格内敌人 冻伤1（减速20·回合末1真伤·2回合）+3伤
+static func _ef_wanli(user: BattleUnit, ctx: Dictionary) -> String:
+	var targets: Array = ctx.get("targets", [])
+	var out := "%s 释放【万里冰封】" % user.name
+	var hit := 0
+	for t in targets:
+		var tu := t as BattleUnit
+		if tu == null:
+			continue
+		var r: Dictionary = tu.take_damage(3, {"attacker": user, "element": "冰"})
+		out += "；%s 受 %d 伤" % [tu.name, r["hp_lost"] + r["absorbed"]]
+		tu.add_status("freeze", 1)
+		tu.set_speed_mod_src("冰封", -20)
+		tu.remove_timer("freeze_end")
+		tu.add_timer("freeze_end", 2, Callable(func():
+			tu.remove_speed_mod_src("冰封")
+			tu.set_status("freeze", 0)))
+		out += "，冻伤1级（速-20，2回合）"
+		hit += 1
+	if hit == 0:
+		out += "（无目标）"
+	return out
+
+## ========== 仙尊（陈雨晴）效果 ==========
+static func _ef_niepan(user: BattleUnit, _ctx: Dictionary) -> String:
+	return "%s 的【涅槃】生效：死亡复活回一半生命（每局1次）；回合末自动回4能量" % user.name
+
+## 五行之力：随机一道五行法力，相邻≤3敌人各2伤
+static func _ef_wuxing(user: BattleUnit, ctx: Dictionary) -> String:
+	var elems := ["金", "木", "水", "火", "土"]
+	var pick: String = elems[randi() % elems.size()]
+	var targets: Array = ctx.get("targets", [])
+	var out := "%s 释放【五行之力】（%s）：" % [user.name, pick]
+	var hit := 0
+	for t in targets:
+		if hit >= 3:
+			break
+		var tu := t as BattleUnit
+		if tu == null:
+			continue
+		var r: Dictionary = tu.take_damage(2, {"attacker": user, "element": pick})
+		out += "%s 受 %d 伤；" % [tu.name, r["hp_lost"] + r["absorbed"]]
+		hit += 1
+	if hit == 0:
+		out += "无目标"
+	return out
+
+## 束缚之灵：相邻敌人本回合无法使用技能
+static func _ef_shufu(user: BattleUnit, ctx: Dictionary) -> String:
+	var targets: Array = ctx.get("targets", [])
+	var out := "%s 释放【束缚之灵】" % user.name
+	var n := 0
+	for t in targets:
+		var tu := t as BattleUnit
+		if tu == null:
+			continue
+		tu.add_flag("no_skill")
+		tu.remove_timer("shufu_end")
+		tu.add_timer("shufu_end", 1, Callable(func(): tu.clear_flag("no_skill")))
+		out += "；%s 本回合沉默" % tu.name
+		n += 1
+	if n == 0:
+		out += "（无目标）"
+	return out
+
+## 转嫁傀儡：目标位移由战斗层执行；造成已损生命20%伤害
+static func _ef_zhuanjia(user: BattleUnit, ctx: Dictionary) -> String:
+	var targets: Array = ctx.get("targets", [])
+	if targets.is_empty():
+		return "%s 释放【转嫁傀儡】（无目标）" % user.name
+	var tu := targets[0] as BattleUnit
+	var dmg := ceili(float(maxi(0, tu.max_hp - tu.hp)) * 0.2)
+	var r: Dictionary = tu.take_damage(dmg, {"attacker": user, "element": "土"})
+	return "%s 释放【转嫁傀儡】：%s 被转移到仙尊相邻空格（战斗层执行），受 %d 伤" % [user.name, tu.name, r["hp_lost"] + r["absorbed"]]
+
+## 万剑归宗：两格内敌人每回合末2真伤，持续3回合
+static func _ef_wanjian(user: BattleUnit, ctx: Dictionary) -> String:
+	var targets: Array = ctx.get("targets", [])
+	var out := "%s 释放【万剑归宗】" % user.name
+	var n := 0
+	for t in targets:
+		var tu := t as BattleUnit
+		if tu == null:
+			continue
+		tu.add_status("sword_field", 1)
+		tu.remove_timer("sword_end")
+		tu.add_timer("sword_end", 3, Callable(func(): tu.set_status("sword_field", 0)))
+		out += "；%s 剑域3回合" % tu.name
+		n += 1
+	if n == 0:
+		out += "（无目标）"
+	return out
+
+## ========== 灵虚数影（辛子祺）效果 ==========
+static func _ef_shuyu(user: BattleUnit, _ctx: Dictionary) -> String:
+	return "%s 的【数域】生效：对非必中攻击 90%% 闪避" % user.name
+
+static func _ef_tianji(user: BattleUnit, _ctx: Dictionary) -> String:
+	user.set_dmg_mult(1.5)
+	user.remove_timer("tianji_end")
+	user.add_timer("tianji_end", 1, Callable(func(): user.set_dmg_mult(1.0)))
+	return "%s 释放【天机】：下回合伤害 1.5 倍" % user.name
+
+## 解析：单体3伤 + 破甲2（护甲-2，3回合后恢复）
+static func _ef_jiexi(user: BattleUnit, ctx: Dictionary) -> String:
+	var targets: Array = ctx.get("targets", [])
+	if targets.is_empty():
+		return "%s 释放【解析】（无目标）" % user.name
+	var tu := targets[0] as BattleUnit
+	var r: Dictionary = tu.take_damage(3, {"attacker": user, "element": user.element, "sure_hit": true})
+	tu.remove_armor(2)
+	tu.remove_timer("pojia_restore")
+	tu.add_timer("pojia_restore", 3, Callable(func(): tu.add_armor(2)))
+	return "%s 释放【解析】：%s 受 %d 伤，破甲二级（甲-2，3回合）" % [user.name, tu.name, r["hp_lost"] + r["absorbed"]]
+
+static func _ef_jidian(user: BattleUnit, _ctx: Dictionary) -> String:
+	var e := user.add_energy(5)
+	user.add_shield(1)
+	return "%s 释放【极点】：回复 %d 能量、1 护盾（现 %d）" % [user.name, e, user.shield]
+
+## 数海腾挪：天机+解析+本回合及下回合无法被选中
+static func _ef_shuhai(user: BattleUnit, ctx: Dictionary) -> String:
+	var out := "%s 释放【数海腾挪】" % user.name
+	user.set_dmg_mult(1.5)
+	user.remove_timer("tianji_end")
+	user.add_timer("tianji_end", 1, Callable(func(): user.set_dmg_mult(1.0)))
+	var targets: Array = ctx.get("targets", [])
+	if not targets.is_empty():
+		var tu := targets[0] as BattleUnit
+		var r: Dictionary = tu.take_damage(3, {"attacker": user, "element": user.element, "sure_hit": true})
+		tu.remove_armor(2)
+		tu.remove_timer("pojia_restore")
+		tu.add_timer("pojia_restore", 3, Callable(func(): tu.add_armor(2)))
+		out += "；%s 受 %d 伤、破甲二级" % [tu.name, r["hp_lost"] + r["absorbed"]]
+	user.add_flag("untargetable")
+	user.remove_timer("untargetable_end")
+	user.add_timer("untargetable_end", 2, Callable(func(): user.clear_flag("untargetable")))
+	out += "；本回合及下回合无法被选中"
+	return out
+
+## ========== 辛克莱（数值草案）效果 ==========
+static func _ef_hebi(user: BattleUnit, _ctx: Dictionary) -> String:
+	return "%s 的【何必如此】生效：理智 %d" % [user.name, user.sanity]
+
+static func _ef_pbdy(user: BattleUnit, ctx: Dictionary) -> String:
+	var targets: Array = ctx.get("targets", [])
+	if targets.is_empty():
+		return "%s 释放【迫不得已的审判】（无目标）" % user.name
+	var tu := targets[0] as BattleUnit
+	var r: Dictionary = tu.take_damage(2, {"attacker": user, "element": "火"})
+	tu.add_status("burn", 2)
+	user.lose_sanity(7)
+	return "%s 释放【迫不得已的审判】：%s 受 %d 伤、灼烧+2；理智 -7（现 %d）" % [user.name, tu.name, r["hp_lost"] + r["absorbed"], user.sanity]
+
+static func _ef_heibai(user: BattleUnit, ctx: Dictionary) -> String:
+	var targets: Array = ctx.get("targets", [])
+	var n := targets.size()
+	if n <= 0:
+		return "%s 释放【黑白不分的执行】（无目标）" % user.name
+	var tu := targets[0] as BattleUnit
+	var dmg := 1 + 2 * n
+	var r: Dictionary = tu.take_damage(dmg, {"attacker": user, "element": "火"})
+	tu.add_status("bleed", 2 * n)
+	tu.add_status("burn", 2)
+	user.lose_sanity(10)
+	return "%s 释放【黑白不分的执行】：命中 %d 个敌人，%s 受 %d 伤、流血+%d、灼烧+2；理智 -10（现 %d）" % [user.name, n, tu.name, r["hp_lost"] + r["absorbed"], 2 * n, user.sanity]
+
+static func _ef_zishu(user: BattleUnit, ctx: Dictionary) -> String:
+	var targets: Array = ctx.get("targets", [])
+	var out := "%s 释放【自我毁灭的审判】" % user.name
+	var n := 0
+	for t in targets:
+		var tu := t as BattleUnit
+		if tu == null:
+			continue
+		var r: Dictionary = tu.take_damage(4, {"attacker": user, "element": "火"})
+		tu.add_status("bleed", 3)
+		out += "；%s 受 %d 伤、流血+3" % [tu.name, r["hp_lost"] + r["absorbed"]]
+		n += 1
+	var cost := ceili(float(n) * 3.5)
+	user.lose_sanity(cost)
+	out += "；理智 -%d（现 %d）" % [cost, user.sanity]
+	if n == 0:
+		out += "（无目标）"
+	return out
+
+static func _ef_xuanzhong(user: BattleUnit, ctx: Dictionary) -> String:
+	var targets: Array = ctx.get("targets", [])
+	if targets.is_empty():
+		return "%s 释放【因为我是被选中的】（无目标）" % user.name
+	var tu := targets[0] as BattleUnit
+	var dmg := ceili(float(tu.max_hp) * 0.15)
+	var before := tu.hp
+	tu.lose_hp(dmg)
+	var out := "%s 释放【因为我是被选中的】：%s 失去 %d 点生命（最大生命的15%%）" % [user.name, tu.name, before - tu.hp]
+	if tu.status_stacks("bleed") >= 5:
+		tu.add_status("burn", 5)
+		out += "，流血≥5层 → 灼烧+5"
+	user.lose_sanity(15)
+	out += "；理智 -15（现 %d）" % user.sanity
 	return out

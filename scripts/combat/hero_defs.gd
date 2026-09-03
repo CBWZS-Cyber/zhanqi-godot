@@ -114,6 +114,42 @@ const ALL := {
 			"actives": ["snap_shot", "hunt", "shield_up", "meteor_shot"],
 		},
 	},
+
+	# —— 剧情英雄 · 孤狼（叶麟 · 物理 8/12/甲2/160；锻体/防守/斩杀低血）——
+	"gu_lang": {
+		"name": "孤狼", "element": "物理",
+		"hp": 8, "energy": 12, "armor": 2, "speed": 160,
+		"skills": {"passive": "duan_ti", "actives": ["yin_yang_san_shou", "shen_suo_quan", "pu_tong_quan", "xue_yu"]},
+	},
+	# —— 剧情英雄 · rapper睡神（何至高 · 神秘 7/13/甲1/170；掠夺/魅惑/无敌/冰封）——
+	"he_zhigao": {
+		"name": "rapper睡神", "element": "神秘",
+		"hp": 7, "energy": 13, "armor": 1, "speed": 170,
+		"hp_threshold_flags": [{"flag": "rage", "pct": 20, "dmg_mult": 2.0}],
+		"skills": {"passive": "kuang_nu", "actives": ["lve_duo", "mei_huo", "suo_xue", "wan_li_bing_feng"]},
+	},
+	# —— 剧情英雄 · 仙尊（陈雨晴 · 圣灵 6/18/甲1/131；涅槃复活/五行/剑域）——
+	"xian_zun": {
+		"name": "仙尊", "element": "圣灵",
+		"hp": 6, "energy": 18, "armor": 1, "speed": 131,
+		"turn_end_effects": [{"kind": "energy", "amount": 4}],
+		"death_revive": {"rounds": 1, "hp_pct": 50, "per_game": 1},
+		"skills": {"passive": "nie_pan", "actives": ["wu_xing_zhi_li", "shu_fu_zhi_ling", "zhuan_jia_kui_lei", "wan_jian_gui_zong"]},
+	},
+	# —— 剧情英雄 · 灵虚数影（辛子祺老师不离谱版 · 神秘 4/32/甲0/234；90%闪避/增伤/破甲）——
+	"ling_xu": {
+		"name": "灵虚数影", "element": "神秘",
+		"hp": 4, "energy": 32, "armor": 0, "speed": 234, "evasion_pct": 90,
+		"skills": {"passive": "shu_yu", "actives": ["tian_ji", "jie_xi", "ji_dian", "shu_hai_teng_nuo"]},
+	},
+	# —— 剧情英雄 · 辛克莱（火 35血/理智体系0..45；数值为草案，待对表确认）——
+	"xin_kelai": {
+		"name": "辛克莱", "element": "火",
+		"hp": 35, "energy": 0, "energy_max": -1, "armor": 0, "speed": 120,
+		"turn_end_effects": [{"kind": "sanity", "min_gain": 1, "spread": 14}],
+		"skills": {"passive": "he_bi", "actives": ["po_bu_de_yi", "hei_bai", "zi_wo_destroy", "xuan_zhong"]},
+	},
+
 	"demo_hero": {
 		"name": "演示英雄",
 		"element": "火",

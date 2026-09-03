@@ -635,8 +635,8 @@ static func _ef_hei_shan(user: BattleUnit, ctx: Dictionary) -> String:
 		if layers > 0:
 			tu.consume_counter("污染", layers)
 			var loss := ceili(float(tu.max_hp) * 0.1 * float(layers))
-			tu.lose_hp(loss)
-			out += "；%s 失去 %d 点生命（%d 层×10%%）" % [tu.name, loss, layers]
+			var r: Dictionary = tu.take_damage(loss)
+			out += "；%s 失去 %d 点生命（%d 层×10%%）" % [tu.name, r["hp_lost"] + r["absorbed"], layers]
 		if layers >= 6:
 			if mode == "1v1":
 				tu.lose_hp(tu.hp)
@@ -699,13 +699,13 @@ static func status_cn(id: String) -> String:
 	}
 	return String(m.get(id, id))
 
-## 行动触发（施放技能/移动）：结算自身流血 —— 每层 1 点真伤，层数不变（回合末才减）
+## 行动触发（施放技能/移动）：结算自身流血 —— 每层 1 点伤害（未标真伤=普伤），层数不变（回合末才减）
 static func tick_action_statuses(u: BattleUnit) -> String:
 	var b := u.status_stacks("bleed")
 	if b <= 0:
 		return ""
 	var before := u.hp
-	u.lose_hp(b)
+	u.take_damage(b)
 	return "%s 行动触发流血：失去 %d 点生命（%d/%d）" % [u.name, before - u.hp, u.hp, u.max_hp]
 
 ## 回合开始触发：原灼烧逻辑改为回合末结算（新表备注：每回合末1真伤，持续2回合）

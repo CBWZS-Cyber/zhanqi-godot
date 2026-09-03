@@ -64,6 +64,16 @@ const ALL := {
 			"actives": ["hun_qi", "zhi_pei", "qin_ran", "hei_shan"],
 		},
 	},
+	# —— 剧情英雄 · 追猎（孙广泽 · 新版本表；创伤/流血/灼烧体系示范）——
+	"zhuilie": {
+		"name": "追猎",
+		"element": "机械",
+		"hp": 8, "energy": 6, "armor": 3, "speed": 120,
+		"skills": {
+			"passive": "zhuilie_ymxb",
+			"actives": ["snap_shot", "hunt", "shield_up", "meteor_shot"],
+		},
+	},
 	"demo_hero": {
 		"name": "演示英雄",
 		"element": "火",

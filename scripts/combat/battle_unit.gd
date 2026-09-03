@@ -19,7 +19,8 @@ var energy: int = 50
 var shield: int = 0
 var armor: int = 0
 var speed: int = 5          # 基础速度（行动先后由战斗层按 effective_speed 排序，大者先动）
-var speed_mod: int = 0      # 速度修正（如每层污染 -15）
+var speed_mod: int = 0      # 速度修正（减益：如每层污染 -15）
+var speed_buff: int = 0     # 速度加成（增益：如“以命相搏”生命≤3 时 +200）
 var alive: bool = true
 var cell := Vector2i.ZERO       # 单位所在棋盘格（由战斗层摆放时设置，距离判定用）
 var flags: Dictionary = {}      # 状态标志："失神"/"被支配"/"永久支配"/"本回合均摊"…（战斗层/效果读写）
@@ -97,10 +98,13 @@ func _make_skill(sid: String) -> Skill:
 
 ## ---------- 生命 ----------
 func effective_speed() -> int:
-	return maxi(1, speed + speed_mod)
+	return maxi(1, speed + speed_buff + speed_mod)
 
 func set_speed_mod(n: int) -> void:
 	speed_mod = n
+
+func set_speed_buff(n: int) -> void:
+	speed_buff = n
 
 func add_flag(f: String) -> void:
 	flags[f] = true
@@ -168,6 +172,53 @@ func clear_shield() -> void:
 func set_shield(amount: int) -> void:
 	shield = maxi(0, amount)
 
+## ---------- 护甲增减（支持上限封顶，如“架盾护甲+1，上限3”） ----------
+func add_armor(amount: int, max_cap: int = 0) -> int:
+	if amount <= 0:
+		return 0
+	var before := armor
+	armor += amount
+	if max_cap > 0 and armor > max_cap:
+		armor = max_cap
+	return armor - before
+
+func remove_armor(amount: int) -> void:
+	armor = maxi(0, armor - amount)
+
+func set_armor(amount: int) -> void:
+	armor = maxi(0, amount)
+
+## ---------- 状态/印记（层数制：bleed 流血 / burn 灼烧 / wound 创伤…） ----------
+## 层数 = 等级（“流血2级”=bleed 2 层）。tick 规则见 SkillEffects.tick_* 系列。
+var statuses: Dictionary = {}     # id -> 层数
+
+func add_status(id: String, amount: int) -> void:
+	statuses[id] = maxi(0, int(statuses.get(id, 0)) + amount)
+
+func set_status(id: String, amount: int) -> void:
+	if amount <= 0:
+		statuses.erase(id)
+	else:
+		statuses[id] = amount
+
+func status_stacks(id: String) -> int:
+	return int(statuses.get(id, 0))
+
+func has_status(id: String) -> bool:
+	return statuses.has(id)
+
+func clear_statuses() -> void:
+	statuses.clear()
+
+func to_status_summary() -> String:
+	if statuses.is_empty():
+		return ""
+	var parts: Array[String] = []
+	for k in statuses:
+		var cn := SkillEffects.status_cn(str(k))
+		parts.append("%s%d" % [cn, int(statuses[k])])
+	return " 状态[%s]" % "、".join(parts)
+
 ## ---------- 能量 ----------
 func add_energy(amount: int) -> int:
 	var before := energy
@@ -192,7 +243,14 @@ func use_active(i: int, ctx: Dictionary) -> String:
 	var sk := actives[i - 1]
 	if sk == null:
 		return "%s 第 %d 个技能未配置" % [name, i]
-	return sk.activate(self, ctx)
+	# 行动前结算自身“流血”（移动/施放技能时触发），流血可能致死
+	var action_log := SkillEffects.tick_action_statuses(self)
+	if not alive:
+		return action_log + "%s 因流血倒下了" % name
+	var out := sk.activate(self, ctx)
+	if action_log != "":
+		out = action_log + "；" + out
+	return out
 
 ## 战斗层在合适时机调用：触发被动
 func trigger_passive(ctx: Dictionary) -> String:
@@ -200,7 +258,7 @@ func trigger_passive(ctx: Dictionary) -> String:
 		return passive.trigger_passive(self, ctx)
 	return ""
 
-## 回合结束清理（战斗层调用）。返回产生的结算文本（如回合末吸血），无则空串。
+## 回合结束清理（战斗层调用）。返回产生的结算文本（如回合末吸血/流血衰减），无则空串。
 func end_turn() -> String:
 	var out := ""
 	for s in actives:
@@ -213,6 +271,7 @@ func end_turn() -> String:
 		grant_counter(str(k), int(_pending_grant[k]))
 	_pending_grant.clear()
 	out += _settle_share_drain()
+	out += SkillEffects.tick_end_of_turn_statuses(self)
 	return out
 
 ## ---------- 一技能类“分担/回合末吸血”登记（战斗层时序） ----------
@@ -244,8 +303,10 @@ func _settle_share_drain() -> String:
 		out += "%s 回合末吸取 %s：流失 %d 生命，邪神回 %d 血" % [name, tu.name, loss, got]
 	return out
 
-## 回合开始（战斗层调用）：被动资源 per_turn 自动增长（支持 start_round 延迟生效）
-func on_turn_start() -> void:
+## 回合开始（战斗层调用）：被动资源 per_turn 自动增长（支持 start_round 延迟生效）；
+## 返回产生的结算文本（如灼烧伤害）
+func on_turn_start() -> String:
+	var out := ""
 	_rounds += 1
 	for k in _counters_cfg:
 		var cfg: Dictionary = _counters_cfg[k]
@@ -254,6 +315,8 @@ func on_turn_start() -> void:
 		if _rounds < int(cfg.get("start_round", 1)):
 			continue
 		grant_counter(str(k), int(cfg["per_turn"]))
+	out += SkillEffects.tick_start_of_turn_statuses(self)
+	return out
 
 ## ---------- 计数资源池（叠层/元晶等） ----------
 func counter(name: String) -> int:

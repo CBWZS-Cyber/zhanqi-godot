@@ -99,6 +99,46 @@ const DATA := {
 		"desc": "消耗 3 枚元晶，对最多 3 个目标各造成 2 点伤害，并获得 1 枚元晶。",
 	},
 
+	# ===== 追猎（孙广泽 · 新版本表；创伤/流血/灼烧体系示范）=====
+	"zhuilie_ymxb": {
+		"name": "以命相搏",
+		"element": "机械",
+		"kind": "passive",
+		"desc": "生命值≤3时，速度增加200点，护甲清零，每回合获得2点护盾。",
+	},
+	"snap_shot": {
+		"name": "狙击",
+		"element": "机械",
+		"kind": "active",
+		"energy_cost": 0,
+		"cooldown": 0,
+		"desc": "射程3格，对1个目标造成1点伤害，附加「创伤」印记；积累3层时清空印记并触发「流血2级」。",
+	},
+	"hunt": {
+		"name": "追猎",
+		"element": "机械",
+		"kind": "active",
+		"energy_cost": 3,
+		"cooldown": 0,
+		"desc": "位移后额外发动一次「狙击」。（位移由战斗层执行）",
+	},
+	"shield_up": {
+		"name": "架盾",
+		"element": "机械",
+		"kind": "active",
+		"energy_cost": 0,
+		"cooldown": 0,
+		"desc": "获得2点护盾，护甲+1（上限3）。",
+	},
+	"meteor_shot": {
+		"name": "流星飞弹",
+		"element": "机械",
+		"kind": "ultimate",
+		"energy_cost": 0,
+		"cooldown": 0,
+		"desc": "全图射程，攻击2个目标各造成3点伤害，附加「灼烧1级」；若目标已有「流血2级」则升为「流血3级」；护甲-1。一局仅限一次。",
+	},
+
 	# ===== 邪神（王泽）· 同学设计 + 用户改版 2026-09-03 =====
 	## 污染层 = 每层使目标速度 -15；层数 ≥3 → 失神
 	"ji_sheng": {
@@ -154,6 +194,12 @@ const EFFECTS := {
 	"hua_jing_kai": Callable(SkillEffects, "_ef_hua_jing_kai"),
 	"sui_jing_zhan": Callable(SkillEffects, "_ef_sui_jing_zhan"),
 	"yu_jing_wei_long": Callable(SkillEffects, "_ef_yu_jing_wei_long"),
+	# 追猎（孙广泽）
+	"zhuilie_ymxb": Callable(SkillEffects, "_ef_zl_ymxb"),
+	"snap_shot": Callable(SkillEffects, "_ef_snap_shot"),
+	"hunt": Callable(SkillEffects, "_ef_hunt"),
+	"shield_up": Callable(SkillEffects, "_ef_shield_up"),
+	"meteor_shot": Callable(SkillEffects, "_ef_meteor_shot"),
 	# 邪神（王泽）
 	"ji_sheng": Callable(SkillEffects, "_ef_ji_sheng"),
 	"hun_qi": Callable(SkillEffects, "_ef_hun_qi"),
@@ -418,4 +464,120 @@ static func grant_layer_each(targets: Array, layer: String, n: int) -> String:
 			continue
 		tu.grant_counter(layer, n)
 		out += "，%s %s +%d（共 %d）" % [tu.name, layer, n, tu.counter(layer)]
+	return out
+
+## ========== 状态/印记公共基元（通用，勿为单个英雄复制） ==========
+## 层数制：bleed 流血 / burn 灼烧 / wound 创伤 / freeze 冻伤… 存 unit.statuses
+## 结算时机：行动时(施放技能/移动)看 bleed；回合开始时看 burn；回合末 bleed 衰减 1。
+
+static func status_cn(id: String) -> String:
+	var m := {
+		"bleed": "流血", "burn": "灼烧", "wound": "创伤", "freeze": "冻伤",
+		"poison": "中毒", "burn2": "灼烧2",
+	}
+	return String(m.get(id, id))
+
+## 行动触发（施放技能/移动）：结算自身流血 —— 每层 1 点真伤，层数不变（回合末才减）
+static func tick_action_statuses(u: BattleUnit) -> String:
+	var b := u.status_stacks("bleed")
+	if b <= 0:
+		return ""
+	var before := u.hp
+	u.lose_hp(b)
+	return "%s 行动触发流血：失去 %d 点生命（%d/%d）" % [u.name, before - u.hp, u.hp, u.max_hp]
+
+## 回合开始触发：灼烧 —— 造成层数伤害后层数 -2
+static func tick_start_of_turn_statuses(u: BattleUnit) -> String:
+	var b := u.status_stacks("burn")
+	if b <= 0:
+		return ""
+	var dmg := b
+	u.set_status("burn", b - 2)
+	var before := u.hp
+	u.lose_hp(dmg)
+	return "%s 被灼烧：失去 %d 点生命，灼烧层 %d→%d" % [u.name, before - u.hp, b, u.status_stacks("burn")]
+
+## 回合末触发：流血层数 -1
+static func tick_end_of_turn_statuses(u: BattleUnit) -> String:
+	if u.status_stacks("bleed") <= 0:
+		return ""
+	var b := u.status_stacks("bleed")
+	u.set_status("bleed", b - 1)
+	return "%s 流血衰减：%d→%d 层" % [u.name, b, u.status_stacks("bleed")]
+
+## 施加创伤印记（wound）：满 3 层清空并触发「流血2级」
+static func add_wound(t: BattleUnit, n: int) -> String:
+	t.add_status("wound", n)
+	if t.status_stacks("wound") >= 3:
+		t.set_status("wound", 0)
+		t.add_status("bleed", 2)
+		return "，%s 创伤满 3 层 → 触发流血2级" % t.name
+	return "，%s 创伤 +%d（共 %d）" % [t.name, n, t.status_stacks("wound")]
+
+## 对目标打一发“狙击”（1 伤 + 创伤）
+static func _fire_snap(user: BattleUnit, t: BattleUnit, extra: String) -> String:
+	var r: Dictionary = t.take_damage(1)
+	var out := "%s%s：%s 受 %d 伤" % [user.name, extra, t.name, r["hp_lost"] + r["absorbed"]]
+	out += add_wound(t, 1)
+	return out
+
+## ========== 追猎（孙广泽）效果 ==========
+## 被动·以命相搏：生命≤3 → 速+200、护甲清零、每回合+2盾（战斗层每回合开始调用 trigger_passive）
+static func _ef_zl_ymxb(user: BattleUnit, _ctx: Dictionary) -> String:
+	if user.hp <= 3:
+		if not user.has_flag("zl_lowhp"):
+			user.add_flag("zl_lowhp")
+			user.set_speed_buff(200)
+			user.set_armor(0)
+		user.add_shield(2)
+		return "%s 触发【以命相搏】：速度 +200（现 %d）、护甲清零、获得 2 点护盾" % [user.name, user.effective_speed()]
+	if user.has_flag("zl_lowhp"):
+		user.clear_flag("zl_lowhp")
+		user.set_speed_buff(0)
+	return "%s 生命 %d/3 以上，【以命相搏】未触发" % [user.name, user.hp]
+
+## 主动1·狙击：单体 1 伤 + 创伤
+static func _ef_snap_shot(user: BattleUnit, ctx: Dictionary) -> String:
+	var targets: Array = ctx.get("targets", [])
+	if targets.is_empty():
+		return "%s 释放【狙击】（无目标）" % user.name
+	return _fire_snap(user, targets[0] as BattleUnit, " 释放【狙击】")
+
+## 主动2·追猎：位移后额外发动一次狙击（位移本体由战斗层执行）
+static func _ef_hunt(user: BattleUnit, ctx: Dictionary) -> String:
+	var targets: Array = ctx.get("targets", [])
+	if targets.is_empty():
+		return "%s 释放【追猎】（位移后无目标）" % user.name
+	return _fire_snap(user, targets[0] as BattleUnit, " 释放【追猎】位移后额外狙击")
+
+## 主动3·架盾：2 盾 + 护甲+1（上限3）
+static func _ef_shield_up(user: BattleUnit, _ctx: Dictionary) -> String:
+	user.add_shield(2)
+	var ag := user.add_armor(1, 3)
+	return "%s 释放【架盾】：护盾 +2（现 %d），护甲 +%d（现 %d）" % [user.name, user.shield, ag, user.armor]
+
+## 终极·流星飞弹：至多2目标各3伤 + 灼烧1；已有流血2级→升3级；护甲-1（一局一次由战斗层限制）
+static func _ef_meteor_shot(user: BattleUnit, ctx: Dictionary) -> String:
+	var targets: Array = ctx.get("targets", [])
+	var out := "%s 释放【流星飞弹】" % user.name
+	var hit := 0
+	for t in targets:
+		if hit >= 2:
+			break
+		var tu := t as BattleUnit
+		if tu == null:
+			continue
+		var r: Dictionary = tu.take_damage(3)
+		out += "；%s 受 %d 伤" % [tu.name, r["hp_lost"] + r["absorbed"]]
+		if tu.status_stacks("bleed") >= 2:
+			tu.set_status("bleed", 3)
+			out += "，流血升级为3级"
+		else:
+			tu.add_status("burn", 1)
+			out += "，附加灼烧1级"
+		tu.remove_armor(1)
+		out += "，护甲-1"
+		hit += 1
+	if hit == 0:
+		out += "（无目标）"
 	return out

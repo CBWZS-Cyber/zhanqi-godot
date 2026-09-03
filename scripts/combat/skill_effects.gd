@@ -581,3 +581,61 @@ static func _ef_meteor_shot(user: BattleUnit, ctx: Dictionary) -> String:
 	if hit == 0:
 		out += "（无目标）"
 	return out
+
+## ========== 重灾区防护基元（目标/阵营/加成/斩杀/先手） ==========
+
+## 按关系过滤目标：rel = "enemy"(敌对) / "ally"(同队,含自己可选) / "any"
+static func filter_by_relation(targets: Array, me: BattleUnit, rel: String, include_self := false) -> Array:
+	var out: Array = []
+	for t in targets:
+		var tu := t as BattleUnit
+		if tu == null:
+			continue
+		if not include_self and tu == me:
+			continue
+		var enemy := tu.team != me.team
+		var hit_ok := false
+		if rel == "any":
+			hit_ok = true
+		elif rel == "enemy":
+			hit_ok = enemy
+		elif rel == "ally":
+			hit_ok = not enemy
+		if hit_ok:
+			out.append(tu)
+	return out
+
+## 目标当前生命百分比（0..100，按最大生命）
+static func hp_pct(t: BattleUnit) -> int:
+	if t.max_hp <= 0:
+		return 100
+	return int(round(float(t.hp) / float(t.max_hp) * 100.0))
+
+## 条件斩杀：目标当前生命 ≤ 最大生命的 pct% 时直接斩杀（返回真）
+static func cut_if_under_pct(t: BattleUnit, pct: int) -> bool:
+	if hp_pct(t) <= pct:
+		t.lose_hp(t.hp)
+		return true
+	return false
+
+## 伤害结算走“技能槽伤害加成”：user.slot_damage(slot, base) 后统一打
+static func hit_group_slot(user: BattleUnit, slot: int, targets: Array, base: int, true_dmg := false) -> String:
+	var dmg := user.slot_damage(slot, base)
+	return hit_group(targets, dmg, true_dmg)
+
+## 先手排序：按 effective_speed 降序；同速按数组原顺序（Battle 每轮开始时取一次快照，
+## 本轮内速度变化不重排——固定规则，见 battle 层约定）
+static func speed_order(units: Array) -> Array:
+	var lst: Array = []
+	for u in units:
+		if u is BattleUnit:
+			lst.append(u)
+	# 冒泡降序（严格大于才交换 → 同速保持原顺序，作为先手快照稳定）
+	for i in range(lst.size()):
+		for j in range(i + 1, lst.size()):
+			var ai: BattleUnit = lst[i]
+			var aj: BattleUnit = lst[j]
+			if aj.effective_speed() > ai.effective_speed():
+				lst[i] = aj
+				lst[j] = ai
+	return lst

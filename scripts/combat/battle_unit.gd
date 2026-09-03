@@ -19,8 +19,9 @@ var energy: int = 50
 var shield: int = 0
 var armor: int = 0
 var speed: int = 5          # 基础速度（行动先后由战斗层按 effective_speed 排序，大者先动）
-var speed_mod: int = 0      # 速度修正（减益：如每层污染 -15）
-var speed_buff: int = 0     # 速度加成（增益：如“以命相搏”生命≤3 时 +200）
+var speed_buff: int = 0     # 速度加成（增益，如“以命相搏”+200）
+var _speed_mods := {}       # 速度修正多来源：来源 -> delta（可叠加求和，如 污染-15 + 断流-50）
+var team: int = 0           # 阵营：0 红方 / 1 蓝方（摆放时由战斗层设置；目标过滤用）
 var alive: bool = true
 var cell := Vector2i.ZERO       # 单位所在棋盘格（由战斗层摆放时设置，距离判定用）
 var flags: Dictionary = {}      # 状态标志："失神"/"被支配"/"永久支配"/"本回合均摊"…（战斗层/效果读写）
@@ -98,13 +99,80 @@ func _make_skill(sid: String) -> Skill:
 
 ## ---------- 生命 ----------
 func effective_speed() -> int:
-	return maxi(1, speed + speed_buff + speed_mod)
+	var total := speed + speed_buff
+	for src in _speed_mods:
+		total += int(_speed_mods[src])
+	return maxi(1, total)
 
+## 速度修正（多来源求和）：src 同名覆盖，不同名叠加
+func set_speed_mod_src(src: String, delta: int) -> void:
+	_speed_mods[src] = delta
+
+func remove_speed_mod_src(src: String) -> void:
+	_speed_mods.erase(src)
+
+func speed_mod_total() -> int:
+	var t := 0
+	for src in _speed_mods:
+		t += int(_speed_mods[src])
+	return t
+
+## 兼容旧接口：写入统一来源 "legacy"
 func set_speed_mod(n: int) -> void:
-	speed_mod = n
+	set_speed_mod_src("legacy", n)
 
 func set_speed_buff(n: int) -> void:
 	speed_buff = n
+
+## ---------- 伤害加成栈（按技能槽 1..4 / 0=全技能） ----------
+## 用法：剑舞剑意“每次使用技能1后 技能1伤害+1（上限4）” → add_slot_damage(1, 1, 4)
+var _dmg_slot := {}          # slot(int) -> 加成值
+
+func add_slot_damage(slot: int, amount: int, cap: int = -1) -> int:
+	if amount <= 0:
+		return 0
+	var cur := int(_dmg_slot.get(slot, 0))
+	var added := amount
+	if cap > 0 and cur + added > cap:
+		added = cap - cur
+	if added > 0:
+		_dmg_slot[slot] = cur + added
+	return added
+
+func slot_damage(slot: int, base: int) -> int:
+	var all := int(_dmg_slot.get(0, 0))
+	var sp := int(_dmg_slot.get(slot, 0))
+	return base + all + sp
+
+## ---------- 持续回合计时器（状态/增益“持续 N 回合”统一用） ----------
+## _timers: id -> {left:int, cb:Callable?}；cb 在到期时调用，可返回 String 并入日志
+var _timers := {}
+
+func add_timer(id: String, rounds: int, on_expire: Callable = Callable()) -> void:
+	_timers[id] = {"left": maxi(1, rounds), "cb": on_expire}
+
+func timer_left(id: String) -> int:
+	return int(_timers.get(id, {}).get("left", 0))
+
+func has_timer(id: String) -> bool:
+	return _timers.has(id)
+
+func remove_timer(id: String) -> void:
+	_timers.erase(id)
+
+func _tick_timers() -> String:
+	var out := ""
+	for id in _timers.keys():
+		var entry: Dictionary = _timers[id]
+		entry["left"] = int(entry["left"]) - 1
+		if int(entry["left"]) <= 0:
+			var cb: Callable = entry.get("cb", Callable())
+			_timers.erase(id)
+			if not cb.is_null():
+				var r: Variant = cb.call()
+				if r is String:
+					out += r
+	return out
 
 func add_flag(f: String) -> void:
 	flags[f] = true
@@ -272,6 +340,7 @@ func end_turn() -> String:
 	_pending_grant.clear()
 	out += _settle_share_drain()
 	out += SkillEffects.tick_end_of_turn_statuses(self)
+	out += _tick_timers()
 	return out
 
 ## ---------- 一技能类“分担/回合末吸血”登记（战斗层时序） ----------
@@ -364,7 +433,7 @@ func _refresh_layer(layer: String) -> void:
 		return
 	var cnt := counter(layer)
 	if _layer_speeds.has(layer):
-		set_speed_mod(-int(_layer_speeds[layer]) * cnt)
+		set_speed_mod_src("layer:" + layer, -int(_layer_speeds[layer]) * cnt)
 	if _layer_flags.has(layer):
 		var f: Dictionary = _layer_flags[layer]
 		var flag := str(f["flag"])

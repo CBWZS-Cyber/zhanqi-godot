@@ -623,8 +623,8 @@ static func hit_group_slot(user: BattleUnit, slot: int, targets: Array, base: in
 	var dmg := user.slot_damage(slot, base)
 	return hit_group(targets, dmg, true_dmg)
 
-## 先手排序：按 effective_speed 降序；同速按数组原顺序（Battle 每轮开始时取一次快照，
-## 本轮内速度变化不重排——固定规则，见 battle 层约定）
+## 按当前 effective_speed 降序（同速保持数组原顺序）。用于：每轮初始排列，
+## 以及战斗中任意时刻的“动态重排”。注意：速度变化会立即影响后续行动顺序。
 static func speed_order(units: Array) -> Array:
 	var lst: Array = []
 	for u in units:
@@ -639,3 +639,18 @@ static func speed_order(units: Array) -> Array:
 				lst[i] = aj
 				lst[j] = ai
 	return lst
+
+
+## —— 动态行动判定（Battle 采用）——
+## 模型：不冻结“轮内顺序”。每次需要决定下一位行动者时，对所有本轮回合尚未行动
+## （或按规则可行动）的单位实时取 effective_speed 最高者；任何减速/加速都立即
+## 参与下一次比较。requeue_by_speed 用于在一次行动结算后重排剩余单位。
+
+## 重新按当前速度降序排列（传入剩余待行动单位）
+static func requeue_by_speed(remaining: Array) -> Array:
+	return speed_order(remaining)
+
+## 取当前“应行动”的单位（速度最高者），无则 null
+static func next_actor(units: Array) -> BattleUnit:
+	var lst := speed_order(units)
+	return lst[0] as BattleUnit if lst.size() > 0 else null

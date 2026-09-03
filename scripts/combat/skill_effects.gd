@@ -748,7 +748,7 @@ static func _ef_zhu_xin(user: BattleUnit, ctx: Dictionary) -> String:
 		if tu == null:
 			continue
 		if not cut_if_under_pct(tu, 30):
-			out += "；%s 生命高于30%（%d%%），无法斩杀" % [tu.name, hp_pct(tu)]
+			out += "；%s 生命高于30%%（%d%%），无法斩杀" % [tu.name, hp_pct(tu)]
 			continue
 		out += "；斩杀 %s" % tu.name
 		if not tu.alive:

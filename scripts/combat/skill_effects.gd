@@ -17,7 +17,6 @@ class_name SkillEffects
 ## “护盾技能/效果”加出来（add_shield / set_shield）。英雄基础属性里不放护盾值。
 
 const DATA := {
-	# 被动技能示例（后续由剧情英雄数据替换/新增）
 	"stub_passive": {
 		"name": "模板被动",
 		"element": "光",
@@ -25,6 +24,7 @@ const DATA := {
 		"desc": "占位被动，效果待填写。",
 	},
 	# 主动技能示例
+
 	"stub_skill_1": {
 		"name": "模板攻击",
 		"element": "火",
@@ -33,6 +33,7 @@ const DATA := {
 		"cooldown": 0,
 		"desc": "占位主动技能，效果待填写。",
 	},
+
 	"stub_skill_2": {
 		"name": "模板护盾",
 		"element": "—",
@@ -41,6 +42,7 @@ const DATA := {
 		"cooldown": 2,
 		"desc": "给自己加一层护盾（示例调用 add_shield）。",
 	},
+
 	"stub_skill_3": {
 		"name": "模板治疗",
 		"element": "光",
@@ -49,6 +51,7 @@ const DATA := {
 		"cooldown": 0,
 		"desc": "治疗自己（示例调用 heal）。",
 	},
+
 	"stub_skill_4": {
 		"name": "模板爆发",
 		"element": "雷",
@@ -60,38 +63,44 @@ const DATA := {
 
 	# ===== 元晶龙王（老方案 = 英雄资料汇总 01）=====
 	## 元晶：开局 3 枚，从第 2 回合起每回合初 +1（引擎 counters start_round 自动处理）
+
 	"yuan_jing_mark": {
 		"name": "元晶印记",
 		"element": "元",
 		"kind": "passive",
 		"desc": "初始持有 3 枚元晶，从第 2 回合起每回合初获得 1 枚元晶。",
 	},
+
 	"ning_cheng_jian_ren": {
 		"name": "凝元晶为刃",
+		"range": 1,
 		"element": "元",
 		"kind": "active",
 		"energy_cost": 3,
 		"cooldown": 0,
 		"desc": "消耗 1 枚元晶，对 1 个目标造成 3 点伤害。",
 	},
+
 	"hua_jing_kai": {
-		"name": "化晶为铠",
-		"element": "元",
-		"kind": "active",
-		"energy_cost": 0,
-		"cooldown": 0,
+		"name": "化晶为铠", "element": "元", "kind": "active", "energy_cost": 0,
+		"range": 0,
+		"ai": {"self_buff": true, "self_kind": "shield"},
 		"desc": "消耗 2 枚元晶，获得 3 点护盾并回复 2 点能量。",
 	},
+
 	"sui_jing_zhan": {
 		"name": "碎晶斩",
+		"range": 1,
 		"element": "元",
 		"kind": "active",
 		"energy_cost": 3,
 		"cooldown": 0,
 		"desc": "自身有护盾时，清空护盾，对 1 个目标造成 3 点真实伤害（无护盾无法发动）。",
 	},
+
 	"yu_jing_wei_long": {
 		"name": "御晶为龙",
+		"range": 2,
 		"element": "元",
 		"kind": "ultimate",
 		"energy_cost": 9,
@@ -100,78 +109,91 @@ const DATA := {
 	},
 
 	# ===== 剑舞（王佳欣 · 新版本表；伤害成长/减速/流血/斩杀示范）=====
+
 	"jian_yi": {
 		"name": "剑意",
 		"element": "金",
 		"kind": "passive",
 		"desc": "每次使用技能1（瞬击）后，技能1伤害 +1（上限 4）。",
 	},
+
 	"shun_ji": {
 		"name": "瞬击",
+		"range": 1,
 		"element": "金",
 		"kind": "active",
 		"energy_cost": 0,
 		"cooldown": 0,
 		"desc": "射程1格，对1个目标造成1点伤害（随剑意成长），目标速度下降10。",
 	},
+
 	"duan_liu": {
 		"name": "断流",
+		"range": 1,
 		"element": "金",
 		"kind": "active",
 		"energy_cost": 8,
 		"cooldown": 0,
 		"desc": "射程1格，对1个目标造成减速，目标速度下降50。",
 	},
+
 	"guan_chuan": {
 		"name": "贯穿",
+		"range": 1,
 		"element": "金",
 		"kind": "active",
 		"energy_cost": 5,
 		"cooldown": 0,
 		"desc": "射程1格，对1个目标叠加2层流血。",
 	},
+
 	"zhu_xin": {
-		"name": "诛心",
-		"element": "金",
-		"kind": "ultimate",
-		"energy_cost": 10,
-		"cooldown": 0,
+		"name": "诛心", "element": "金", "kind": "ultimate", "energy_cost": 10,
+		"range": 3,
+		"ai": {"dash": true},
 		"desc": "射程3格位移型斩杀：只能对生命≤30%的目标使用，将其斩杀；斩杀成功回复8点能量。",
 	},
 
-	# ===== 光雨（刘星泽 · 新版本表；星矢印记/眩晕/星河回收）=====
 	"xing_he": {
 		"name": "星河",
 		"element": "光",
 		"kind": "passive",
 		"desc": "每回合能量回复提升为 2 点；每两回合回复 3 点生命值、2 点能量。（引擎 turn_start_effects 自动处理）",
 	},
+
 	"guang_ru_shi": {
 		"name": "光如矢",
+		"range": 3,
 		"element": "光",
 		"kind": "active",
 		"energy_cost": 0,
 		"cooldown": 0,
 		"desc": "射程3格，对1个目标造成2点伤害并加1层「星矢」；目标星矢满3层时清空并眩晕1回合，自身获得1层星河。",
 	},
+
 	"shi_ru_yu": {
 		"name": "矢如雨",
+		"range": 3,
 		"element": "光",
 		"kind": "active",
 		"energy_cost": 6,
 		"cooldown": 0,
 		"desc": "射程3格，对最多4个目标各造成2点伤害，目标速度降低2。",
 	},
+
 	"yu_ru_xing": {
 		"name": "雨如星",
+		"range": 2,
 		"element": "光",
 		"kind": "active",
 		"energy_cost": 6,
 		"cooldown": 0,
 		"desc": "射程2格，对1个目标造成3点伤害，目标+2层「星矢」，自身+1层星河。",
 	},
+
 	"xing_ru_he": {
 		"name": "星如河",
+		"range": 2,
 		"element": "光",
 		"kind": "ultimate",
 		"energy_cost": 8,
@@ -180,141 +202,209 @@ const DATA := {
 	},
 
 	# ===== 药师（杨鑫翰 · 新版本表；以“牺牲自身生命”为代价的辅助/输出）=====
+
 	"gao_yu": {
 		"name": "膏腴",
 		"element": "木",
 		"kind": "passive",
 		"desc": "初始无能量，能量无上限。生命≤4时每回合末回复1点生命、获得1点护盾（引擎 turn_end_effects 处理）。",
 	},
+
 	"jian_mu_sheng_fa": {
 		"name": "建木生发",
+		"range": 2,
 		"element": "木",
 		"kind": "active",
 		"energy_cost": 0,
 		"cooldown": 0,
 		"desc": "射程2格：消耗等同于目标当前生命一半的生命值，造成目标已损生命一半的伤害，回复等同于消耗生命值的能量。",
 	},
+
 	"shou_wan_huo_zu": {
 		"name": "寿瘟祸祖",
+		"range": 1,
 		"element": "木",
 		"kind": "active",
 		"energy_cost": 0,
 		"cooldown": 0,
 		"desc": "消耗一半当前生命：随机清除自身一种负面状态，对附近敌人造成3点伤害。",
 	},
+
 	"shi_zhe_yi_xin": {
-		"name": "莳者一心",
-		"element": "木",
-		"kind": "active",
-		"energy_cost": 0,
-		"cooldown": 0,
+		"name": "莳者一心", "element": "木", "kind": "active", "energy_cost": 0,
+		"range": 0,
+		"ai": {"self_buff": true, "self_kind": "heal"},
 		"desc": "回复2点生命、2点能量，获得1点护盾。",
 	},
+
 	"yao_ling": {
-		"name": "药灵",
-		"element": "圣灵",
-		"kind": "ultimate",
-		"energy_cost": 12,
-		"cooldown": 0,
+		"name": "药灵", "element": "圣灵", "kind": "ultimate", "energy_cost": 12,
+		"range": 1,
+		"ai": {"self_buff": true, "self_kind": "heal"},
 		"desc": "生命降至1并获得等同于消耗生命值一半的护盾，本回合内血量最低为1（锁血），并对相邻敌人造成等同于当前护盾量的伤害。",
 	},
 
-
-	# ===== 孤狼（叶麟）=====
 	"duan_ti": {"name": "锻体", "element": "物理", "kind": "passive",
 		"desc": "每次受到伤害，对该攻击者的伤害免伤 +5%（对同一人最高 20%）。"},
-	"yin_yang_san_shou": {"name": "阴阳散手", "element": "物理", "kind": "active", "energy_cost": 4,
-		"desc": "进入阴状态防守：获得 15% 减伤并嘲讽相邻目标；受击 3 次后转阳，阳持续 2 回合，期间 50% 反伤。"},
+
+	"yin_yang_san_shou": {
+		"name": "阴阳散手", "element": "物理", "kind": "active", "energy_cost": 4,
+		"range": 0,
+		"ai": {"self_buff": true, "self_kind": "buff"},
+		"desc": "进入阴状态防守：获得 15% 减伤并嘲讽相邻目标；受击 3 次后转阳，阳持续 2 回合，期间 50% 反伤。",
+	},
+
 	"shen_suo_quan": {"name": "伸缩拳", "element": "物理", "kind": "active", "energy_cost": 6,
+		"range": 2,
 		"desc": "相邻目标 4 伤，或两格目标 2 伤。击中两格目标使其禁大招 2 回合（嘲讽）；击中相邻目标时自身获得对该目标的 5% 免伤（对同一人上限 30%）。"},
+
 	"pu_tong_quan": {"name": "普通拳", "element": "物理", "kind": "active", "energy_cost": 0,
+		"range": 1,
 		"desc": "对目标造成 2 点伤害；对被嘲讽的目标追加 1 点真实伤害。回复 2 能量。"},
+
 	"xue_yu": {"name": "血狱", "element": "物理", "kind": "ultimate", "energy_cost": 10,
+		"range": 2,
 		"desc": "对两格内一个目标造成其已损生命 15% 的伤害；范围内每有 1 个目标自身获得 5% 免伤（总上限 40%）。"},
 
 	# ===== rapper睡神（何至高）=====
+
 	"kuang_nu": {"name": "狂怒", "element": "神秘", "kind": "passive",
 		"desc": "生命值低于 20% 时伤害翻倍（hp_threshold_flags 自动管理）。"},
+
 	"lve_duo": {"name": "掠夺", "element": "神秘", "kind": "active", "energy_cost": 8,
+		"range": 1,
 		"desc": "掠夺相邻一个敌人身上的一个技能（大招除外）：该敌人本局无法再使用它，自己下回合起可使用（技能槽由战斗层替换显示）。"},
+
 	"mei_huo": {"name": "魅惑", "element": "毒", "kind": "active", "energy_cost": 5,
+		"range": 2,
 		"desc": "选择两格内 2 个目标，使其本回合无法造成伤害。"},
-	"suo_xue": {"name": "锁血", "element": "火", "kind": "active", "energy_cost": 0,
-		"desc": "本回合内无敌，回复 1 点生命、2 点能量。"},
+
+	"suo_xue": {
+		"name": "锁血", "element": "火", "kind": "active", "energy_cost": 0,
+		"range": 0,
+		"ai": {"self_buff": true, "self_kind": "heal"},
+		"desc": "本回合内无敌，回复 1 点生命、2 点能量。",
+	},
+
 	"wan_li_bing_feng": {"name": "万里冰封", "element": "冰", "kind": "ultimate", "energy_cost": 12,
+		"range": 3,
 		"desc": "三格内所有敌人进入冻伤1级（速度-20，每回合末受1真伤，持续2回合）并受到 3 点伤害。"},
 
 	# ===== 仙尊（陈雨晴）=====
+
 	"nie_pan": {"name": "涅槃", "element": "圣灵", "kind": "passive",
 		"desc": "死亡后复活，回复一半生命（每局一次，引擎 death_revive）。每回合末回复 4 能量。"},
+
 	"wu_xing_zhi_li": {"name": "五行之力", "element": "五行", "kind": "active", "energy_cost": 9,
+		"range": 1,
 		"desc": "随机发射一道五行法力（金木水火土），对相邻格最多 3 个敌人各造成 2 点伤害。"},
+
 	"shu_fu_zhi_ling": {"name": "束缚之灵", "element": "木", "kind": "active", "energy_cost": 13,
+		"range": 1,
 		"desc": "至本回合末，相邻格子内的敌人无法使用技能。"},
+
 	"zhuan_jia_kui_lei": {"name": "转嫁傀儡", "element": "土", "kind": "active", "energy_cost": 15,
+		"range": 3,
 		"desc": "指定敌方一人转移到仙尊相邻空格（位移由战斗层执行），并对其造成已损生命 20% 的伤害。"},
+
 	"wan_jian_gui_zong": {"name": "万剑归宗", "element": "金", "kind": "ultimate", "energy_cost": 18,
+		"range": 2,
 		"desc": "两格范围内所有敌人每回合末受 2 点真伤，持续 3 回合（剑域）。"},
 
 	# ===== 灵虚数影（辛子祺）=====
+
 	"shu_yu": {"name": "数域", "element": "神秘", "kind": "passive",
 		"desc": "对一切攻击（必中除外）90% 闪避；相邻友军 +5% 闪避（aura 由战斗层提供）。"},
-	"tian_ji": {"name": "天机", "element": "神秘", "kind": "active", "energy_cost": 6,
-		"desc": "识破弱点：下回合自身（及周围棋子，aura 由战斗层）伤害 1.5 倍。"},
+
+	"tian_ji": {
+		"name": "天机", "element": "神秘", "kind": "active", "energy_cost": 6,
+		"range": 0,
+		"ai": {"self_buff": true, "self_kind": "buff"},
+		"desc": "识破弱点：下回合自身（及周围棋子，aura 由战斗层）伤害 1.5 倍。",
+	},
+
 	"jie_xi": {"name": "解析", "element": "神秘", "kind": "active", "energy_cost": 8,
+		"range": 2,
 		"desc": "两格内单目标 3 点伤害，并造成破甲二级（护甲-2，持续3回合）。"},
-	"ji_dian": {"name": "极点", "element": "神秘", "kind": "active", "energy_cost": 0,
-		"desc": "推演极点，获得启发：回复 5 点能量、1 点护盾。"},
+
+	"ji_dian": {
+		"name": "极点", "element": "神秘", "kind": "active", "energy_cost": 0,
+		"range": 0,
+		"ai": {"self_buff": true, "self_kind": "buff"},
+		"desc": "推演极点，获得启发：回复 5 点能量、1 点护盾。",
+	},
+
 	"shu_hai_teng_nuo": {"name": "数海腾挪", "element": "神秘", "kind": "ultimate", "energy_cost": 24,
+		"range": 2,
 		"desc": "同时释放天机与解析，且本回合及下回合无法被选中。"},
 
 	# ===== 辛克莱（新表已定稿：理智上限25 初始0，可为负）=====
+
 	"he_bi": {"name": "何必如此", "element": "火", "kind": "passive",
 		"desc": "无能量机制，专属理智值（上限25，初始0）。每回合末回复30%缺损理智；使用技能使理智变负时下回合失控（随机放技不分敌我），随后回合末理智归0。"},
-	"po_bu_de_yi": {"name": "迫不得已的审判", "element": "火", "kind": "active", "energy_cost": 0,
-		"desc": "向一个方向突进2格（战斗层）：穿过棋子则造成 2 点伤害，目标获得烧伤（持续中再获得则刷新时长）；理智 -7。"},
-	"hei_bai": {"name": "黑白不分的执行", "element": "火", "kind": "active", "energy_cost": 0,
-		"desc": "向一个方向快速突进直到碰壁（人或障碍）：对撞到的棋子造成 3 点伤害并施加 2 层重伤；理智 -10。"},
-	"zi_wo_destroy": {"name": "自我毁灭的审判", "element": "物理", "kind": "active", "energy_cost": 0,
-		"desc": "向周围3格内某地点传送（战斗层），对周围格子敌人造成 2 点伤害、施加 3 层重伤；自身失去 3×命中数 理智。"},
-	"xuan_zhong": {"name": "因为我是被选中的", "element": "物理", "kind": "ultimate", "energy_cost": 0,
-		"desc": "向前冲刺3格（战斗层）：对被穿过的棋子造成其已损生命 20% 的真伤；若其身上重伤≥4 层，再施加烧伤；理智 -15。"},
-	# 状态规则（烧伤：速度-10，每回合末1真伤，持续2回合，刷新式。重伤：受击额外 0.5×层真伤，回合末层-1）
 
+	"po_bu_de_yi": {
+		"name": "迫不得已的审判", "element": "火", "kind": "active", "energy_cost": 0,
+		"range": 2,
+		"ai": {"dash": true},
+		"desc": "向一个方向突进2格（战斗层）：穿过棋子则造成 2 点伤害，目标获得烧伤（持续中再获得则刷新时长）；理智 -7。",
+	},
 
-	# ===== 追猎（孙广泽 · 新版本表；创伤/流血/灼烧体系示范）=====
+	"hei_bai": {
+		"name": "黑白不分的执行", "element": "火", "kind": "active", "energy_cost": 0,
+		"range": 3,
+		"ai": {"dash": true},
+		"desc": "向一个方向快速突进直到碰壁（人或障碍）：对撞到的棋子造成 3 点伤害并施加 2 层重伤；理智 -10。",
+	},
+
+	"zi_wo_destroy": {
+		"name": "自我毁灭的审判", "element": "物理", "kind": "active", "energy_cost": 0,
+		"range": 1,
+		"ai": {"dash": true},
+		"desc": "向周围3格内某地点传送（战斗层），对周围格子敌人造成 2 点伤害、施加 3 层重伤；自身失去 3×命中数 理智。",
+	},
+
+	"xuan_zhong": {
+		"name": "因为我是被选中的", "element": "物理", "kind": "ultimate", "energy_cost": 0,
+		"range": 3,
+		"ai": {"dash": true},
+		"desc": "向前冲刺3格（战斗层）：对被穿过的棋子造成其已损生命 20% 的真伤；若其身上重伤≥4 层，再施加烧伤；理智 -15。",
+	},
+
 	"zhuilie_ymxb": {
 		"name": "以命相搏",
 		"element": "机械",
 		"kind": "passive",
 		"desc": "生命值≤3时，速度增加200点，护甲清零，每回合获得2点护盾。",
 	},
+
 	"snap_shot": {
 		"name": "狙击",
+		"range": 3,
 		"element": "机械",
 		"kind": "active",
 		"energy_cost": 0,
 		"cooldown": 0,
 		"desc": "射程3格，对1个目标造成1点伤害，附加「创伤」印记；积累3层时清空印记并触发「流血2级」。",
 	},
+
 	"hunt": {
-		"name": "追猎",
-		"element": "机械",
-		"kind": "active",
-		"energy_cost": 3,
-		"cooldown": 0,
+		"name": "追猎", "element": "机械", "kind": "active", "energy_cost": 3,
+		"range": 3,
+		"ai": {"dash": true},
 		"desc": "位移后额外发动一次「狙击」。（位移由战斗层执行）",
 	},
+
 	"shield_up": {
-		"name": "架盾",
-		"element": "机械",
-		"kind": "active",
-		"energy_cost": 0,
-		"cooldown": 0,
+		"name": "架盾", "element": "机械", "kind": "active", "energy_cost": 0,
+		"range": 0,
+		"ai": {"self_buff": true, "self_kind": "shield"},
 		"desc": "获得2点护盾，护甲+1（上限3）。",
 	},
+
 	"meteor_shot": {
 		"name": "流星飞弹",
+		"range": 99,
 		"element": "机械",
 		"kind": "ultimate",
 		"energy_cost": 0,
@@ -324,38 +414,47 @@ const DATA := {
 
 	# ===== 邪神（王泽）· 同学设计 + 用户改版 2026-09-03 =====
 	## 污染层 = 每层使目标速度 -15；层数 ≥3 → 失神
+
 	"ji_sheng": {
 		"name": "寄生",
 		"element": "暗",
 		"kind": "passive",
 		"desc": "每回合末向附近格子内的敌人 +1 层污染。每层污染使该单位速度 -15；污染 ≥3 时进入失神状态。",
 	},
+
 	"hun_qi": {
 		"name": "替死",
+		"range": 0,
 		"element": "暗",
 		"kind": "active",
 		"energy_cost": 7,
 		"cooldown": 0,
 		"desc": "本回合所有伤害由失神状态下的敌方棋子均摊；回合末吸取失神敌当前生命的 30%。（伤害均摊需战斗层接伤害管线）",
 	},
+
 	"zhi_pei": {
 		"name": "支配",
+		"range": 1,
 		"element": "暗",
 		"kind": "active",
 		"energy_cost": 10,
 		"cooldown": 0,
 		"desc": "对周围敌人触发：污染 ≥5 时消耗 3 层，支配该单位 2 回合（下一回合起生效）。单挑模式：污染 ≥8 直接斩杀敌方并获胜。",
 	},
+
 	"qin_ran": {
 		"name": "侵染",
+		"range": 1,
 		"element": "暗",
 		"kind": "active",
 		"energy_cost": 0,
 		"cooldown": 0,
 		"desc": "对周围所有敌人造成 1 点伤害；60% 概率使每个目标额外 +1 污染；回复 5 点能量。",
 	},
+
 	"hei_shan": {
 		"name": "黑闪",
+		"range": 1,
 		"element": "暗",
 		"kind": "active",
 		"energy_cost": 15,
@@ -365,6 +464,7 @@ const DATA := {
 }
 
 ## 效果注册表：id -> Callable
+
 const EFFECTS := {
 	"stub_passive": Callable(SkillEffects, "_ef_stub_passive"),
 	"stub_skill_1": Callable(SkillEffects, "_ef_stub_attack"),
@@ -1266,14 +1366,14 @@ static func _ef_meihuo(user: BattleUnit, ctx: Dictionary) -> String:
 		out += "（无目标）"
 	return out
 
-## 锁血：本回合无敌 + 回1血2能
+## 锁血：本回合 60% 免伤 + 回1血2能（不再是无敌）
 static func _ef_suoxue(user: BattleUnit, _ctx: Dictionary) -> String:
-	user.add_flag("invuln")
-	user.remove_timer("invuln_end")
-	user.add_timer("invuln_end", 1, Callable(func(): user.clear_flag("invuln")))
+	user.add_flag("免伤60")
+	user.remove_timer("mianguan60_end")
+	user.add_timer("mianguan60_end", 1, Callable(func(): user.clear_flag("免伤60")))
 	var h := user.heal(1)
 	var e := user.add_energy(2)
-	return "%s 释放【锁血】：本回合无敌，回复 %d 生命、%d 能量" % [user.name, h, e]
+	return "%s 释放【锁血】：本回合获得 60%% 免伤，回复 %d 生命、%d 能量" % [user.name, h, e]
 
 ## 万里冰封：三格内敌人 冻伤1（减速20·回合末1真伤·2回合）+3伤
 static func _ef_wanli(user: BattleUnit, ctx: Dictionary) -> String:

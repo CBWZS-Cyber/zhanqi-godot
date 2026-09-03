@@ -278,7 +278,9 @@ func _test_heroes() -> void:
 	rp.lose_hp(3)
 	var h1 := rp.hp
 	var sx: String = rp.use_active(3, {})
-	ck(rp.has_flag("invuln") and rp.hp == h1 + 1, "锁血无敌+回1")
+	ck(rp.has_flag("免伤60") and rp.hp == h1 + 1, "锁血60%免伤+回1")
+	var db4: Dictionary = rp.take_damage(10)
+	ck(db4["hp_lost"] <= 4, "锁血期间10伤最多承受4")
 	# 仙尊五行 & 束缚
 	var xz := u("xian_zun")
 	xz.add_energy(30)

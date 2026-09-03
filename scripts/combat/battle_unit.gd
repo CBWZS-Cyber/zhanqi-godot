@@ -332,8 +332,11 @@ func take_damage(amount: int, info := {}) -> Dictionary:
 	var mit := int(_mitig.get("all", 0)) + int(_mitig.get(element, 0))
 	if attacker != null:
 		mit += int(_mitig_att.get(attacker.get_instance_id(), {}).get("pct", 0))
+	if has_flag("免伤60"):
+		mit += 60   # 锁血：本回合 60% 免伤
 	if mit > 0:
 		var cut := ceili(float(rest) * float(mit) / 100.0)
+		cut = mini(cut, rest)
 		rest -= cut
 		result["reduced"] += cut
 	# 1) 护盾吸收

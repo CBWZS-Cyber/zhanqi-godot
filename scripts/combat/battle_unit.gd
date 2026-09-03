@@ -108,6 +108,10 @@ func effective_speed() -> int:
 func set_speed_mod_src(src: String, delta: int) -> void:
 	_speed_mods[src] = delta
 
+## 同名来源叠加（用于“每击都减速”类效果：瞬击每次 -10 → 累计）
+func add_speed_mod_src(src: String, delta: int) -> void:
+	_speed_mods[src] = int(_speed_mods.get(src, 0)) + delta
+
 func remove_speed_mod_src(src: String) -> void:
 	_speed_mods.erase(src)
 

@@ -54,6 +54,16 @@ const ALL := {
 			"actives": ["ning_cheng_jian_ren", "hua_jing_kai", "sui_jing_zhan", "yu_jing_wei_long"],
 		},
 	},
+	# —— 剧情英雄 · 剑舞（王佳欣 · 新版本表；金 8/14/甲2/172）——
+	"jianwu": {
+		"name": "剑舞",
+		"element": "金",
+		"hp": 8, "energy": 14, "armor": 2, "speed": 172,
+		"skills": {
+			"passive": "jian_yi",
+			"actives": ["shun_ji", "duan_liu", "guan_chuan", "zhu_xin"],
+		},
+	},
 	# —— 剧情英雄 · 王泽 = 邪神（同学设计 + 用户改版 2026-09-03；hp4/armor1/speed174）——
 	"xie_shen": {
 		"name": "邪神",

@@ -99,6 +99,46 @@ const DATA := {
 		"desc": "消耗 3 枚元晶，对最多 3 个目标各造成 2 点伤害，并获得 1 枚元晶。",
 	},
 
+	# ===== 剑舞（王佳欣 · 新版本表；伤害成长/减速/流血/斩杀示范）=====
+	"jian_yi": {
+		"name": "剑意",
+		"element": "金",
+		"kind": "passive",
+		"desc": "每次使用技能1（瞬击）后，技能1伤害 +1（上限 4）。",
+	},
+	"shun_ji": {
+		"name": "瞬击",
+		"element": "金",
+		"kind": "active",
+		"energy_cost": 0,
+		"cooldown": 0,
+		"desc": "射程1格，对1个目标造成1点伤害（随剑意成长），目标速度下降10。",
+	},
+	"duan_liu": {
+		"name": "断流",
+		"element": "金",
+		"kind": "active",
+		"energy_cost": 8,
+		"cooldown": 0,
+		"desc": "射程1格，对1个目标造成减速，目标速度下降50。",
+	},
+	"guan_chuan": {
+		"name": "贯穿",
+		"element": "金",
+		"kind": "active",
+		"energy_cost": 5,
+		"cooldown": 0,
+		"desc": "射程1格，对1个目标叠加2层流血。",
+	},
+	"zhu_xin": {
+		"name": "诛心",
+		"element": "金",
+		"kind": "ultimate",
+		"energy_cost": 10,
+		"cooldown": 0,
+		"desc": "射程3格位移型斩杀：只能对生命≤30%的目标使用，将其斩杀；斩杀成功回复8点能量。",
+	},
+
 	# ===== 追猎（孙广泽 · 新版本表；创伤/流血/灼烧体系示范）=====
 	"zhuilie_ymxb": {
 		"name": "以命相搏",
@@ -194,6 +234,12 @@ const EFFECTS := {
 	"hua_jing_kai": Callable(SkillEffects, "_ef_hua_jing_kai"),
 	"sui_jing_zhan": Callable(SkillEffects, "_ef_sui_jing_zhan"),
 	"yu_jing_wei_long": Callable(SkillEffects, "_ef_yu_jing_wei_long"),
+	# 剑舞（王佳欣）
+	"jian_yi": Callable(SkillEffects, "_ef_jian_yi"),
+	"shun_ji": Callable(SkillEffects, "_ef_shun_ji"),
+	"duan_liu": Callable(SkillEffects, "_ef_duan_liu"),
+	"guan_chuan": Callable(SkillEffects, "_ef_guan_chuan"),
+	"zhu_xin": Callable(SkillEffects, "_ef_zhu_xin"),
 	# 追猎（孙广泽）
 	"zhuilie_ymxb": Callable(SkillEffects, "_ef_zl_ymxb"),
 	"snap_shot": Callable(SkillEffects, "_ef_snap_shot"),
@@ -654,3 +700,60 @@ static func requeue_by_speed(remaining: Array) -> Array:
 static func next_actor(units: Array) -> BattleUnit:
 	var lst := speed_order(units)
 	return lst[0] as BattleUnit if lst.size() > 0 else null
+
+## ========== 剑舞（王佳欣）效果 ==========
+## 被动·剑意：成长由瞬击施放后 add_slot_damage(1,1,4) 维护（这里仅展示说明）
+static func _ef_jian_yi(user: BattleUnit, _ctx: Dictionary) -> String:
+	return "%s 的【剑意】生效：瞬击伤害加成 %d（上限4）" % [user.name, int(user.slot_damage(1, 1)) - 1]
+
+## 主动1·瞬击：单体基础1伤（吃剑意成长）+ 目标减速10；施放后剑意+1（封顶4）
+static func _ef_shun_ji(user: BattleUnit, ctx: Dictionary) -> String:
+	var targets: Array = ctx.get("targets", [])
+	var out := "%s 释放【瞬击】" % user.name
+	if targets.is_empty():
+		return out + "（无目标）"
+	var tu := targets[0] as BattleUnit
+	out += hit_group_slot(user, 1, [tu], 1)
+	tu.add_speed_mod_src("剑舞:瞬击", -10)
+	out += "；%s 速度 -10（现 %d）" % [tu.name, tu.effective_speed()]
+	var gained := user.add_slot_damage(1, 1, 4)
+	if gained > 0:
+		out += "；剑意 +1（伤害加成 %d/4）" % (int(user.slot_damage(1, 1)) - 1)
+	return out
+
+## 主动2·断流：单体减速 50
+static func _ef_duan_liu(user: BattleUnit, ctx: Dictionary) -> String:
+	var targets: Array = ctx.get("targets", [])
+	if targets.is_empty():
+		return "%s 释放【断流】（无目标）" % user.name
+	var tu := targets[0] as BattleUnit
+	tu.add_speed_mod_src("剑舞:断流", -50)
+	return "%s 释放【断流】：%s 速度 -50（现 %d）" % [user.name, tu.name, tu.effective_speed()]
+
+## 主动3·贯穿：目标叠 2 层流血
+static func _ef_guan_chuan(user: BattleUnit, ctx: Dictionary) -> String:
+	var targets: Array = ctx.get("targets", [])
+	if targets.is_empty():
+		return "%s 释放【贯穿】（无目标）" % user.name
+	var tu := targets[0] as BattleUnit
+	tu.add_status("bleed", 2)
+	return "%s 释放【贯穿】：%s 流血 +2（现 %d 层）" % [user.name, tu.name, tu.status_stacks("bleed")]
+
+## 终极·诛心：仅对生命≤30%目标生效，斩杀成功回8能量（战斗层应只允许此类目标被选中）
+static func _ef_zhu_xin(user: BattleUnit, ctx: Dictionary) -> String:
+	var targets: Array = ctx.get("targets", [])
+	var out := "%s 释放【诛心】" % user.name
+	for t in targets:
+		var tu := t as BattleUnit
+		if tu == null:
+			continue
+		if not cut_if_under_pct(tu, 30):
+			out += "；%s 生命高于30%（%d%%），无法斩杀" % [tu.name, hp_pct(tu)]
+			continue
+		out += "；斩杀 %s" % tu.name
+		if not tu.alive:
+			var got := user.add_energy(8)
+			out += "，回 %d 能量（%d/%d）" % [got, user.energy, user.max_energy]
+	if targets.is_empty():
+		out += "（无目标）"
+	return out

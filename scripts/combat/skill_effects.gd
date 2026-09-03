@@ -139,6 +139,86 @@ const DATA := {
 		"desc": "射程3格位移型斩杀：只能对生命≤30%的目标使用，将其斩杀；斩杀成功回复8点能量。",
 	},
 
+	# ===== 光雨（刘星泽 · 新版本表；星矢印记/眩晕/星河回收）=====
+	"xing_he": {
+		"name": "星河",
+		"element": "光",
+		"kind": "passive",
+		"desc": "每回合能量回复提升为 2 点；每两回合回复 3 点生命值、2 点能量。（引擎 turn_start_effects 自动处理）",
+	},
+	"guang_ru_shi": {
+		"name": "光如矢",
+		"element": "光",
+		"kind": "active",
+		"energy_cost": 0,
+		"cooldown": 0,
+		"desc": "射程3格，对1个目标造成2点伤害并加1层「星矢」；目标星矢满3层时清空并眩晕1回合，自身获得1层星河。",
+	},
+	"shi_ru_yu": {
+		"name": "矢如雨",
+		"element": "光",
+		"kind": "active",
+		"energy_cost": 6,
+		"cooldown": 0,
+		"desc": "射程3格，对最多4个目标各造成2点伤害，目标速度降低2。",
+	},
+	"yu_ru_xing": {
+		"name": "雨如星",
+		"element": "光",
+		"kind": "active",
+		"energy_cost": 6,
+		"cooldown": 0,
+		"desc": "射程2格，对1个目标造成3点伤害，目标+2层「星矢」，自身+1层星河。",
+	},
+	"xing_ru_he": {
+		"name": "星如河",
+		"element": "光",
+		"kind": "ultimate",
+		"energy_cost": 8,
+		"cooldown": 0,
+		"desc": "消耗3层星河，对1个目标造成5点伤害，全体敌人+1层星矢并失明1级。",
+	},
+
+	# ===== 药师（杨鑫翰 · 新版本表；以“牺牲自身生命”为代价的辅助/输出）=====
+	"gao_yu": {
+		"name": "膏腴",
+		"element": "木",
+		"kind": "passive",
+		"desc": "初始无能量，能量无上限。生命≤4时每回合末回复1点生命、获得1点护盾（引擎 turn_end_effects 处理）。",
+	},
+	"jian_mu_sheng_fa": {
+		"name": "建木生发",
+		"element": "木",
+		"kind": "active",
+		"energy_cost": 0,
+		"cooldown": 0,
+		"desc": "射程2格：消耗等同于目标当前生命一半的生命值，造成目标已损生命一半的伤害，回复等同于消耗生命值的能量。",
+	},
+	"shou_wan_huo_zu": {
+		"name": "寿瘟祸祖",
+		"element": "木",
+		"kind": "active",
+		"energy_cost": 0,
+		"cooldown": 0,
+		"desc": "消耗一半当前生命：随机清除自身一种负面状态，对附近敌人造成3点伤害。",
+	},
+	"shi_zhe_yi_xin": {
+		"name": "莳者一心",
+		"element": "木",
+		"kind": "active",
+		"energy_cost": 0,
+		"cooldown": 0,
+		"desc": "回复2点生命、2点能量，获得1点护盾。",
+	},
+	"yao_ling": {
+		"name": "药灵",
+		"element": "圣灵",
+		"kind": "ultimate",
+		"energy_cost": 12,
+		"cooldown": 0,
+		"desc": "生命降至1并获得等同于消耗生命值一半的护盾，本回合内血量最低为1（锁血），并对相邻敌人造成等同于当前护盾量的伤害。",
+	},
+
 	# ===== 追猎（孙广泽 · 新版本表；创伤/流血/灼烧体系示范）=====
 	"zhuilie_ymxb": {
 		"name": "以命相搏",
@@ -188,7 +268,7 @@ const DATA := {
 		"desc": "每回合末向附近格子内的敌人 +1 层污染。每层污染使该单位速度 -15；污染 ≥3 时进入失神状态。",
 	},
 	"hun_qi": {
-		"name": "魂契（暂名，待定）",
+		"name": "替死",
 		"element": "暗",
 		"kind": "active",
 		"energy_cost": 7,
@@ -199,7 +279,7 @@ const DATA := {
 		"name": "支配",
 		"element": "暗",
 		"kind": "active",
-		"energy_cost": 5,
+		"energy_cost": 10,
 		"cooldown": 0,
 		"desc": "对周围敌人触发：污染 ≥5 时消耗 3 层，支配该单位 2 回合（下一回合起生效）。单挑模式：污染 ≥8 直接斩杀敌方并获胜。",
 	},
@@ -209,7 +289,7 @@ const DATA := {
 		"kind": "active",
 		"energy_cost": 0,
 		"cooldown": 0,
-		"desc": "对周围所有敌人造成 2 点伤害；60% 概率使每个目标额外 +1 污染；回复 5 点能量和 2 点生命。",
+		"desc": "对周围所有敌人造成 1 点伤害；60% 概率使每个目标额外 +1 污染；回复 5 点能量。",
 	},
 	"hei_shan": {
 		"name": "黑闪",
@@ -240,6 +320,18 @@ const EFFECTS := {
 	"duan_liu": Callable(SkillEffects, "_ef_duan_liu"),
 	"guan_chuan": Callable(SkillEffects, "_ef_guan_chuan"),
 	"zhu_xin": Callable(SkillEffects, "_ef_zhu_xin"),
+	# 光雨（刘星泽）
+	"xing_he": Callable(SkillEffects, "_ef_xing_he"),
+	"guang_ru_shi": Callable(SkillEffects, "_ef_guang_ru_shi"),
+	"shi_ru_yu": Callable(SkillEffects, "_ef_shi_ru_yu"),
+	"yu_ru_xing": Callable(SkillEffects, "_ef_yu_ru_xing"),
+	"xing_ru_he": Callable(SkillEffects, "_ef_xing_ru_he"),
+	# 药师（杨鑫翰）
+	"gao_yu": Callable(SkillEffects, "_ef_gao_yu"),
+	"jian_mu_sheng_fa": Callable(SkillEffects, "_ef_jian_mu_sheng_fa"),
+	"shou_wan_huo_zu": Callable(SkillEffects, "_ef_shou_wan_huo_zu"),
+	"shi_zhe_yi_xin": Callable(SkillEffects, "_ef_shi_zhe_yi_xin"),
+	"yao_ling": Callable(SkillEffects, "_ef_yao_ling"),
 	# 追猎（孙广泽）
 	"zhuilie_ymxb": Callable(SkillEffects, "_ef_zl_ymxb"),
 	"snap_shot": Callable(SkillEffects, "_ef_snap_shot"),
@@ -394,11 +486,11 @@ static func _ef_ji_sheng(user: BattleUnit, ctx: Dictionary) -> String:
 		out += "；%s 污染 +1（共 %d，速度 %d）" % [tu.name, tu.counter("污染"), tu.effective_speed()]
 	return out
 
-## 一技能·魂契（暂名，待定）：登记本回合分担/回合末吸血（伤害均摊需战斗层拦截伤害管线）
+## 一技能·替死：登记本回合分担/回合末吸血（伤害均摊需战斗层拦截伤害管线）
 static func _ef_hun_qi(user: BattleUnit, ctx: Dictionary) -> String:
 	var targets: Array = ctx.get("targets", [])
 	user.begin_share_round(targets)
-	return "%s 立下【魂契】：本回合伤害由失神敌人均摊，回合末吸取失神敌当前生命的 30%%" % user.name
+	return "%s 立下【替死】：本回合伤害由失神敌人均摊，回合末吸取失神敌当前生命的 30%%" % user.name
 
 ## 二技能·支配：周围敌人触发；目标污染≥5 → 耗 3 层，支配 2 回合（下回合起）；
 ## 单挑模式：目标污染 ≥8 → 斩杀获胜
@@ -435,14 +527,13 @@ static func _ef_qin_ran(user: BattleUnit, ctx: Dictionary) -> String:
 		var tu := t as BattleUnit
 		if tu == null:
 			continue
-		var r: Dictionary = tu.take_damage(2)
+		var r: Dictionary = tu.take_damage(1)
 		out += "；%s 受 %d 伤" % [tu.name, r["hp_lost"] + r["absorbed"]]
 		if randf() < 0.6:
 			_pollute(tu, 1)
 			out += "，污染+1（共 %d）" % tu.counter("污染")
 	user.add_energy(5)
-	var healed := user.heal(2)
-	out += "；回复 5 能量（%d/%d）、%d 点生命" % [user.energy, user.max_energy, healed]
+	out += "；回复 5 能量（%d/%d）" % [user.energy, user.max_energy]
 	return out
 
 ## 大招·黑闪：周围敌人——耗其全部污染层，每层失去 10% 最大生命；
@@ -756,4 +847,179 @@ static func _ef_zhu_xin(user: BattleUnit, ctx: Dictionary) -> String:
 			out += "，回 %d 能量（%d/%d）" % [got, user.energy, user.max_energy]
 	if targets.is_empty():
 		out += "（无目标）"
+	return out
+
+## ========== 光雨（刘星泽）效果 ==========
+## 星河 = 自身计数器（counters["星河"]，攒3层给大招）；星矢 = 目标 status "star"
+## 眩晕/失明：flag + 持续回合 timer（执行由战斗层看 flag：眩晕跳过回合/失明按概率）
+
+## 眩晕辅助（通用）：施加 flag + N 回合后自动清除
+static func apply_stun(t: BattleUnit, rounds: int) -> void:
+	t.add_flag("stun")
+	t.remove_timer("stun_clear")
+	t.add_timer("stun_clear", rounds, Callable(func(): t.clear_flag("stun")))
+
+## 光雨被动（展示；每回合回能/每2回合回血能由 def turn_start_effects 自动处理）
+static func _ef_xing_he(user: BattleUnit, _ctx: Dictionary) -> String:
+	return "%s 的【星河】生效：星河 %d 层" % [user.name, user.counter("星河")]
+
+## 施加星矢：满3 → 清空 + 眩晕1（目标）；返回追加文本
+static func _add_star(user: BattleUnit, t: BattleUnit, n: int) -> String:
+	t.add_status("star", n)
+	if t.status_stacks("star") >= 3:
+		t.set_status("star", 0)
+		apply_stun(t, 1)
+		user.grant_counter("星河", 1)
+		return "，%s 星矢满3层→眩晕1回合，%s 星河+1（共%d）" % [t.name, user.name, user.counter("星河")]
+	return "，%s 星矢+%d（共%d）" % [t.name, n, t.status_stacks("star")]
+
+## 主动1·光如矢
+static func _ef_guang_ru_shi(user: BattleUnit, ctx: Dictionary) -> String:
+	var targets: Array = ctx.get("targets", [])
+	if targets.is_empty():
+		return "%s 释放【光如矢】（无目标）" % user.name
+	var tu := targets[0] as BattleUnit
+	var r: Dictionary = tu.take_damage(2)
+	var out := "%s 释放【光如矢】：%s 受 %d 伤" % [user.name, tu.name, r["hp_lost"] + r["absorbed"]]
+	out += _add_star(user, tu, 1)
+	return out
+
+## 主动2·矢如雨（≤4目标各2伤+减速2）
+static func _ef_shi_ru_yu(user: BattleUnit, ctx: Dictionary) -> String:
+	var targets: Array = ctx.get("targets", [])
+	var out := "%s 释放【矢如雨】" % user.name
+	var hit := 0
+	for t in targets:
+		if hit >= 4:
+			break
+		var tu := t as BattleUnit
+		if tu == null:
+			continue
+		var r: Dictionary = tu.take_damage(2)
+		tu.add_speed_mod_src("光雨:矢如雨", -2)
+		out += "；%s 受 %d 伤，速度-2（现%d）" % [tu.name, r["hp_lost"] + r["absorbed"], tu.effective_speed()]
+		hit += 1
+	if hit == 0:
+		out += "（无目标）"
+	return out
+
+## 主动3·雨如星：3伤 + 星矢2 + 星河1
+static func _ef_yu_ru_xing(user: BattleUnit, ctx: Dictionary) -> String:
+	var targets: Array = ctx.get("targets", [])
+	if targets.is_empty():
+		return "%s 释放【雨如星】（无目标）" % user.name
+	var tu := targets[0] as BattleUnit
+	var r: Dictionary = tu.take_damage(3)
+	var out := "%s 释放【雨如星】：%s 受 %d 伤" % [user.name, tu.name, r["hp_lost"] + r["absorbed"]]
+	out += _add_star(user, tu, 2)
+	user.grant_counter("星河", 1)
+	out += "，%s 星河+1（共%d）" % [user.name, user.counter("星河")]
+	return out
+
+## 终极·星如河：消耗3星河 → 单体5伤 + 全体敌人星矢+1/失明1
+static func _ef_xing_ru_he(user: BattleUnit, ctx: Dictionary) -> String:
+	if user.counter("星河") < 3:
+		return "%s 星河不足 3 层，【星如河】无法发动" % user.name
+	user.consume_counter("星河", 3)
+	var targets: Array = ctx.get("targets", [])
+	var out := "%s 释放【星如河】" % user.name
+	var hit := 0
+	for t in targets:
+		var tu := t as BattleUnit
+		if tu == null:
+			continue
+		if hit == 0:
+			var r: Dictionary = tu.take_damage(5)
+			out += "；%s 受 %d 伤" % [tu.name, r["hp_lost"] + r["absorbed"]]
+		tu.add_status("star", 1)
+		tu.add_status("blind", 1)
+		hit += 1
+	out += "；全体敌人星矢+1、失明1级（%d 目标）" % hit
+	if hit == 0:
+		out += "（无目标）"
+	return out
+
+## ========== 药师（杨鑫翰）效果 ==========
+## 负面状态定义（用于“清除负面”类技能）：bleed/burn/wound/star/blind/stun 及减速
+static func _clear_random_debuff(t: BattleUnit) -> String:
+	var pool := ["bleed", "burn", "wound", "blind"]
+	for k in pool:
+		if t.status_stacks(k) > 0:
+			t.set_status(k, 0)
+			return "%s（清除）" % status_cn(k)
+	if t.speed_mod_total() < 0:
+		t.set_speed_mod_src("药师:负面", 0)
+		return "减速（清除）"
+	if t.has_flag("stun"):
+		t.clear_flag("stun")
+		return "眩晕（清除）"
+	return "无负面可清"
+
+static func _ef_gao_yu(user: BattleUnit, _ctx: Dictionary) -> String:
+	return "%s 的【膏腴】生效：能量无上限（当前 %d）" % [user.name, user.energy]
+
+## 主动1·建木生发：耗自身血=目标当前血一半 → 目标受“已损生命一半”伤害 → 回能=消耗量
+static func _ef_jian_mu_sheng_fa(user: BattleUnit, ctx: Dictionary) -> String:
+	var targets: Array = ctx.get("targets", [])
+	if targets.is_empty():
+		return "%s 释放【建木生发】（无目标）" % user.name
+	var tu := targets[0] as BattleUnit
+	var cost := ceili(float(tu.hp) * 0.5)
+	if user.hp <= cost:
+		return "%s 生命不足（%d/%d），【建木生发】无法发动（需要 %d）" % [user.name, user.hp, user.max_hp, cost]
+	user.lose_hp(cost)
+	var lost := tu.max_hp - tu.hp
+	var dmg := ceili(float(maxi(0, lost)) * 0.5)
+	var r: Dictionary = tu.take_damage(dmg)
+	user.add_energy(cost)
+	return "%s 释放【建木生发】：消耗自身 %d 生命，%s 受 %d 伤，回复 %d 能量" % [user.name, cost, tu.name, r["hp_lost"] + r["absorbed"], cost]
+
+## 主动2·寿瘟祸祖：耗一半当前生命 → 清一负面 → 附近敌人3伤
+static func _ef_shou_wan_huo_zu(user: BattleUnit, ctx: Dictionary) -> String:
+	var cost := ceili(float(user.hp) * 0.5)
+	if user.hp <= cost:
+		return "%s 生命不足，【寿瘟祸祖】无法发动" % user.name
+	user.lose_hp(cost)
+	var clean := _clear_random_debuff(user)
+	var out := "%s 释放【寿瘟祸祖】：消耗 %d 生命，自身%s" % [user.name, cost, clean]
+	var targets: Array = ctx.get("targets", [])
+	for t in targets:
+		var tu := t as BattleUnit
+		if tu == null:
+			continue
+		var r: Dictionary = tu.take_damage(3)
+		out += "；%s 受 %d 伤" % [tu.name, r["hp_lost"] + r["absorbed"]]
+	if targets.is_empty():
+		out += "（附近无敌人）"
+	return out
+
+## 主动3·莳者一心：回2血2能 + 1盾
+static func _ef_shi_zhe_yi_xin(user: BattleUnit, _ctx: Dictionary) -> String:
+	var h := user.heal(2)
+	var e := user.add_energy(2)
+	user.add_shield(1)
+	return "%s 释放【莳者一心】：回复 %d 生命、%d 能量，+1 护盾（现 %d）" % [user.name, h, e, user.shield]
+
+## 终极·药灵：生命降至1 → 盾=消耗量一半；锁血本回合；相邻敌人受当前盾量伤害
+static func _ef_yao_ling(user: BattleUnit, ctx: Dictionary) -> String:
+	var spend := user.hp - 1
+	if spend <= 0:
+		return "%s 生命过低，【药灵】无法发动" % user.name
+	user.lose_hp(spend)
+	var gained := ceili(float(spend) * 0.5)
+	user.add_shield(gained)
+	user.add_flag("lock_min_hp")
+	user.remove_timer("yaoling_lock")
+	user.add_timer("yaoling_lock", 1, Callable(func(): user.clear_flag("lock_min_hp")))
+	var out := "%s 释放【药灵】：生命降至 1，获得 %d 护盾（现 %d），本回合锁血" % [user.name, gained, user.shield]
+	var targets: Array = ctx.get("targets", [])
+	for t in targets:
+		var tu := t as BattleUnit
+		if tu == null:
+			continue
+		var before := tu.hp
+		tu.lose_hp(user.shield)
+		out += "；%s 受 %d 真伤" % [tu.name, before - tu.hp]
+	if targets.is_empty():
+		out += "（相邻无敌人）"
 	return out

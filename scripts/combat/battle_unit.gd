@@ -33,6 +33,8 @@ var counters: Dictionary = {}              # name -> 当前值
 var _counters_cfg: Dictionary = {}         # name -> 配置
 var _pending_grant: Dictionary = {}        # end_turn 待发放
 var _rounds: int = 0                       # 已进行的自身回合数（on_turn_start 计数，资源延迟生效用）
+var _tsfx: Array = []                     # def["turn_start_effects"]：回合开始配置化效果
+var _tefx: Array = []                     # def["turn_end_effects"]：回合结束配置化效果
 
 # ---- 层数规则（声明式，def["layer_rules"] 驱动，供所有“叠层型”英雄复用）----
 # 例：{ "污染": { "speed_per_layer": 15, "flag_threshold": {"失神": 3} } }
@@ -74,6 +76,8 @@ func _init(def: Dictionary) -> void:
 			watch_layer_flag(str(layer), int(ft[flag]), str(flag))
 	for layer in counters:
 		_refresh_layer(str(layer))   # 让初始层数立即生效（速度/阈值状态）
+	_tsfx = (def.get("turn_start_effects", []) as Array).duplicate()
+	_tefx = (def.get("turn_end_effects", []) as Array).duplicate()
 	var sk: Dictionary = def.get("skills", {})
 	var passive_id := str(sk.get("passive", ""))
 	if passive_id != "":
@@ -164,6 +168,36 @@ func has_timer(id: String) -> bool:
 func remove_timer(id: String) -> void:
 	_timers.erase(id)
 
+## def["turn_start_effects"] 应用（光雨星河等被动回能/周期性回血）
+func _apply_tsfx() -> String:
+	var out := ""
+	for fx in _tsfx:
+		var f: Dictionary = fx
+		var kind := str(f.get("kind", ""))
+		if kind == "energy":
+			out += "；%s 每回合回复 %d 能量" % [name, add_energy(int(f.get("amount", 0)))]
+		elif kind == "every" and _rounds % int(f.get("every", 2)) == 0:
+			var e := int(f.get("energy", 0))
+			var h := int(f.get("hp", 0))
+			var hg := heal(h)
+			var eg := add_energy(e)
+			out += "；%s 周期性回复 %d 生命、%d 能量" % [name, hg, eg]
+	return out
+
+## def["turn_end_effects"] 应用（药师膏腴等条件回血/盾）
+func _apply_tefx() -> String:
+	var out := ""
+	for fx in _tefx:
+		var f: Dictionary = fx
+		var kind := str(f.get("kind", ""))
+		if kind == "if_hp_shield":
+			if hp > int(f.get("hp_max", 4)):
+				continue
+			var h := heal(int(f.get("hp", 1)))
+			add_shield(int(f.get("shield", 1)))
+			out += "；%s 膏腴：回复 %d 生命、%d 护盾" % [name, h, int(f.get("shield", 1))]
+	return out
+
 func _tick_timers() -> String:
 	var out := ""
 	for id in _timers.keys():
@@ -201,7 +235,10 @@ func lose_hp(amount: int) -> void:
 	hp -= amount
 	if hp <= 0:
 		hp = 0
-		alive = false
+		if has_flag("lock_min_hp"):
+			hp = 1
+		else:
+			alive = false
 
 ## 受击总入口：护盾先吸收 → 剩余按护甲减免 → 扣生命。
 ## 返回 { "absorbed": 盾吸收量, "reduced": 护甲减免量, "hp_lost": 最终掉血, "killed": bool }
@@ -293,8 +330,13 @@ func to_status_summary() -> String:
 
 ## ---------- 能量 ----------
 func add_energy(amount: int) -> int:
+	if amount < 0:
+		return 0
 	var before := energy
-	energy = clampi(energy + amount, 0, max_energy)
+	if max_energy < 0:
+		energy += amount
+	else:
+		energy = clampi(energy + amount, 0, max_energy)
 	return energy - before
 
 func spend_energy(amount: int) -> bool:
@@ -344,6 +386,7 @@ func end_turn() -> String:
 	_pending_grant.clear()
 	out += _settle_share_drain()
 	out += SkillEffects.tick_end_of_turn_statuses(self)
+	out += _apply_tefx()
 	out += _tick_timers()
 	return out
 
@@ -389,6 +432,7 @@ func on_turn_start() -> String:
 			continue
 		grant_counter(str(k), int(cfg["per_turn"]))
 	out += SkillEffects.tick_start_of_turn_statuses(self)
+	out += _apply_tsfx()
 	return out
 
 ## ---------- 计数资源池（叠层/元晶等） ----------

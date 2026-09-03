@@ -68,10 +68,40 @@ const ALL := {
 	"xie_shen": {
 		"name": "邪神",
 		"element": "暗",
-		"hp": 4, "energy": 10, "energy_max": 20, "armor": 1, "speed": 174,
+		"hp": 6, "energy": 20, "energy_max": 20, "armor": 1, "speed": 174,
 		"skills": {
 			"passive": "ji_sheng",
 			"actives": ["hun_qi", "zhi_pei", "qin_ran", "hei_shan"],
+		},
+	},
+	# —— 剧情英雄 · 光雨（刘星泽 · 新版本表；光 6/8/甲0/180）——
+	"guang_yu": {
+		"name": "光雨",
+		"element": "光",
+		"hp": 6, "energy": 8, "armor": 0, "speed": 180,
+		"counters": {
+			"星河": {"start": 0, "per_turn": 0, "max": 0},
+		},
+		"turn_start_effects": [
+			{"kind": "energy", "amount": 2},
+			{"kind": "every", "every": 2, "hp": 3, "energy": 2},
+		],
+		"skills": {
+			"passive": "xing_he",
+			"actives": ["guang_ru_shi", "shi_ru_yu", "yu_ru_xing", "xing_ru_he"],
+		},
+	},
+	# —— 剧情英雄 · 药师（杨鑫翰 · 新版本表；木 10血/能量见被动·无上限/甲1/102）——
+	"yao_shi": {
+		"name": "药师",
+		"element": "木",
+		"hp": 10, "energy": 0, "energy_max": -1, "armor": 1, "speed": 102,
+		"turn_end_effects": [
+			{"kind": "if_hp_shield", "hp_max": 4, "hp": 1, "shield": 1},
+		],
+		"skills": {
+			"passive": "gao_yu",
+			"actives": ["jian_mu_sheng_fa", "shou_wan_huo_zu", "shi_zhe_yi_xin", "yao_ling"],
 		},
 	},
 	# —— 剧情英雄 · 追猎（孙广泽 · 新版本表；创伤/流血/灼烧体系示范）——

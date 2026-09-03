@@ -1,0 +1,1638 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>战棋 · 地图设计器（自由拼格）</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    background: #f4f2ec; color: #2c2a26;
+    display: flex; flex-direction: column; height: 100vh; overflow: hidden;
+  }
+  header {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 8px 12px; background: #2e2b45; color: #f0ead6;
+  }
+  header h1 { font-size: 16px; font-weight: 500; margin-right: 6px; letter-spacing: 1px; }
+  header label { font-size: 12px; opacity: .85; }
+  header input[type=text] {
+    width: 150px; padding: 3px 6px; border: 1px solid #00000044; border-radius: 4px; font-size: 13px;
+  }
+  button {
+    padding: 4px 10px; font-size: 12px; border: 1px solid #00000033; border-radius: 5px;
+    background: #faf8f2; cursor: pointer; color: #333; white-space: nowrap;
+  }
+  button:hover { background: #efe9d8; }
+  button.primary { background: #d8b45a; border-color: #b3903a; }
+  button.primary:hover { background: #cd9f3e; }
+  #main { flex: 1; display: flex; min-height: 0; }
+  #panel {
+    width: 232px; flex: none; background: #eae6da; border-right: 1px solid #d0cabb;
+    padding: 10px; overflow-y: auto; font-size: 13px; display: flex; flex-direction: column; gap: 10px;
+  }
+  #panel h2 { font-size: 13px; font-weight: 500; color: #6b5d33; border-bottom: 1px solid #d0cabb; padding-bottom: 3px; }
+  .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .tool-btn {
+    flex: 1; min-width: 60px; text-align: center; padding: 5px 2px; border-radius: 6px;
+    border: 1px solid #c9c2b0; background: #fbf9f2; cursor: pointer; font-size: 12px;
+  }
+  .tool-btn.on { background: #2e6fb7; color: #fff; border-color: #2e6fb7; }
+  .tool-btn.sw.on { background: #c0392b; border-color: #c0392b; }
+  .tool-btn.blue.on { background: #1f6fb2; border-color: #1f6fb2; }
+  .tool-btn.green.on { background: #27801d; border-color: #27801d; }
+  .tool-btn.yellow.on { background: #b8860b; border-color: #b8860b; }
+  .tool-btn.pan.on { background: #555; border-color: #555; }
+  .tool-btn.eraser.on { background: #7a7a7a; border-color: #7a7a7a; }
+  .u-chip {
+    display: flex; align-items: center; gap: 5px; padding: 3px 6px 3px 9px;
+    border: 1px solid #c9c2b0; border-radius: 12px; background: #fbf9f2;
+    cursor: pointer; font-size: 12px; user-select: none;
+  }
+  .u-chip.on { outline: 2px solid #d8b45a; outline-offset: 1px; }
+  .u-chip .x { color: #a33; font-weight: bold; cursor: pointer; padding: 0 3px; font-size: 13px; line-height: 1; }
+  .u-chip .x:hover { color: #e00; }
+  .u-chip .ren { color: #7a6b45; cursor: pointer; padding: 0 2px; font-size: 12px; line-height: 1; }
+  .u-chip .ren:hover { color: #d8b45a; }
+  .u-chip .cpy { color: #7a6b45; cursor: pointer; padding: 0 2px; display: inline-flex; align-items: center; }
+  .u-chip .cpy:hover { color: #d8b45a; }
+  .tile {
+    display: flex; align-items: center; gap: 6px; padding: 3px 5px;
+    border: 1px solid #cfc8b4; border-radius: 6px; background: #fbf9f2; cursor: pointer; font-size: 12px;
+  }
+  .tile.on { outline: 2px solid #d8b45a; outline-offset: 1px; }
+  .tile .sw { width: 20px; height: 20px; border-radius: 4px; border: 1px solid #00000033; flex: none; }
+  .tile .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tile .chk { display: flex; gap: 3px; align-items: center; font-size: 11px; color: #666; }
+  .tile input[type=color] { width: 0; height: 0; border: none; opacity: 0; padding: 0; }
+  .tile .del { color: #a33; font-weight: bold; cursor: pointer; padding: 0 2px; font-size: 14px; }
+  .mini { font-size: 11px; color: #666; line-height: 1.55; }
+  #canvasWrap { flex: 1; position: relative; min-width: 0; overflow: hidden; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; }
+  #status {
+    display: flex; gap: 18px; align-items: center; padding: 4px 12px;
+    background: #2e2b45; color: #cfc9b4; font-size: 12px; flex-wrap: wrap;
+  }
+  #status b { color: #f0ead6; font-weight: 500; }
+  #toast {
+    position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%);
+    background: #333; color: #fff; padding: 8px 16px; border-radius: 6px; font-size: 13px;
+    opacity: 0; pointer-events: none; transition: opacity .25s; z-index: 60;
+  }
+  #toast.show { opacity: .95; }
+  #homeBox {
+    display: none; position: fixed; inset: 0; background: #2e2b45; z-index: 30;
+    align-items: center; justify-content: center;
+  }
+  #homeBox.show { display: flex; }
+  #homeCard { text-align: center; padding: 24px; }
+  #homeCard .t0 { font-size: 34px; font-weight: 500; color: #d8b45a; letter-spacing: 3px; }
+  #homeCard .sub { margin-top: 8px; color: #b9b3d8; }
+  #homeBtns { display: flex; gap: 18px; justify-content: center; margin-top: 26px; }
+  .home-btn {
+    width: 240px; padding: 30px 16px 22px; background: #fdfcf8; color: #333;
+    border-radius: 16px; cursor: pointer; display: flex; flex-direction: column; gap: 10px;
+    align-items: center; border: 2px solid transparent; transition: border-color .15s, transform .1s;
+  }
+  .home-btn:hover { border-color: #d8b45a; transform: translateY(-2px); }
+  .home-btn .ico { font-size: 36px; color: #8a6d2f; line-height: 1; }
+  .home-btn .lb { font-size: 17px; font-weight: 500; }
+  #modalBox {
+    display: none; position: fixed; inset: 0; background: #0009; z-index: 40;
+    align-items: center; justify-content: center;
+  }
+  #modalBox.show { display: flex; }
+  #modalCard {
+    background: #fff; border-radius: 10px; padding: 18px 20px; width: min(380px, 92vw);
+    box-shadow: 0 6px 30px #0005;
+  }
+  #modalCard .t { font-size: 14px; font-weight: 500; margin-bottom: 12px; line-height: 1.5; white-space: pre-line; }
+  #modalCard input[type=text] {
+    width: 100%; padding: 7px 9px; font-size: 14px; border: 1px solid #b9b2a0;
+    border-radius: 6px; margin-bottom: 14px;
+  }
+  #modalCard input[type=text]:focus { outline: 2px solid #d8b45a; border-color: #d8b45a; }
+  #modalCard .btns { display: flex; gap: 8px; justify-content: flex-end; }
+  #modalCard button { padding: 6px 16px; font-size: 13px; }
+  #modalCard .danger { background: #c0392b; border-color: #a93226; color: #fff; }
+  #modalCard .danger:hover { background: #a93226; }
+  #jsonBox {
+    display: none; position: fixed; inset: 0; background: #0009; z-index: 20;
+    align-items: center; justify-content: center;
+  }
+  #jsonBox.show { display: flex; }
+  #jsonCard {
+    background: #fff; border-radius: 8px; padding: 14px; width: min(680px, 92vw);
+    max-height: 84vh; display: flex; flex-direction: column; gap: 8px;
+  }
+  #jsonCard textarea { width: 100%; flex: 1; min-height: 40vh; font-family: Consolas, monospace; font-size: 12px; resize: none; border: 1px solid #ccc; border-radius: 4px; padding: 6px; }
+  #jsonCard .btns { display: flex; gap: 8px; justify-content: flex-end; }
+  #libBox {
+    display: none; position: fixed; inset: 0; background: #0009; z-index: 33;
+    align-items: center; justify-content: center;
+  }
+  #libBox.show { display: flex; }
+  #libCard {
+    background: #fff; border-radius: 10px; padding: 14px; width: min(880px, 94vw);
+    max-height: 86vh; display: flex; flex-direction: column;
+  }
+  #libGrid {
+    overflow-y: auto; display: grid; gap: 12px; padding: 4px;
+    grid-template-columns: repeat(auto-fill, minmax(156px, 1fr));
+  }
+  .libcard {
+    position: relative;
+    border: 1px solid #ddd6c6; border-radius: 8px; padding: 8px; cursor: pointer;
+    background: #fdfcf8; display: flex; flex-direction: column; gap: 6px;
+  }
+  .libcard:hover { border-color: #d8b45a; background: #fbf6e8; }
+  .libcard .libdel {
+    position: absolute; top: 2px; right: 5px; color: #b98a86; font-weight: bold;
+    cursor: pointer; padding: 0 4px; font-size: 15px; line-height: 1; border-radius: 4px;
+  }
+  .libcard .libdel:hover { color: #e00; background: #fdecea; }
+  .libcard .thumb {
+    width: 100%; height: 104px; display: flex; align-items: center; justify-content: center;
+    background: #f7f5ee; border: 1px solid #e0dac9; border-radius: 6px; overflow: hidden;
+  }
+  .libcard .thumb canvas { max-width: 100%; max-height: 102px; }
+  .libcard .thumb img { max-width: 100%; max-height: 102px; object-fit: contain; }
+  .libcard .nm2 { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #ctxMenu {
+    display: none; position: fixed; z-index: 70; min-width: 132px; padding: 4px;
+    background: #fff; border: 1px solid #d5cfc0; border-radius: 9px; box-shadow: 0 8px 22px #0003;
+  }
+  #ctxMenu.show { display: block; }
+  .ctx-item { padding: 7px 13px; font-size: 13px; cursor: pointer; border-radius: 5px; white-space: nowrap; }
+  .ctx-item:hover { background: #f7f1e2; }
+  .ctx-item.danger { color: #c0392b; }
+  .ctx-item.danger:hover { background: #fdecea; }
+</style>
+</head>
+<body>
+<header>
+  <h1>战棋 · 地图设计器</h1>
+  <label>地图名</label><input type="text" id="mapName" value="剧情地图 1">
+  <span style="flex:1"></span>
+  <button id="btnHomeTop" title="返回起始页（新建 / 浏览）">⌂ 起始页</button>
+  <button id="btnFit" title="把地图缩放到窗口">适配视图</button>
+  <button id="btnUndo" title="Ctrl+Z">撤销</button>
+  <button id="btnRedo" title="Ctrl+Y">重做</button>
+  <button id="btnClear">清空</button>
+</header>
+<div id="main">
+  <div id="panel">
+    <div>
+      <h2>工具</h2>
+      <div class="row" style="margin-top:6px;">
+        <div class="tool-btn brush on" id="tbTerrain" title="空白处左键新建格子；已有格上左键换地形">铺格 / 涂地形</div>
+        <div class="tool-btn eraser" id="tbEraser" title="删除格子">删除</div>
+        <div class="tool-btn pan" id="tbPan" title="或按住空格 / 鼠标中键拖拽">抓手</div>
+      </div>
+    </div>
+    <div>
+      <h2>出生点（指定棋子专属）</h2>
+      <div class="row" style="margin-top:6px;">
+        <div class="tool-btn sw" id="spRed">红方</div>
+        <div class="tool-btn blue" id="spBlue">蓝方</div>
+        <div class="tool-btn green" id="spGreen">绿方</div>
+        <div class="tool-btn yellow" id="spYellow">黄方</div>
+      </div>
+      <div class="mini" style="margin:5px 0 4px;">点下方一个单位 → 到格子上摆它的专属出生点（<b id="spCur"></b>）</div>
+      <div id="unitChips" style="display:flex;flex-direction:column;gap:4px;"></div>
+      <button id="btnAddUnit" style="width:100%;margin-top:6px;">+ 给该阵营加单位</button>
+    </div>
+    <div>
+      <h2>地形库</h2>
+      <div class="mini" style="margin:4px 0;">点选一种地形作为当前画笔（地形名称与特性由你统一定义，这里不可编辑）</div>
+      <div id="tileList" style="display:flex;flex-direction:column;gap:5px;"></div>
+    </div>
+    <div>
+      <h2>数据</h2>
+      <div style="display:flex;flex-direction:column;gap:5px;margin-top:6px;">
+        <button id="btnSaveToLib" title="一键保存到工程 maps/ 地图库（EXE 版直接写入，网页版首次需授权目录）">保存到地图库</button>
+        <button id="btnExportJson">导出 JSON（下载到浏览器）</button>
+        <button id="btnCopyJson">复制 JSON 到剪贴板</button>
+        <button id="btnImportJson">导入 JSON（编辑已有关卡）</button>
+        <button id="btnExportPng">导出 PNG 预览图</button>
+        <button id="btnQuitApp" title="关闭程序（仅 EXE 版有效）">退出程序</button>
+      </div>
+      <input type="file" id="fileJson" accept=".json" style="display:none;">
+      <div class="mini" style="margin-top:5px;">地图库路径：<br>…\godot-chess-tactics\maps\</div>
+    </div>
+    <div>
+      <h2>操作说明</h2>
+      <div class="mini" style="margin-top:4px;">
+        从中央 (0,0) 的格子开始设计。<br>
+        <b>铺格 / 涂地形</b>：<br>
+        · 空白处左键 = 新建一个格子（任意位置都行，不必贴着已有格）<br>
+        · 已有格上左键 = 换成当前地形<br>
+        · 右键 / 删除工具 = 删掉格子<br>
+        <b>出生点（专属）</b>：选阵营 → 选单位（可＋加）
+        → 点格子放该棋子的专属出生点；同单位再点别处会自动搬家<br>
+        右键 = 删格子；出生点工具下右键只清出生点<br>
+        滚轮缩放 · 空格/中键拖 = 平移<br>
+        Ctrl+Z / Ctrl+Y = 撤销 / 重做
+      </div>
+    </div>
+  </div>
+  <div id="canvasWrap"><canvas id="cv"></canvas></div>
+</div>
+<div id="status">
+  <span>格子 <b id="stSize">1</b></span>
+  <span>工具 <b id="stTool">铺格 / 涂地形</b></span>
+  <span>坐标 <b id="stCell">-</b></span>
+  <span>缩放 <b id="stZoom">100%</b></span>
+  <span>出生点 <b id="stSpawns">0</b></span>
+</div>
+<div id="toast"></div>
+<div id="ctxMenu">
+  <div class="ctx-item" data-act="edit">编辑</div>
+  <div class="ctx-item" data-act="json">导出 JSON</div>
+  <div class="ctx-item" data-act="png">导出 PNG</div>
+  <div class="ctx-item danger" data-act="del">删除</div>
+</div>
+<div id="homeBox">
+  <div id="homeCard">
+    <div class="t0">战棋 · 地图设计器</div>
+    <div class="sub mini">选择一种开始方式</div>
+    <div id="homeBtns">
+      <div class="home-btn" id="btnHomeNew">
+        <div class="ico">＋</div>
+        <div class="lb">新建地图</div>
+        <div class="mini" style="color:#888;">从空白开始画一张新图</div>
+      </div>
+      <div class="home-btn" id="btnHomeBrowse">
+        <div class="ico">▦</div>
+        <div class="lb">浏览地图</div>
+        <div class="mini" style="color:#888;">像文件夹一样查看已存地图，点击进入修改</div>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="modalBox">
+  <div id="modalCard">
+    <div class="t" id="modalText"></div>
+    <input type="text" id="modalInput" style="display:none;">
+    <div id="modalRow2" style="display:none;">
+      <div class="mini" style="margin:0 0 3px;">格子上显示的字（可留空 = 自动用名字首字）</div>
+      <input type="text" id="modalInput2" maxlength="3">
+    </div>
+    <div class="btns">
+      <button id="modalCancel">取消</button>
+      <button id="modalOk" class="primary">确定</button>
+    </div>
+  </div>
+</div>
+<div id="jsonBox">
+  <div id="jsonCard">
+    <div style="font-weight:500;">关卡 JSON（可编辑后复制保存）</div>
+    <textarea id="jsonText" spellcheck="false"></textarea>
+    <div class="btns">
+      <button id="btnCopy2">复制</button>
+      <button id="btnCloseJson" class="primary">关闭</button>
+    </div>
+  </div>
+</div>
+<div id="libBox">
+  <div id="libCard">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+      <b style="font-size:15px;">地图库</b>
+      <span class="mini" id="libDir"></span>
+      <span style="flex:1"></span>
+      <button id="btnLibRefresh">刷新</button>
+      <button id="btnLibClose" class="primary">关闭</button>
+    </div>
+    <div id="libGrid"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ================= 状态 ================= */
+const LS_KEY = "zq_map_editor_v5";
+const BASE_CELL = 28;                /* 100% 缩放下一格 CSS 像素 */
+const MAX_HISTORY = 300;
+const N4 = [[1,0],[-1,0],[0,1],[0,-1]];   /* 上下左右（屏幕坐标 y 向下） */
+
+/* 用户地形体系（2026-09-02 口述基础表 + 追加）：id=下标，0 固定"空地"；
+   后续新增地形只追加到末尾，避免旧地图 typeId 错位；
+   特性（通行/消耗/效果）由用户另行定义，编辑器仅存名称+显示色 */
+const DEFAULT_TYPES = [
+  { name: "空地",              color: "#E6DCC3" },
+  { name: "障碍（可破坏）",     color: "#A08A62" },
+  { name: "障碍（不可破坏）",   color: "#5A5650" },
+  { name: "森林",              color: "#4E8C43" },
+  { name: "沼泽",              color: "#7A8F3F" },
+  { name: "水域",              color: "#4B8BC4" },
+  { name: "雪地",              color: "#EFF3F8" },
+  { name: "沙漠",              color: "#E2C467" },
+  { name: "山地",              color: "#96785A" },
+  { name: "冰面",              color: "#A9D6E8" }
+];
+
+let state = {
+  name: "剧情地图 1",
+  types: DEFAULT_TYPES.map(t => ({ ...t })),
+  cells: new Map(),              /* key "x,y" -> typeId（自由拼格，从 (0,0) 出发） */
+  spawns: [],                    /* {x, y, team, unit}——每格至多 1 个，指定具体棋子 */
+  units: {}                      /* team -> [单位名...]（出生点可用的棋子清单） */
+};
+let marks = {};                  /* team+"\u0001"+name -> 格上显示字（缺省=名字首字） */
+function markKey(team, name) { return team + "\u0001" + name; }
+function markOf(team, name) {
+  const m = marks[markKey(team, name)];
+  return m ? String(m) : String(name).charAt(0);
+}
+function setMark(team, name, txt) {
+  txt = String(txt || "").trim();
+  if (txt) marks[markKey(team, name)] = txt;
+  else delete marks[markKey(team, name)];
+}
+function renameMarkKey(team, oldName, newName) {
+  const k = markKey(team, oldName);
+  if (Object.prototype.hasOwnProperty.call(marks, k)) {
+    marks[markKey(team, newName)] = marks[k];
+    delete marks[k];
+  }
+}
+/* 把默认地形表里缺失的新地形追加到草稿末尾（只增不改，保住旧格子编号） */
+function syncTypes() {
+  let changed = false;
+  for (const d of DEFAULT_TYPES) {
+    if (!state.types.some(t => t.name === d.name)) {
+      state.types.push({ ...d });
+      changed = true;
+    }
+  }
+  return changed;
+}
+function ckey(x, y) { return x + "," + y; }
+state.cells.set(ckey(0, 0), 0);  /* 初始中心格 */
+
+const TEAMS = [
+  { id: "red",    label: "红方", color: "#d64545" },
+  { id: "blue",   label: "蓝方", color: "#2f6fb7" },
+  { id: "green",  label: "绿方", color: "#2e8b33" },
+  { id: "yellow", label: "黄方", color: "#d9a012" }
+];
+TEAMS.forEach(t => { state.units[t.id] = ["单位1"]; });   /* 每阵营默认一个单位 */
+
+function teamById(id) { return TEAMS.find(t => t.id === id) || TEAMS[0]; }
+function spawnAt(x, y) { return state.spawns.find(s => s.x === x && s.y === y) || null; }
+function unitSpawn(team, unit) { return state.spawns.find(s => s.team === team && s.unit === unit) || null; }
+
+/* 工具 {kind:"terrain"|"eraser"|"spawn"|"pan", typeId?, team?, unit?} */
+let tool = { kind: "terrain", typeId: 0 };
+let activeTeam = "red";          /* 出生点面板当前选中的阵营 */
+let history = [];
+let redoHist = [];
+
+/* 视图 */
+const view = { ox: 0, oy: 0, zoom: 1 };
+let cellPx = BASE_CELL;
+
+/* ================= 小工具 ================= */
+function $id(x) { return document.getElementById(x); }
+function toast(msg) {
+  const t = $id("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(t._h);
+  t._h = setTimeout(() => t.classList.remove("show"), 1600);
+}
+/* ===== 自定义弹窗（确认 / 输入），不用浏览器原生 confirm / prompt ===== */
+let _mOkCb = null;
+function modalClose() {
+  $id("modalBox").classList.remove("show");
+  _mOkCb = null;
+}
+function openConfirm(text, okCb, okLabel) {
+  const okBtn = $id("modalOk");
+  okBtn.textContent = okLabel || "确定";
+  okBtn.classList.add("danger");
+  $id("modalText").textContent = text;
+  $id("modalText").style.display = "";
+  const inp = $id("modalInput");
+  inp.style.display = "none";
+  inp.value = "";
+  $id("modalRow2").style.display = "none";
+  _mOkCb = okCb;
+  $id("modalBox").classList.add("show");
+  okBtn.onclick = () => { const cb = _mOkCb; modalClose(); if (cb) cb(); };
+  $id("modalCancel").onclick = modalClose;
+  okBtn.focus();
+}
+/* input2: 传字符串则显示第二输入框（如"格上显示字"），回调收到 (v1, v2) */
+function openPrompt(title, def, okCb, input2) {
+  const okBtn = $id("modalOk");
+  okBtn.textContent = "确定";
+  okBtn.classList.remove("danger");
+  $id("modalText").textContent = title;
+  $id("modalText").style.display = "";
+  const inp = $id("modalInput");
+  inp.style.display = "";
+  inp.value = def;
+  const row2 = $id("modalRow2");
+  const inp2 = $id("modalInput2");
+  if (input2 === undefined) {
+    row2.style.display = "none";
+    inp2.value = "";
+  } else {
+    row2.style.display = "";
+    inp2.value = input2;
+  }
+  _mOkCb = okCb;
+  $id("modalBox").classList.add("show");
+  const commit = () => {
+    const v = inp.value;
+    const v2 = row2.style.display === "none" ? undefined : inp2.value;
+    const cb = _mOkCb;
+    modalClose();
+    if (cb) cb(v, v2);
+  };
+  okBtn.onclick = commit;
+  $id("modalCancel").onclick = modalClose;
+  inp.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } };
+  inp2.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } };
+  inp.focus();
+  inp.select();
+}
+function hasCell(x, y) { return state.cells.has(ckey(x, y)); }
+function typeOf(id) { return state.types[id] || state.types[0]; }
+function emptyName(n) { return n || "未命名地图"; }
+
+/* ================= 撤销 / 重做 ================= */
+/* 记录:
+   tileOps:  [{x,y, oldHad,oldType, newHad,newType}]  正序应用=重做，逆序应用=撤销
+   spawnOps: [{x,y, old:{team,unit}|null, new:{team,unit}|null}]  整格出生点状态替换 */
+function pushHistory(rec) {
+  history.push(rec);
+  if (history.length > MAX_HISTORY) history.shift();
+  redoHist = [];
+}
+function applyTileOp(op, forward) {
+  const had = forward ? op.newHad : op.oldHad;
+  const type = forward ? op.newType : op.oldType;
+  const k = ckey(op.x, op.y);
+  if (had) state.cells.set(k, type);
+  else state.cells.delete(k);
+}
+function applySpawnOp(op, forward) {
+  const val = forward ? op.new : op.old;   /* val = {team,unit} 或 null */
+  state.spawns = state.spawns.filter(q => !(q.x === op.x && q.y === op.y));
+  if (val) state.spawns.push({ x: op.x, y: op.y, team: val.team, unit: val.unit });
+}
+function applyRec(rec, forward) {
+  const ops = rec.tileOps;
+  if (forward) for (const op of ops) applyTileOp(op, true);
+  else for (let i = ops.length - 1; i >= 0; i--) applyTileOp(ops[i], false);
+  for (const s of rec.spawnOps) applySpawnOp(s, forward);
+}
+function undo() {
+  const rec = history.pop();
+  if (!rec) { toast("没有可撤销的操作"); return; }
+  applyRec(rec, false);
+  redoHist.push(rec);
+  afterEdit();
+}
+function redo() {
+  const rec = redoHist.pop();
+  if (!rec) { toast("没有可重做的操作"); return; }
+  applyRec(rec, true);
+  history.push(rec);
+  afterEdit();
+}
+
+/* ================= 编辑操作 ================= */
+let strokeRec = null;
+function strokeBegin() { strokeRec = { tileOps: [], spawnOps: [] }; }
+function strokeCell(x, y) {
+  if (tool.kind === "terrain") {
+    /* 铺格 / 涂地形：空白处任意位置都能新建格子（不要求贴边） */
+    const id = tool.typeId;
+    if (hasCell(x, y)) {
+      if (state.cells.get(ckey(x, y)) === id) return;
+      strokeRec.tileOps.push({ x, y, oldHad: true, oldType: state.cells.get(ckey(x, y)), newHad: true, newType: id });
+      state.cells.set(ckey(x, y), id);
+    } else {
+      strokeRec.tileOps.push({ x, y, oldHad: false, oldType: 0, newHad: true, newType: id });
+      state.cells.set(ckey(x, y), id);
+    }
+  } else if (tool.kind === "eraser") {
+    if (!hasCell(x, y)) return;
+    strokeRec.tileOps.push({ x, y, oldHad: true, oldType: state.cells.get(ckey(x, y)), newHad: false, newType: 0 });
+    state.cells.delete(ckey(x, y));
+    removeSpawnOnCell(x, y, strokeRec);   /* 格子没了，出生点一并清除 */
+  } else if (tool.kind === "spawn") {
+    if (!hasCell(x, y)) return;
+    placeUnitSpawn(x, y, tool.team, tool.unit, strokeRec);
+  }
+}
+/* 把一个单位放到指定格：一格至多一个出生点；同单位放在别处则自动挪过来 */
+function placeUnitSpawn(x, y, team, unit, rec) {
+  const cur = spawnAt(x, y);
+  if (cur && cur.team === team && cur.unit === unit) return;   /* 已经在这 */
+  const oldSpot = unitSpawn(team, unit);                        /* 该单位旧出生格 */
+  if (oldSpot) removeSpawnOnCell(oldSpot.x, oldSpot.y, rec);
+  if (cur) removeSpawnOnCell(x, y, rec);
+  rec.spawnOps.push({ x, y, old: cur, new: { team, unit } });
+  state.spawns = state.spawns.filter(q => !(q.x === x && q.y === y));
+  state.spawns.push({ x, y, team, unit });
+}
+function removeSpawnOnCell(x, y, rec) {
+  const s = spawnAt(x, y);
+  if (!s) return null;
+  rec.spawnOps.push({ x, y, old: s, new: null });
+  state.spawns = state.spawns.filter(q => !(q.x === x && q.y === y));
+  return s;
+}
+function strokeEnd() {
+  if (strokeRec && (strokeRec.tileOps.length || strokeRec.spawnOps.length)) {
+    pushHistory(strokeRec);
+    afterEdit();
+  }
+  strokeRec = null;
+}
+function eraseCell(x, y) {          /* 右键删除格子：不受当前工具影响 */
+  if (!hasCell(x, y)) return;
+  const rec = { tileOps: [], spawnOps: [] };
+  rec.tileOps.push({ x, y, oldHad: true, oldType: state.cells.get(ckey(x, y)), newHad: false, newType: 0 });
+  state.cells.delete(ckey(x, y));
+  removeSpawnOnCell(x, y, rec);
+  pushHistory(rec);
+  afterEdit();
+}
+function clearSpawnsAt(x, y) {      /* 出生点工具的右键：只清出生点，不删格 */
+  if (!hasCell(x, y)) return;
+  const rec = { tileOps: [], spawnOps: [] };
+  if (removeSpawnOnCell(x, y, rec)) { pushHistory(rec); afterEdit(); }
+}
+function afterEdit() {
+  saveSoon();
+  updateStatus();
+  render();
+}
+
+/* ================= 渲染 ================= */
+const cv = $id("cv");
+const ctx = cv.getContext("2d");
+let dpr = window.devicePixelRatio || 1;
+let cssW = 0, cssH = 0;
+let hover = null;      /* {x, y} 或 null */
+
+function resizeCanvas() {
+  const wrap = $id("canvasWrap");
+  cssW = wrap.clientWidth;
+  cssH = wrap.clientHeight;
+  cv.width = Math.max(1, Math.round(cssW * dpr));
+  cv.height = Math.max(1, Math.round(cssH * dpr));
+  render();
+}
+function cellScreenX(x) { return view.ox + x * cellPx; }
+function cellScreenY(y) { return view.oy + y * cellPx; }
+function toCell(mx, my) {
+  return {
+    x: Math.floor((mx - view.ox) / cellPx),
+    y: Math.floor((my - view.oy) / cellPx)
+  };
+}
+function render() {
+  cellPx = BASE_CELL * view.zoom;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = "#f7f5ee";
+  ctx.fillRect(0, 0, cssW, cssH);
+
+  /* 全平面淡网格（便于对齐与定位） */
+  if (cellPx >= 14) {
+    ctx.strokeStyle = "rgba(0,0,0,.06)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    const gx0 = Math.floor(-view.ox / cellPx), gx1 = Math.ceil((cssW - view.ox) / cellPx);
+    const gy0 = Math.floor(-view.oy / cellPx), gy1 = Math.ceil((cssH - view.oy) / cellPx);
+    for (let x = gx0; x <= gx1; x++) {
+      const px = cellScreenX(x) + .5;
+      ctx.moveTo(px, 0); ctx.lineTo(px, cssH);
+    }
+    for (let y = gy0; y <= gy1; y++) {
+      const py = cellScreenY(y) + .5;
+      ctx.moveTo(0, py); ctx.lineTo(cssW, py);
+    }
+    ctx.stroke();
+  }
+
+  /* 格子与出生点（可视裁剪） */
+  const lx = Math.floor(-view.ox / cellPx) - 1, rx = Math.ceil((cssW - view.ox) / cellPx) + 1;
+  const ty = Math.floor(-view.oy / cellPx) - 1, by = Math.ceil((cssH - view.oy) / cellPx) + 1;
+  for (const [k, tid] of state.cells) {
+    const sep = k.indexOf(",");
+    const x = parseInt(k.slice(0, sep), 10);
+    const y = parseInt(k.slice(sep + 1), 10);
+    if (x < lx || x > rx || y < ty || y > by) continue;
+    const t = typeOf(tid);
+    const px = cellScreenX(x), py = cellScreenY(y);
+    ctx.fillStyle = t.color;
+    ctx.fillRect(px, py, cellPx + .5, cellPx + .5);
+    const sp = spawnAt(x, y);
+    if (sp) {
+      const tm = teamById(sp.team);
+      /* 阵营色底 + 单位名首字 */
+      ctx.globalAlpha = .18;
+      ctx.fillStyle = tm.color;
+      ctx.fillRect(px, py, cellPx, cellPx);
+      ctx.globalAlpha = 1;
+      ctx.lineWidth = Math.max(1.4, cellPx * .09);
+      ctx.strokeStyle = tm.color;
+      ctx.strokeRect(px + 1.5, py + 1.5, cellPx - 3, cellPx - 3);
+      if (cellPx >= 9) {
+        const mk = markOf(sp.team, sp.unit);
+        ctx.fillStyle = tm.color;
+        ctx.font = "bold " + Math.max(8, Math.round(cellPx * (mk.length >= 2 ? .34 : .46))) + "px sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(mk, px + cellPx / 2, py + cellPx / 2 + 1);
+        ctx.textAlign = "start";
+        ctx.textBaseline = "alphabetic";
+      }
+      drawSpawnBadge(ctx, px, py, cellPx, sp.unit);   /* 右上角数字角标 */
+    }
+  }
+
+  /* 起始格 (0,0) 金色细框标记 */
+  if (state.cells.has(ckey(0, 0))) {
+    const px = cellScreenX(0), py = cellScreenY(0);
+    ctx.strokeStyle = "rgba(216,180,90,.9)";
+    ctx.lineWidth = Math.max(1, cellPx * .05);
+    ctx.strokeRect(px + 1, py + 1, cellPx - 2, cellPx - 2);
+  }
+
+  /* hover 反馈 */
+  if (hover) {
+    const hx = hover.x, hy = hover.y;
+    const exists = hasCell(hx, hy);
+    const px = cellScreenX(hx), py = cellScreenY(hy);
+    if (exists) {
+      if (tool.kind === "spawn") {
+        /* 出生点放置预览（淡色底 + 单位首字） */
+        const tm = teamById(tool.team);
+        ctx.globalAlpha = .35;
+        ctx.fillStyle = tm.color;
+        ctx.fillRect(px, py, cellPx, cellPx);
+        ctx.globalAlpha = 1;
+        const mk = markOf(tool.team, tool.unit || "?");
+        ctx.fillStyle = tm.color;
+        ctx.font = "bold " + Math.max(8, Math.round(cellPx * (mk.length >= 2 ? .34 : .46))) + "px sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(mk, px + cellPx / 2, py + cellPx / 2 + 1);
+        ctx.textAlign = "start";
+        ctx.textBaseline = "alphabetic";
+      }
+      ctx.strokeStyle = "#d8b45a";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(px + 1, py + 1, cellPx - 2, cellPx - 2);
+    } else if (tool.kind === "terrain") {
+      /* 任意空白处新建格子预览（半透明地形色 + 绿框） */
+      const t = typeOf(tool.typeId);
+      ctx.globalAlpha = .55;
+      ctx.fillStyle = t.color;
+      ctx.fillRect(px, py, cellPx, cellPx);
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = "#3b8f3b";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(px + 1, py + 1, cellPx - 2, cellPx - 2);
+    }
+  }
+  updateStatus();
+}
+
+/* 出生格右上角小标：单位名尾号（本体 0，复制体 1/2/3…），供画布与 PNG 共用 */
+function drawSpawnBadge(g, px, py, cell, unit) {
+  const m = /([0-9]+)$/.exec(String(unit));
+  if (!m) return;
+  if (cell < 12) return;
+  const tag = m[1];
+  const fs = Math.max(6, Math.round(cell * .24));
+  g.font = "bold " + fs + "px sans-serif";
+  const tw = Math.ceil(g.measureText(tag).width);
+  const hh = fs + 4;
+  const ww = Math.max(tw + 6, hh);
+  const bx = px + cell - ww - 1.5, by = py + 1.5;
+  g.globalAlpha = .88;
+  g.fillStyle = "#2f2f2f";
+  g.beginPath();
+  g.roundRect(bx, by, ww, hh, hh / 2);
+  g.fill();
+  g.globalAlpha = 1;
+  g.fillStyle = "#fff";
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.fillText(tag, bx + ww / 2, by + hh / 2 + .5);
+  g.textAlign = "start";
+  g.textBaseline = "alphabetic";
+}
+
+/* ================= 面板 ================= */
+function renderPanel() {
+  const list = $id("tileList");
+  list.innerHTML = "";
+  state.types.forEach((t, id) => {
+    const d = document.createElement("div");
+    d.className = "tile" + (tool.kind === "terrain" && tool.typeId === id ? " on" : "");
+    d.innerHTML =
+      '<span class="sw" style="background:' + t.color + '"></span>' +
+      '<span class="nm">' + esc(t.name) + '</span>';
+    d.title = "点选「" + t.name + "」作为当前画笔";
+    d.onclick = () => selectTool({ kind: "terrain", typeId: id });
+    list.appendChild(d);
+  });
+  $id("tbTerrain").classList.toggle("on", tool.kind === "terrain");
+  $id("tbEraser").classList.toggle("on", tool.kind === "eraser");
+  $id("tbPan").classList.toggle("on", tool.kind === "pan");
+  for (const tm of TEAMS) {
+    const b = $id("sp" + tm.id[0].toUpperCase() + tm.id.slice(1));
+    if (b) b.classList.toggle("on", activeTeam === tm.id);
+  }
+  renderUnitPanel();
+  updateToolLabel();
+}
+/* 出生点单位清单（当前阵营） */
+function renderUnitPanel() {
+  const box = $id("unitChips");
+  box.innerHTML = "";
+  const tm = teamById(activeTeam);
+  const units = state.units[activeTeam] || [];
+  $id("spCur").textContent = tm.label;
+  $id("spCur").style.color = tm.color;
+  const act = tool.kind === "spawn" && tool.team === activeTeam ? tool.unit : null;
+  for (const u of units) {
+    const chip = document.createElement("div");
+    chip.className = "u-chip" + (act === u ? " on" : "");
+    chip.title = "点选该单位 → 到格子上摆出生点";
+    const dot = document.createElement("span");
+    dot.style.cssText = "width:9px;height:9px;border-radius:50%;background:" + tm.color + ";flex:none;";
+    const nm = document.createElement("span");
+    nm.style.flex = "1";
+    nm.textContent = u;
+    nm.title = "双击可改名";
+    const ren = document.createElement("span");
+    ren.className = "ren";
+    ren.textContent = "✎";
+    ren.title = "改名";
+    const cpy = document.createElement("span");
+    cpy.className = "cpy";
+    cpy.title = "复制（小兵要很多只就点它）";
+    cpy.innerHTML = '<svg viewBox="0 0 16 16" width="11" height="11" style="fill:currentColor;display:block;"><rect x="1" y="1" width="10" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M5 5h10v10H5z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>';
+    const x = document.createElement("span");
+    x.className = "x";
+    x.textContent = "×";
+    x.title = "删除该单位（连带其出生点）";
+    chip.appendChild(dot); chip.appendChild(nm); chip.appendChild(ren); chip.appendChild(cpy); chip.appendChild(x);
+    chip.onclick = (ev) => {
+      if (ev.target === x || ev.target === ren || ev.target === cpy) return;
+      selectTool({ kind: "spawn", team: activeTeam, unit: u });
+    };
+    ren.onclick = (ev) => { ev.stopPropagation(); renameUnit(activeTeam, u); };
+    cpy.onclick = (ev) => { ev.stopPropagation(); dupUnit(activeTeam, u); };
+    x.onclick = (ev) => { ev.stopPropagation(); delUnit(activeTeam, u); };
+    nm.ondblclick = () => renameUnit(activeTeam, u);
+    box.appendChild(chip);
+  }
+  if (!units.length) {
+    const tip = document.createElement("div");
+    tip.className = "mini";
+    tip.textContent = "该阵营还没有单位，点下方按钮添加";
+    box.appendChild(tip);
+  }
+}
+function setActiveTeam(id) {
+  activeTeam = id;
+  const units = state.units[id] || [];
+  if (tool.kind !== "spawn" || tool.team !== id) {
+    if (units.length) tool = { kind: "spawn", team: id, unit: units[0] };
+  }
+  renderPanel();
+  render();
+}
+function baseUnitName(unit) {
+  const b = String(unit).replace(/\d+$/, "");
+  return b || String(unit);
+}
+function dupUnit(team, unit) {
+  const arr = state.units[team];
+  if (!arr.includes(unit)) return;
+  const base = baseUnitName(unit);          /* 炎龙2 → 炎龙：复制永远基于基础名 */
+  const origIdx = arr.indexOf(unit);
+
+  /* 本体还没有编号（就叫 base）时：一使用复制就把本体改成 base0 */
+  if (arr.includes(base) && !arr.includes(base + "0")) {
+    arr[arr.indexOf(base)] = base + "0";
+    renameMarkKey(team, base, base + "0");
+    for (const s of state.spawns) if (s.team === team && s.unit === base) s.unit = base + "0";
+    if (tool.kind === "spawn" && tool.team === team && tool.unit === base) tool.unit = base + "0";
+  }
+  /* 收集已占编号（本体 0 也在内），取最小空号 */
+  const used = new Set();
+  for (const u of arr) {
+    if (!u.startsWith(base)) continue;
+    const tail = u.slice(base.length);
+    if (tail === "0") used.add(0);
+    else if (/^[1-9]\d*$/.test(tail)) used.add(parseInt(tail, 10));
+  }
+  let n = 1;
+  while (used.has(n)) n++;
+  const name = base + n;                     /* 副本：炎龙1、炎龙2… */
+  /* 新副本继承本体的显示字（本体无自定义则副本也用首字） */
+  const srcMark = marks[markKey(team, base + "0")] || marks[markKey(team, base)] || "";
+  if (srcMark) setMark(team, name, srcMark);
+  arr.splice(origIdx + 1, 0, name);
+  tool = { kind: "spawn", team, unit: name };
+  renderPanel(); markDirty();
+  toast("本体已编号「" + base + "0」，「" + base + "」复制为「" + name + "」，点格子摆它的出生点");
+}
+function addUnit(team) {
+  openPrompt("给 " + teamById(team).label + " 添加棋子，输入单位名（如：剑士甲 / 弓手二号）：", "", (raw) => {
+    const n = (raw || "").trim();
+    if (!n) return;
+    if ((state.units[team] || []).includes(n)) { toast("该阵营已有同名单位"); return; }
+    state.units[team].push(n);
+    tool = { kind: "spawn", team, unit: n };
+    renderPanel();
+    toast("已添加 " + teamById(team).label + " · " + n + "，点格子放置出生点");
+  });
+}
+function delUnit(team, unit) {
+  const s = unitSpawn(team, unit);
+  const msg = s
+    ? "确定删除单位「" + unit + "」？\n它在 (" + s.x + ", " + s.y + ") 的出生点也会一并移除。"
+    : "确定删除单位「" + unit + "」？";
+  openConfirm(msg, () => {
+    const rec = { tileOps: [], spawnOps: [] };
+    while (true) {
+      const spot = unitSpawn(team, unit);
+      if (!spot) break;
+      removeSpawnOnCell(spot.x, spot.y, rec);
+    }
+    const arr = state.units[team];
+    arr.splice(arr.indexOf(unit), 1);
+    delete marks[markKey(team, unit)];
+    if (rec.spawnOps.length) pushHistory(rec);
+    if (tool.kind === "spawn" && tool.team === team && tool.unit === unit) {
+      tool = arr.length ? { kind: "spawn", team, unit: arr[0] } : { kind: "terrain", typeId: 0 };
+    }
+    renderPanel(); markDirty(); render();
+    toast("已删除单位「" + unit + "」");
+  }, "删除");
+}
+function renameUnit(team, oldName) {
+  const curMark = marks[markKey(team, oldName)] || "";
+  openPrompt("编辑" + teamById(team).label + "单位「" + oldName + "」：名称与格子显示字", oldName, (raw, markRaw) => {
+    const n = (raw || "").trim();
+    if (!n) return;
+    const m = String(markRaw || "").trim().slice(0, 3);
+    const arr = state.units[team];
+    if (!arr.includes(oldName)) return;
+    if (n !== oldName) {
+      if (arr.includes(n)) { toast("该阵营已有同名单位"); return; }
+      arr[arr.indexOf(oldName)] = n;
+      renameMarkKey(team, oldName, n);                        /* 迁移原显示字 */
+      for (const s of state.spawns) if (s.team === team && s.unit === oldName) s.unit = n;
+      if (tool.kind === "spawn" && tool.team === team && tool.unit === oldName) tool.unit = n;
+    }
+    setMark(team, n, m);                                      /* 显示字（留空=用名字首字） */
+    renderPanel(); markDirty(); render();
+    toast("已保存「" + n + "」" + (m ? "，格子显示「" + m + "」" : "，格子显示名字首字"));
+  }, curMark);
+}
+function selectTool(t) {
+  if (t.kind === "spawn") activeTeam = t.team;
+  tool = t;
+  renderPanel();
+  render();
+}
+function updateToolLabel() {
+  const map = {
+    terrain: "铺格/涂地形 · " + typeOf(tool.typeId).name,
+    eraser: "删除格子",
+    spawn: "出生点 · " + teamById(tool.team).label + " " + tool.unit,
+    pan: "抓手"
+  };
+  $id("stTool").textContent = map[tool.kind] || tool.kind;
+}
+function markDirty() { saveSoon(); }
+function esc(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function updateStatus() {
+  $id("stSize").textContent = state.cells.size;
+  $id("stZoom").textContent = Math.round(view.zoom * 100) + "%";
+  $id("stSpawns").textContent = state.spawns.length;
+  if (hover) {
+    const sp = spawnAt(hover.x, hover.y);
+    $id("stCell").textContent = sp
+      ? hover.x + ", " + hover.y + " · " + teamById(sp.team).label + " " + sp.unit
+      : hover.x + ", " + hover.y;
+  }
+}
+
+/* ================= 适配视图 / 清空 ================= */
+function fitView() {
+  if (!state.cells.size) {
+    view.zoom = 1; view.ox = (cssW - BASE_CELL) / 2; view.oy = (cssH - BASE_CELL) / 2;
+    return;
+  }
+  let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
+  for (const k of state.cells.keys()) {
+    const sep = k.indexOf(",");
+    const x = parseInt(k.slice(0, sep), 10), y = parseInt(k.slice(sep + 1), 10);
+    if (x < minX) minX = x; if (x > maxX) maxX = x;
+    if (y < minY) minY = y; if (y > maxY) maxY = y;
+  }
+  const w = (maxX - minX + 1) * BASE_CELL, h = (maxY - minY + 1) * BASE_CELL;
+  view.zoom = Math.max(.06, Math.min(4, Math.min((cssW - 60) / w, (cssH - 60) / h)));
+  cellPx = BASE_CELL * view.zoom;
+  const cx = (minX + maxX + 1) / 2, cy = (minY + maxY + 1) / 2;
+  view.ox = cssW / 2 - cx * cellPx;
+  view.oy = cssH / 2 - cy * cellPx;
+}
+function clearMap() {
+  if (!state.cells.size) return;
+  openConfirm("清空整张地图？\n所有格子与出生点都会删除，只保留中心格 (0,0)。\n（可用 Ctrl+Z 撤销）", () => {
+    const rec = { tileOps: [], spawnOps: [] };
+    for (const [k, v] of state.cells) {
+      const sep = k.indexOf(",");
+      const x = parseInt(k.slice(0, sep), 10), y = parseInt(k.slice(sep + 1), 10);
+      rec.tileOps.push({ x, y, oldHad: true, oldType: v, newHad: false, newType: 0 });
+    }
+    for (const s of state.spawns) rec.spawnOps.push({ x: s.x, y: s.y, old: { team: s.team, unit: s.unit }, new: null });
+    state.cells = new Map();
+    state.cells.set(ckey(0, 0), 0);
+    state.spawns = [];
+    state.units = {};
+    TEAMS.forEach(t => { state.units[t.id] = ["单位1"]; });
+    marks = {};
+    pushHistory(rec);
+    afterEdit();
+    toast("已清空，保留中心格 (0,0)");
+  }, "清空");
+}
+
+/* ================= 导入 / 导出 ================= */
+function exportJson() {
+  const cells = [];
+  for (const [k, v] of state.cells) {
+    const sep = k.indexOf(",");
+    cells.push({ x: parseInt(k.slice(0, sep), 10), y: parseInt(k.slice(sep + 1), 10), type: v });
+  }
+  /* 单位清单 + 各自"格子显示字"（持久化，避免重启丢失 & 保留 mark） */
+  const unitsOut = {};
+  for (const t of TEAMS) {
+    const list = [];
+    const arr = state.units[t.id] || [];
+    for (const nm of arr) list.push({ name: nm, mark: marks[markKey(t.id, nm)] || "" });
+    for (const s of state.spawns)
+      if (s.team === t.id && !list.some(q => q.name === s.unit)) list.push({ name: s.unit, mark: "" });
+    unitsOut[t.id] = list;
+  }
+  return {
+    format: "zhanqi-map",
+    version: 5,
+    name: state.name,
+    origin: "freeform：自由拼格，(0,0) 为起始格，x 向右、y 向下；types 仅名称+显示色，地形特性在游戏侧另行定义；出生点指定到具体棋子(team+unit)",
+    cells,
+    types: state.types.map((t, id) => ({ id, name: t.name, color: t.color })),
+    spawns: state.spawns.map(s => ({ x: s.x, y: s.y, team: s.team, unit: s.unit })),
+    units: unitsOut
+  };
+}
+function downloadText(text, filename, mime) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], { type: mime || "application/octet-stream" }));
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+function copyText(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => toast("已复制到剪贴板"), () => fallbackCopy(text));
+  } else fallbackCopy(text);
+}
+function fallbackCopy(text) {
+  const ta = document.createElement("textarea");
+  ta.value = text; document.body.appendChild(ta); ta.select();
+  try { document.execCommand("copy"); toast("已复制到剪贴板"); }
+  catch (e) { toast("复制失败，请手动选择复制"); }
+  ta.remove();
+}
+function importJson(text) {
+  let obj;
+  try { obj = JSON.parse(text); }
+  catch (e) { toast("JSON 解析失败：" + e.message); return; }
+  if (!Array.isArray(obj.types) || obj.types.length < 1) { toast("JSON 缺少 types 字段"); return; }
+  const ts = obj.types.map(t => ({
+    name: String(t.name || "地形"),
+    color: /^#[0-9a-fA-F]{6}$/.test(t.color || "") ? t.color : "#cccccc"
+  }));
+  const cells = new Map();
+  if (Array.isArray(obj.cells)) {
+    for (const c of obj.cells) {
+      const x = parseInt(c.x, 10), y = parseInt(c.y, 10), v = parseInt(c.type, 10);
+      if (isNaN(x) || isNaN(y) || isNaN(v) || v < 0 || v >= ts.length) continue;
+      cells.set(ckey(x, y), v);
+    }
+  } else if (Array.isArray(obj.tiles) && obj.cols && obj.rows) {
+    /* v1 矩形地图兼容：整块转自由格 */
+    const cols = parseInt(obj.cols, 10), rows = parseInt(obj.rows, 10);
+    for (let r = 0; r < rows; r++) {
+      const row = obj.tiles[r];
+      if (!Array.isArray(row)) continue;
+      for (let c = 0; c < cols && c < row.length; c++) {
+        const v = parseInt(row[c], 10);
+        if (!isNaN(v) && v >= 0 && v < ts.length) cells.set(ckey(c, r), v);
+      }
+    }
+  }
+  if (!cells.size) cells.set(ckey(0, 0), 0);
+  const teams = TEAMS.map(t => t.id);
+  const spawns = [];
+  const units = {};
+  const marksIn = {};
+  TEAMS.forEach(t => { units[t.id] = []; });
+  /* v5：文件自带单位清单（含格上显示字） */
+  if (obj.units && typeof obj.units === "object") {
+    for (const tid of teams) {
+      const arr = obj.units[tid];
+      if (!Array.isArray(arr)) continue;
+      for (const it of arr) {
+        if (typeof it === "string") { if (!units[tid].includes(it)) units[tid].push(it); }
+        else if (it && it.name) {
+          const nm = String(it.name);
+          if (!units[tid].includes(nm)) units[tid].push(nm);
+          if (it.mark) marksIn[markKey(tid, nm)] = String(it.mark);
+        }
+      }
+    }
+  }
+  if (Array.isArray(obj.spawns)) {
+    for (const s of obj.spawns) {
+      const x = parseInt(s.x !== undefined ? s.x : s.col, 10);
+      const y = parseInt(s.y !== undefined ? s.y : s.row, 10);
+      if (isNaN(x) || isNaN(y) || !cells.has(ckey(x, y))) continue;
+      const team = teams.includes(s.team) ? s.team : teams[0];
+      const unit = s.unit ? String(s.unit) : teamById(team).label;   /* 旧版本无 unit → 用阵营名 */
+      if (!spawns.some(q => q.x === x && q.y === y)) spawns.push({ x, y, team, unit });
+      if (!units[team].includes(unit)) units[team].push(unit);
+    }
+  }
+  TEAMS.forEach(t => { if (!units[t.id].length) units[t.id] = ["单位1"]; });
+  history = []; redoHist = [];
+  marks = marksIn;
+  state = { name: emptyName(obj.name), types: ts, cells, spawns, units };
+  if (syncTypes()) toast("地形表已更新：已为你补齐新增地形");
+  tool = { kind: "terrain", typeId: 0 };
+  $id("mapName").value = state.name;
+  afterEdit();
+  renderPanel();
+  toast("导入成功，共 " + cells.size + " 格、" + spawns.length + " 个出生点");
+}
+
+/* ================= 鼠标 / 键盘 ================= */
+let panning = false, spaceDown = false, drawing = false, lastCell = null;
+let panStart = { x: 0, y: 0 };
+
+function evPos(e) {
+  const r = cv.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+cv.addEventListener("contextmenu", e => e.preventDefault());
+cv.addEventListener("pointerdown", e => {
+  cv.setPointerCapture(e.pointerId);
+  const p = evPos(e);
+  const effPan = e.button === 1 || (e.button === 0 && (spaceDown || tool.kind === "pan"));
+  if (effPan) {
+    panning = true;
+    cv.style.cursor = "grabbing";
+    panStart = { x: p.x - view.ox, y: p.y - view.oy };
+    return;
+  }
+  const c = toCell(p.x, p.y);
+  if (e.button === 2) {
+    if (tool.kind === "spawn") { if (c) clearSpawnsAt(c.x, c.y); }
+    else if (c) eraseCell(c.x, c.y);
+    return;
+  }
+  drawing = true;
+  lastCell = null;
+  strokeBegin();
+  if (c) strokeCell(c.x, c.y);
+  lastCell = c;
+});
+cv.addEventListener("pointermove", e => {
+  const p = evPos(e);
+  if (panning) {
+    view.ox = p.x - panStart.x;
+    view.oy = p.y - panStart.y;
+    render();
+    return;
+  }
+  const c = toCell(p.x, p.y);
+  hover = c;
+  if (drawing && lastCell && c) {
+    const steps = Math.max(Math.abs(c.x - lastCell.x), Math.abs(c.y - lastCell.y));
+    for (let i = 1; i <= steps; i++) {
+      const xx = Math.round(lastCell.x + (c.x - lastCell.x) * i / steps);
+      const yy = Math.round(lastCell.y + (c.y - lastCell.y) * i / steps);
+      strokeCell(xx, yy);
+    }
+    lastCell = c;
+  }
+  render();
+});
+function endPointer() {
+  if (drawing) {
+    strokeEnd();
+    drawing = false;
+  }
+  if (panning) {
+    panning = false;
+    hover = null;
+    render();
+  }
+  cv.style.cursor = tool.kind === "pan" || spaceDown ? "grab" : "crosshair";
+}
+cv.addEventListener("pointerup", endPointer);
+cv.addEventListener("pointercancel", endPointer);
+cv.addEventListener("pointerleave", () => { hover = null; render(); });
+cv.addEventListener("wheel", e => {
+  e.preventDefault();
+  const p = evPos(e);
+  const factor = Math.exp(-e.deltaY * 0.0012);
+  const nz = Math.max(.06, Math.min(6, view.zoom * factor));
+  const k = nz / view.zoom;
+  view.ox = p.x - (p.x - view.ox) * k;
+  view.oy = p.y - (p.y - view.oy) * k;
+  view.zoom = nz;
+  cellPx = BASE_CELL * nz;
+  render();
+}, { passive: false });
+window.addEventListener("keydown", e => {
+  if (e.key === "Escape") {
+    hideCtx();
+    if ($id("modalBox").classList.contains("show")) modalClose();
+    if ($id("libBox").classList.contains("show")) $id("libBox").classList.remove("show");
+    return;
+  }
+  if (e.target.closest && e.target.closest("input, textarea, [contenteditable]")) return;
+  const k = e.key.toLowerCase();
+  if (k === " " && !e.repeat) { spaceDown = true; if (cv.style.cursor !== "grabbing") cv.style.cursor = "grab"; e.preventDefault(); }
+  if ((e.ctrlKey || e.metaKey) && k === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
+  if ((e.ctrlKey || e.metaKey) && (k === "y" || (k === "z" && e.shiftKey))) { e.preventDefault(); redo(); }
+  if ((e.ctrlKey || e.metaKey) && k === "s") { e.preventDefault(); doExportJson(); }
+});
+window.addEventListener("keyup", e => {
+  if (e.key.toLowerCase() === " ") {
+    spaceDown = false;
+    if (!panning) cv.style.cursor = tool.kind === "pan" ? "grab" : "crosshair";
+  }
+});
+
+/* ================= 事件绑定 ================= */
+$id("mapName").oninput = () => { state.name = $id("mapName").value.trim() || "未命名地图"; markDirty(); };
+$id("tbTerrain").onclick = () => selectTool({ kind: "terrain", typeId: 0 });
+$id("tbEraser").onclick = () => selectTool({ kind: "eraser" });
+$id("tbPan").onclick = () => selectTool({ kind: "pan" });
+TEAMS.forEach(tm => {
+  const b = $id("sp" + tm.id[0].toUpperCase() + tm.id.slice(1));
+  if (b) b.onclick = () => setActiveTeam(tm.id);
+});
+$id("btnAddUnit").onclick = () => addUnit(activeTeam);
+$id("modalBox").onclick = (e) => { if (e.target === $id("modalBox")) modalClose(); };
+$id("btnFit").onclick = () => { fitView(); render(); };
+$id("btnUndo").onclick = undo;
+$id("btnRedo").onclick = redo;
+$id("btnClear").onclick = clearMap;
+$id("btnExportJson").onclick = doExportJson;
+$id("btnSaveToLib").onclick = () => { doSaveToLib(); };
+$id("btnQuitApp").onclick = quitApp;
+$id("btnHomeTop").onclick = showHome;
+$id("btnHomeNew").onclick = startNewMap;
+$id("btnHomeBrowse").onclick = () => { openLibrary(); };
+$id("btnLibRefresh").onclick = openLibrary;
+Array.from($id("ctxMenu").querySelectorAll(".ctx-item")).forEach(it => {
+  it.onclick = () => { const act = it.getAttribute("data-act"); runCtx(act); hideCtx(); };
+});
+document.addEventListener("click", (e) => { if (!e.target.closest("#ctxMenu")) hideCtx(); });
+document.addEventListener("contextmenu", (e) => {
+  if (!e.target.closest("#ctxMenu") && !e.target.closest(".libcard")) hideCtx();
+});
+window.addEventListener("blur", hideCtx);
+$id("btnLibClose").onclick = () => $id("libBox").classList.remove("show");
+$id("libBox").onclick = (e) => { if (e.target === $id("libBox")) $id("libBox").classList.remove("show"); };
+function libClose() { $id("libBox").classList.remove("show"); }
+/* 浏览列表右键菜单 */
+let ctxItem = null;
+function hideCtx() { $id("ctxMenu").classList.remove("show"); ctxItem = null; }
+function showCtxAt(x, y) {
+  const cm = $id("ctxMenu");
+  cm.classList.add("show");
+  const r = cm.getBoundingClientRect();
+  let nx = x, ny = y;
+  if (nx + r.width > window.innerWidth - 6) nx = window.innerWidth - r.width - 6;
+  if (ny + r.height > window.innerHeight - 6) ny = window.innerHeight - r.height - 6;
+  cm.style.left = Math.max(4, nx) + "px";
+  cm.style.top = Math.max(4, ny) + "px";
+}
+function runCtx(act) {
+  const it = ctxItem;
+  if (!it) return;
+  const safe = (it.name || "map").replace(/[\\/:*?"<>|]/g, "_");
+  if (act === "edit") {
+    if (!it.data) { toast("「" + it.name + "」格式无法读取"); return; }
+    importJson(it.json);
+    libClose();
+    hideHome();
+    toast("已打开「" + it.name + "」，修改后点“保存到地图库”");
+  } else if (act === "json") {
+    downloadText(it.json, safe + ".json", "application/json");
+    toast("已导出 JSON");
+  } else if (act === "png") {
+    const url = it.data ? dataMapToPngUrl(it.data) : null;
+    if (!url) { toast("无法生成 PNG"); return; }
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = safe + ".png";
+    a.click();
+    toast("已导出 PNG");
+  } else if (act === "del") {
+    deleteMapByName(it.name);
+  }
+}
+/* 起始页：新建 / 浏览 */
+function showHome() { $id("homeBox").classList.add("show"); }
+function hideHome() { $id("homeBox").classList.remove("show"); }
+function resetToNew() {
+  state = {
+    name: "剧情地图 1",
+    types: DEFAULT_TYPES.map(t => ({ ...t })),
+    cells: new Map(),
+    spawns: [],
+    units: {}
+  };
+  state.cells.set(ckey(0, 0), 0);
+  marks = {};
+  TEAMS.forEach(t => { state.units[t.id] = ["单位1"]; });
+  history = []; redoHist = [];
+  tool = { kind: "terrain", typeId: 0 };
+  activeTeam = "red";
+  $id("mapName").value = state.name;
+  renderPanel();
+  afterEdit();
+  toast("已新建空白地图，从中心格开始画吧");
+}
+function startNewMap() {
+  const hasContent = state.cells.size > 1 || state.spawns.length > 0;
+  const go = () => { resetToNew(); hideHome(); };
+  if (hasContent) {
+    openConfirm("当前画布上还有内容（若有未保存的草稿也会被覆盖）。\n确定新建一张空白地图吗？", go, "新建");
+  } else { go(); }
+}
+/* 地图库浏览：列出 maps\ 所有地图，PNG 缩略图 + 点击打开 */
+async function openLibrary() {
+  try {
+    const res = await fetch("/api/maps");
+    if (!res.ok) throw 0;
+    const j = await res.json();
+    if (!j || !j.ok) throw 0;
+    $id("libDir").textContent = "文件夹：" + j.dir;
+    renderLibGrid(j.maps);
+    $id("libBox").classList.add("show");
+  } catch (e) {
+    openConfirm("当前是网页版，没有访问地图库的通道。\n\n请用 EXE 版「战棋地图设计器.exe」浏览地图库（PNG 缩略图列表）；\n网页版可以用下方“导入 JSON”打开单张地图。", null, "知道了");
+  }
+}
+function renderLibGrid(maps) {
+  const grid = $id("libGrid");
+  grid.innerHTML = "";
+  if (!maps.length) {
+    const tip = document.createElement("div");
+    tip.className = "mini";
+    tip.style.gridColumn = "1 / -1";
+    tip.textContent = "地图库还是空的——画好地图后点「保存到地图库」，它就会出现在这里。";
+    grid.appendChild(tip);
+    return;
+  }
+  for (const m of maps) {
+    let data = null;
+    try { data = JSON.parse(m.json); } catch (e) { /* 坏文件 */ }
+    const card = document.createElement("div");
+    card.className = "libcard";
+    card.title = "点击打开「" + m.name + "」继续编辑";
+    const thumb = document.createElement("div");
+    thumb.className = "thumb";
+    if (data && Array.isArray(data.cells) && data.cells.length) {
+      /* 缩略图：读取 json 实时绘制，无需额外 PNG 文件 */
+      thumb.appendChild(makeMapThumb(data));
+    } else {
+      thumb.innerHTML = '<span class="mini">无法预览</span>';
+    }
+    const nm = document.createElement("div");
+    nm.className = "nm2";
+    nm.textContent = m.name;
+    const meta = document.createElement("div");
+    meta.className = "mini";
+    meta.textContent = (data && Array.isArray(data.cells))
+      ? data.cells.length + " 格 · " + (Array.isArray(data.spawns) ? data.spawns.length : 0) + " 出生点"
+      : "格式无法识别";
+    const del = document.createElement("span");
+    del.className = "libdel";
+    del.textContent = "×";
+    del.title = "删除这张地图";
+    card.appendChild(del);
+    del.onclick = (ev) => { ev.stopPropagation(); deleteMapByName(m.name); };
+    card.appendChild(thumb);
+    card.appendChild(nm);
+    card.appendChild(meta);
+    card.onclick = () => {
+      if (!data) { toast("「" + m.name + "」格式无法读取"); return; }
+      importJson(m.json);
+      libClose();
+      hideHome();
+      toast("已打开「" + m.name + "」，修改后点“保存到地图库”");
+    };
+    card.oncontextmenu = (ev) => {
+      ev.preventDefault();
+      ctxItem = { name: m.name, json: m.json, data: data };
+      showCtxAt(ev.clientX, ev.clientY);
+    };
+    grid.appendChild(card);
+  }
+}
+function deleteMapByName(name) {
+  openConfirm("确定删除地图「" + name + "」？\n对应文件会从地图库移除，无法撤销。", () => {
+    fetch("/api/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name })
+    }).then(r => r.json()).then(j => {
+      toast(j.ok ? "已删除「" + name + "」" : ("删除失败：" + (j.error || "")));
+      openLibrary();
+    }).catch(() => toast("删除失败：接口不可用"));
+  }, "删除");
+}
+/* 由地图数据生成完整 PNG dataURL（供浏览列表右键导出） */
+function dataMapToPngUrl(d) {
+  const cells = d.cells || [];
+  if (!cells.length) return null;
+  const colMap = {};
+  for (const t of (d.types || [])) colMap[t.id] = t.color;
+  let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+  for (const c of cells) {
+    if (c.x < x0) x0 = c.x; if (c.x > x1) x1 = c.x;
+    if (c.y < y0) y0 = c.y; if (c.y > y1) y1 = c.y;
+  }
+  const cell = 20;
+  const cv = document.createElement("canvas");
+  cv.width = (x1 - x0 + 3) * cell;
+  cv.height = (y1 - y0 + 3) * cell;
+  const g = cv.getContext("2d");
+  g.fillStyle = "#ffffff";
+  g.fillRect(0, 0, cv.width, cv.height);
+  for (const c of cells) {
+    g.fillStyle = colMap[c.type] || "#cccccc";
+    g.fillRect((c.x - x0 + 1) * cell, (c.y - y0 + 1) * cell, cell, cell);
+  }
+  const tcol = { red: "#d64545", blue: "#2f6fb7", green: "#2e8b33", yellow: "#d9a012" };
+  for (const s of (d.spawns || [])) {
+    g.fillStyle = tcol[s.team] || "#333";
+    g.beginPath();
+    g.arc((s.x - x0 + 1.5) * cell, (s.y - y0 + 1.5) * cell, cell * 0.3, 0, 7);
+    g.fill();
+  }
+  return cv.toDataURL("image/png");
+}
+function makeMapThumb(d) {
+  const cells = d.cells;
+  const colMap = {};
+  for (const t of (d.types || [])) colMap[t.id] = t.color;
+  let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+  for (const c of cells) {
+    if (c.x < x0) x0 = c.x; if (c.x > x1) x1 = c.x;
+    if (c.y < y0) y0 = c.y; if (c.y > y1) y1 = c.y;
+  }
+  const W = x1 - x0 + 1, H = y1 - y0 + 1;
+  const cell = Math.max(2, Math.min(8, Math.floor(Math.min(148 / W, 102 / H))));
+  const cv = document.createElement("canvas");
+  cv.width = W * cell; cv.height = H * cell;
+  const g = cv.getContext("2d");
+  g.clearRect(0, 0, cv.width, cv.height);
+  for (const c of cells) {
+    g.fillStyle = colMap[c.type] || "#cccccc";
+    g.fillRect((c.x - x0) * cell, (c.y - y0) * cell, cell, cell);
+  }
+  const tcol = { red: "#d64545", blue: "#2f6fb7", green: "#2e8b33", yellow: "#d9a012" };
+  for (const s of (d.spawns || [])) {
+    g.fillStyle = tcol[s.team] || "#333";
+    g.beginPath();
+    g.arc((s.x - x0 + 0.5) * cell, (s.y - y0 + 0.5) * cell, Math.max(1.6, cell * 0.32), 0, 7);
+    g.fill();
+  }
+  return cv;
+}
+function doExportJson() {
+  const name = (state.name || "map").replace(/[\\/:*?"<>|]/g, "_");
+  const j = JSON.stringify(exportJson(), null, 2);
+  if (state.cells.size <= 1 && state.spawns.length === 0) {
+    openConfirm("注意：当前画布只有 " + state.cells.size + " 个格子且没有出生点，导出的会是空地图。\n如果你刚画过内容，说明这个页面没有读到草稿——先别导出，确认画布上有图再导。\n仍要导出这份空地图吗？",
+      () => { downloadText(j, name + ".json", "application/json"); toast("已导出 JSON"); }, "仍导出");
+    return;
+  }
+  downloadText(j, name + ".json", "application/json");
+  toast("已导出 JSON");
+}
+/* ===== 存入工程地图库（maps/）：File System Access API + IndexedDB 记忆目录 ===== */
+const FS_DB = "zq-map-editor-fs", FS_STORE = "dirs", FS_KEY = "mapsDir";
+let fsDirHandle = null;
+function fsDbOpen() {
+  return new Promise((res, rej) => {
+    const rq = indexedDB.open(FS_DB, 1);
+    rq.onupgradeneeded = () => { if (!rq.result.objectStoreNames.contains(FS_STORE)) rq.result.createObjectStore(FS_STORE); };
+    rq.onsuccess = () => res(rq.result);
+    rq.onerror = () => rej(rq.error);
+  });
+}
+async function fsDirGet() {
+  try {
+    const db = await fsDbOpen();
+    return await new Promise((res) => {
+      const rq = db.transaction(FS_STORE, "readonly").objectStore(FS_STORE).get(FS_KEY);
+      rq.onsuccess = () => res(rq.result || null);
+      rq.onerror = () => res(null);
+    });
+  } catch (e) { return null; }
+}
+async function fsDirSet(h) {
+  try {
+    const db = await fsDbOpen();
+    await new Promise((res, rej) => {
+      const tx = db.transaction(FS_STORE, "readwrite");
+      tx.objectStore(FS_STORE).put(h, FS_KEY);
+      tx.oncomplete = res;
+      tx.onerror = () => rej(tx.error);
+    });
+  } catch (e) { /* 忽略 */ }
+}
+function saveFallback(name, json) {
+  downloadText(json, name + ".json", "application/json");
+  openConfirm(
+    "这个页面环境不能直接写入工程文件夹，已把「" + name + ".json」下载到浏览器下载目录。\n\n请手动把它移动到工程地图库：\ngodot-chess-tactics\\maps\\\n（完整路径：C:\\Users\\Caobo\\WorkBuddy\\2026-08-27-18-06-41\\godot-chess-tactics\\maps）\n\n提示：在 WorkBuddy 预览页（http://127.0.0.1…）打开编辑器时，此按钮可直接写入并记住目录。",
+    null, "知道了");
+}
+async function doSaveToLib() {
+  const name = (state.name || "map").replace(/[\\/:*?"<>|]/g, "_");
+  const json = JSON.stringify(exportJson(), null, 2);
+  /* EXE/本地程序模式：同源 /api/save 直接写 xxx.json */
+  try {
+    const res = await fetch("/api/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, json })
+    });
+    if (res.ok) {
+      const j = await res.json();
+      if (j && j.ok) { toast("已存入地图库：" + name + ".json"); return; }
+    }
+  } catch (e) { /* 非本地服务环境 → 走下面的网页版逻辑 */ }
+  if (!window.showDirectoryPicker) { saveFallback(name, json); return; }
+  try {
+    if (!fsDirHandle) fsDirHandle = await fsDirGet();
+    if (!fsDirHandle) {
+      fsDirHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+      await fsDirSet(fsDirHandle);
+    }
+    let perm = await fsDirHandle.queryPermission({ mode: "readwrite" });
+    if (perm !== "granted") perm = await fsDirHandle.requestPermission({ mode: "readwrite" });
+    if (perm !== "granted") { toast("未获得文件夹写权限"); return; }
+    const fh = await fsDirHandle.getFileHandle(name + ".json", { create: true });
+    const w = await fh.createWritable();
+    await w.write(json);
+    await w.close();
+    toast("已存入地图库：" + name + ".json");
+  } catch (e) {
+    saveFallback(name, json);
+  }
+}
+function quitApp() {
+  try { fetch("/api/shutdown", { method: "POST" }).catch(() => {}); }
+  catch (e) { /* 网页环境无此接口 */ }
+}
+$id("btnCopyJson").onclick = () => {
+  const j = JSON.stringify(exportJson(), null, 2);
+  $id("jsonText").value = j;
+  $id("jsonBox").classList.add("show");
+  copyText(j);
+};
+$id("btnCopy2").onclick = () => copyText($id("jsonText").value);
+$id("btnCloseJson").onclick = () => $id("jsonBox").classList.remove("show");
+$id("jsonBox").onclick = (e) => { if (e.target === $id("jsonBox")) $id("jsonBox").classList.remove("show"); };
+$id("btnImportJson").onclick = () => $id("fileJson").click();
+$id("fileJson").onchange = (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => { importJson(String(rd.result)); e.target.value = ""; };
+  rd.readAsText(f);
+};
+$id("btnExportPng").onclick = doExportPng;
+function renderMapPngDataUrl() {
+  if (!state.cells.size) return null;
+  let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
+  for (const k of state.cells.keys()) {
+    const sep = k.indexOf(",");
+    const x = parseInt(k.slice(0, sep), 10), y = parseInt(k.slice(sep + 1), 10);
+    if (x < minX) minX = x; if (x > maxX) maxX = x;
+    if (y < minY) minY = y; if (y > maxY) maxY = y;
+  }
+  const cell = 22;
+  const w = (maxX - minX + 3) * cell, h = (maxY - minY + 3) * cell;
+  const off = document.createElement("canvas");
+  off.width = w * dpr; off.height = h * dpr;
+  const c2 = off.getContext("2d");
+  c2.scale(dpr, dpr);
+  c2.fillStyle = "#ffffff";
+  c2.fillRect(0, 0, w, h);
+  for (const [k, tid] of state.cells) {
+    const sep = k.indexOf(",");
+    const x = parseInt(k.slice(0, sep), 10), y = parseInt(k.slice(sep + 1), 10);
+    c2.fillStyle = typeOf(tid).color;
+    c2.fillRect((x - minX + 1) * cell, (y - minY + 1) * cell, cell, cell);
+  }
+  for (const s of state.spawns) {
+    const tm = teamById(s.team);
+    const px = (s.x - minX + 1) * cell, py = (s.y - minY + 1) * cell;
+    c2.globalAlpha = .18;
+    c2.fillStyle = tm.color;
+    c2.fillRect(px, py, cell, cell);
+    c2.globalAlpha = 1;
+    c2.strokeStyle = tm.color;
+    c2.lineWidth = 2;
+    c2.strokeRect(px + 1, py + 1, cell - 2, cell - 2);
+    c2.fillStyle = tm.color;
+    const mk = markOf(s.team, s.unit);
+    c2.font = "bold " + Math.max(9, Math.round(cell * (mk.length >= 2 ? .36 : .5))) + "px sans-serif";
+    c2.textAlign = "center";
+    c2.textBaseline = "middle";
+    c2.fillText(mk, px + cell / 2, py + cell / 2 + 1);
+    c2.textAlign = "start";
+    c2.textBaseline = "alphabetic";
+    drawSpawnBadge(c2, px, py, cell, s.unit);
+  }
+  return off.toDataURL("image/png");
+}
+function doExportPng() {
+  const url = renderMapPngDataUrl();
+  if (!url) { toast("地图是空的"); return; }
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = (state.name || "map").replace(/[\\/:*?"<>|]/g, "_") + ".png";
+  a.click();
+  toast("已导出 PNG 预览图");
+}
+
+/* ================= localStorage ================= */
+let saveTimer = 0;
+function saveSoon() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveNow, 350);
+}
+function saveNow() {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(exportJson())); }
+  catch (e) { /* 忽略 */ }
+}
+function restore() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return false;
+    importJson(raw);
+    saveNow();
+    return true;
+  } catch (e) { return false; }
+}
+
+/* ================= 启动 ================= */
+function boot() {
+  $id("mapName").value = state.name;
+  const restored = restore();
+  renderPanel();
+  new ResizeObserver(resizeCanvas).observe($id("canvasWrap"));
+  resizeCanvas();   /* 先取画布实际尺寸 */
+  fitView();        /* 再按实际尺寸适配视图 */
+  render();
+  if (restored) toast("已恢复上次未保存的编辑，可从起始页选择继续或新建");
+  showHome();   /* 启动先进起始页：新建地图 / 浏览地图 */
+}
+boot();
+</script>
+</body>
+</html>

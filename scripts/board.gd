@@ -6,11 +6,14 @@ extends Node2D
 ## 右侧信息栏（宽度 = 视口宽 * 300/1280）覆盖棋子状态。每帧重排保证全屏生效。
 
 const BASE := Vector2(1280, 720)
-const X_MIN := 0
-const X_MAX := 9
-const Y_MIN := 1
-const Y_MAX := 8
-const CELL := 72
+const CELL := 72.0
+## 布局参数（可被 1V1 改写成 3×3+两侧出生格）：
+var _x_min := 0
+var _x_max := 9
+var _y_min := 1
+var _y_max := 8
+var _cell := CELL
+var _duel := false           # 1V1 专用：3×3 主区 + 左右各 1 出生格
 const BG := Color(0.22, 0.20, 0.18)
 const SIDE_PANEL_W := 300.0        # 与 battle_hud.gd 的 PANEL_RATIO 匹配（基准 1280）
 
@@ -23,12 +26,27 @@ var _hud: Control
 var _back_btn: Button
 
 func _ready() -> void:
-	for x in range(1, 9):
-		for y in range(1, 9):
-			main_cells.append(Vector2i(x, y))
-	for y in [3, 4, 5, 6]:
-		wing_cells.append(Vector2i(0, y))
-		wing_cells.append(Vector2i(9, y))
+	_duel = (Global.battle_mode == "1v1")
+	if _duel:
+		# 1V1 布局：主对局区 3×3（x1..3 / y1..3，y 向上），左右贴边各 1 个出生格（中间行 y=2）
+		_x_min = 0
+		_x_max = 4
+		_y_min = 1
+		_y_max = 3
+		_cell = CELL * 2.2
+		for x in range(1, 4):
+			for y in range(1, 4):
+				main_cells.append(Vector2i(x, y))
+		wing_cells.append(Vector2i(0, 2))
+		wing_cells.append(Vector2i(4, 2))
+		print("[Board] 1V1 布局：3×3 主区 + 左(0,2)/右(4,2) 出生格")
+	else:
+		for x in range(1, 9):
+			for y in range(1, 9):
+				main_cells.append(Vector2i(x, y))
+		for y in [3, 4, 5, 6]:
+			wing_cells.append(Vector2i(0, y))
+			wing_cells.append(Vector2i(9, y))
 	# 右侧信息栏（CanvasLayer 隔离 UI 层，不随 Node2D 移动）
 	var layer := CanvasLayer.new()
 	layer.layer = 10
@@ -88,8 +106,8 @@ func _fit() -> void:
 	if vp.x <= 0 or vp.y <= 0:
 		vp = BASE
 	_scale = min(vp.x / BASE.x, vp.y / BASE.y)
-	var board_w := (X_MAX - X_MIN + 1) * CELL * _scale
-	var board_h := (Y_MAX - Y_MIN + 1) * CELL * _scale
+	var board_w := (_x_max - _x_min + 1) * _cell * _scale
+	var board_h := (_y_max - _y_min + 1) * _cell * _scale
 	var side := vp.x * (SIDE_PANEL_W / BASE.x)   # 右侧信息栏占宽
 	var inner := vp.x - side
 	var ox := (inner - board_w) / 2.0
@@ -106,9 +124,9 @@ func _fit() -> void:
 
 ## 棋盘坐标 -> 该格左上角像素矩形（本地坐标，已含缩放）
 func _cell_rect(cell: Vector2i) -> Rect2:
-	var px := (cell.x - X_MIN) * CELL * _scale
-	var py := (Y_MAX - cell.y) * CELL * _scale   # y 向上，故用 Y_MAX - y
-	var sz := CELL * _scale
+	var px := (cell.x - _x_min) * _cell * _scale
+	var py := (_y_max - cell.y) * _cell * _scale   # y 向上，故用 Y_MAX - y
+	var sz := _cell * _scale
 	return Rect2(px, py, sz, sz)
 
 func _draw() -> void:

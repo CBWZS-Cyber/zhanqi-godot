@@ -3,6 +3,7 @@ extends Control
 ## 流程：选英雄 → 对局：点击己方棋子聚焦 → 点绿色移动格 / 点技能(需目标时再点敌人) → AI 自动应战
 
 const CELL := 118.0
+const CELL_SEP := 6.0
 const _HD := preload("res://scripts/combat/hero_defs.gd")
 const _BAT := preload("res://scripts/combat/battle.gd")
 const COL_BG := Color(0.20, 0.18, 0.16)
@@ -312,8 +313,8 @@ func _apply_board_size() -> void:
 		b.custom_minimum_size = Vector2(cs, cs)
 		b.add_theme_font_size_override("font_size", maxi(14, int(cs * 0.17)))
 	if _wrap != null:
-		var w := cs * 5.0 + 6.0 * 4.0
-		var h := cs * 3.0 + 6.0 * 2.0
+		var w := cs * 5.0 + CELL_SEP * 4.0
+		var h := cs * 3.0 + CELL_SEP * 2.0
 		_wrap.custom_minimum_size = Vector2(w, h)
 		_unit_layer.size = Vector2(w, h)
 	for k in _tokens:
@@ -332,8 +333,8 @@ func _build_board(holder: CenterContainer) -> void:
 	holder.add_child(_wrap)
 	_board = GridContainer.new()
 	_board.columns = 5
-	_board.add_theme_constant_override("h_separation", 6)
-	_board.add_theme_constant_override("v_separation", 6)
+	_board.add_theme_constant_override("h_separation", int(CELL_SEP))
+	_board.add_theme_constant_override("v_separation", int(CELL_SEP))
 	_board.position = Vector2.ZERO
 	_wrap.add_child(_board)
 	_unit_layer = Control.new()
@@ -847,8 +848,8 @@ func _refresh_tokens() -> void:
 	for u in _battle.units:
 		if not u.alive:
 			continue
-		var btn := _cell_button_at(u.cell)
-		if btn == null:
+		var cell_pos := u.cell
+		if not (cell_pos.x in [0, 1, 2, 3, 4]) or cell_pos.y < 1 or cell_pos.y > 3:
 			continue
 		var tok = _tokens.get(u)
 		if tok == null or not is_instance_valid(tok):
@@ -859,7 +860,8 @@ func _refresh_tokens() -> void:
 		tok.setup(u.team, u.name, str(u.hp), u == _focus)
 		tok.custom_minimum_size = Vector2(cs, cs)
 		tok.size = Vector2(cs, cs)
-		tok.position = btn.position + Vector2(3, 3)
+		var grow := cs + CELL_SEP
+		tok.position = Vector2(cell_pos.x * grow + 3.0, (3.0 - cell_pos.y) * grow + 3.0)
 		tok.visible = _phase != "select"
 		seen[u] = true
 	for u in _tokens:

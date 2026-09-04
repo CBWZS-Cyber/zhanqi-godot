@@ -24,6 +24,7 @@ var _battle: Battle = null
 var _pick_lab: Label
 var _red_pick_btns := {}
 var _blue_pick_btns := {}
+var _blue_picked := false   # 玩家是否手动为 AI 选过英雄
 var _red_id := "crystal_dragon"
 var _blue_id := "xie_shen"
 var _hero_ids: Array = []
@@ -487,6 +488,7 @@ func _pick_card(title_txt: String, col: Color, is_red: bool) -> PanelContainer:
 				_red_id = hid
 			else:
 				_blue_id = hid
+				_blue_picked = true
 			_refresh_pick_highlight())
 		grid.add_child(nb)
 	return card
@@ -516,6 +518,12 @@ func _refresh_pick_highlight() -> void:
 		_pick_lab.text = "红方：%s ｜ 蓝方：%s" % [_HD.ALL[_red_id].name, _HD.ALL[_blue_id].name]
 
 func _on_start() -> void:
+	if Global.offline_type != "hotseat" and not _blue_picked:
+		var pool: Array = []
+		for hid in _hero_ids:
+			if hid != _red_id:
+				pool.append(hid)
+		_blue_id = pool[randi() % pool.size()]
 	var ov := get_node_or_null("SelectOverlay")
 	if ov != null:
 		ov.queue_free()

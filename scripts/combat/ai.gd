@@ -5,7 +5,7 @@ extends RefCounted
 ## Battle 提供视图 → AI 决策动作 dict → Battle 权威执行
 
 ## 阶段1：要不要移动？返回 move dict 或 {}（不动）
-static func plan_move(battle, actor: BattleUnit) -> Dictionary:
+static func plan_move(battle: Battle, actor: BattleUnit) -> Dictionary:
 	for i in [1, 2, 3, 4]:
 		if not battle.base_usable(actor, i):
 			continue
@@ -40,7 +40,7 @@ static func plan_move(battle, actor: BattleUnit) -> Dictionary:
 	return {"act": "move", "cell": pick}
 
 ## 阶段2：放什么技能？返回 skill dict 或 {}（不放）
-static func plan_skill(battle, actor: BattleUnit, moved: bool) -> Dictionary:
+static func plan_skill(battle: Battle, actor: BattleUnit, moved: bool) -> Dictionary:
 	var hp_ratio := float(actor.hp) / float(maxi(1, actor.max_hp))
 	if hp_ratio <= 0.45:
 		for i in [4, 3, 2, 1]:
@@ -60,25 +60,25 @@ static func plan_skill(battle, actor: BattleUnit, moved: bool) -> Dictionary:
 			return _skill_action(battle, actor, i)
 	return {}
 
-static func _castable(battle, actor: BattleUnit, slot: int, _moved: bool) -> bool:
+static func _castable(battle: Battle, actor: BattleUnit, slot: int, _moved: bool) -> bool:
 	if not battle.base_usable(actor, slot):
 		return false
 	if not battle.self_skill(actor, slot) and battle.targets_in_range(actor, slot).is_empty():
 		return false
 	return true
 
-static func _skill_action(battle, actor: BattleUnit, slot: int) -> Dictionary:
+static func _skill_action(battle: Battle, actor: BattleUnit, slot: int) -> Dictionary:
 	if battle.self_skill(actor, slot):
 		return {"act": "skill", "slot": slot, "targets": []}
 	return {"act": "skill", "slot": slot, "targets": battle.targets_in_range(actor, slot)}
 
-static func _self_kind(battle, actor: BattleUnit, slot: int) -> String:
+static func _self_kind(battle: Battle, actor: BattleUnit, slot: int) -> String:
 	var sk := actor.get_skill(slot)
 	if sk == null:
 		return ""
 	return str(battle.skill_data(sk.id).get("ai", {}).get("self_kind", ""))
 
-static func _by_energy(battle, actor: BattleUnit) -> Array:
+static func _by_energy(battle: Battle, actor: BattleUnit) -> Array:
 	var arr: Array = []
 	for i in [1, 2, 3, 4]:
 		var sk := actor.get_skill(i)

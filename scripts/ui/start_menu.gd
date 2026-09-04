@@ -14,6 +14,7 @@ var _scale := 1.0
 var _last_size := Vector2.ZERO
 
 func _ready() -> void:
+	get_viewport().size_changed.connect(_fit)
 	# 背景：显式铺满视口，不依赖锚点布局
 	_bg = ColorRect.new()
 	_bg.color = BG_COLOR
@@ -64,8 +65,7 @@ func _ready() -> void:
 	quit_btn.pressed.connect(_on_quit_pressed)
 
 ## 每帧都重排：不依赖 size_changed 信号，保证最大化/全屏必定生效
-func _process(_delta: float) -> void:
-	_fit()
+
 
 ## F11 在 Godot 里默认没绑任何事；这里手动切换真正的全屏/窗口模式
 func _unhandled_input(event: InputEvent) -> void:

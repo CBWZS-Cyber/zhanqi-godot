@@ -71,9 +71,6 @@ func _ready() -> void:
 	get_viewport().size_changed.connect(_fit)
 	call_deferred("_fit")
 
-func _process(_delta: float) -> void:
-	_fit()
-
 ## 每帧：字号/间距/最小尺寸按 _scale 真实重算（不用 Control.scale 放大，避免全屏文字发糊），
 ## 卡片取最新内容尺寸后绕中心居中。
 func _fit() -> void:

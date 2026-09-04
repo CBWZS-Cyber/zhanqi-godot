@@ -82,6 +82,7 @@ func _ready() -> void:
 		if str(k) == "demo_hero":
 			continue   # 演示占位英雄不进选人池
 		_hero_ids.append(str(k))
+	get_viewport().size_changed.connect(_apply_board_size)
 	_apply_board_size()
 	_last_cell = _board_cell_size()
 	_select_screen()
@@ -324,12 +325,6 @@ func _apply_board_size() -> void:
 		if is_instance_valid(tk):
 			tk.custom_minimum_size = Vector2(cs, cs)
 
-func _process(_d: float) -> void:
-	var cs := _board_cell_size()
-	if absf(cs - _last_cell) > 0.5:
-		_last_cell = cs
-		_apply_board_size()
-
 func _build_board(holder: CenterContainer) -> void:
 	_wrap = Control.new()
 	holder.add_child(_wrap)
@@ -534,6 +529,12 @@ func _on_start() -> void:
 	_battle = _BAT.new(_red_id, _blue_id)
 	_battle.human_mode = true
 	_battle.human_team = 0
+	if not _battle.log_appended.is_connected(_on_battle_log):
+		_battle.log_appended.connect(_on_battle_log)
+	if not _battle.state_changed.is_connected(_on_battle_state):
+		_battle.state_changed.connect(_on_battle_state)
+	if not _battle.battle_ended.is_connected(_on_battle_end):
+		_battle.battle_ended.connect(_on_battle_end)
 	if Global.offline_type == "hotseat":
 		_battle.human_teams = [0, 1]
 	_focus = null
@@ -541,6 +542,23 @@ func _on_start() -> void:
 	_title.text = "红方 %s（你）vs 蓝方 %s（AI）" % [_HD.ALL[_red_id].name, _HD.ALL[_blue_id].name]
 	_end_turn_btn.visible = true
 	_step()
+
+func _on_battle_log(line: String) -> void:
+	if line.begins_with("——"):
+		_log.append_text("[color=#d8c9a0]%s[/color]\n" % line)
+	elif line.begins_with("=="):
+		_log.append_text("[color=#ffd95a]%s[/color]\n" % line)
+	else:
+		_log.append_text(line + "\n")
+
+func _on_battle_state() -> void:
+	_refresh_board_view()
+
+func _on_battle_end(winner: String) -> void:
+	_phase = "over"
+	_over.text = "对局结束：%s" % winner
+	_end_turn_btn.visible = false
+	_again_btn.visible = true
 
 func _step() -> void:
 	if _battle == null:
@@ -823,17 +841,25 @@ func _refresh_board_view() -> void:
 		if u != null:
 			border_col = COL_RED if u.team == 0 else COL_BLUE
 			bw = 3.0
-		# 三态样式（独立实例，避免共享主题样式互串）
-		var n := StyleBoxFlat.new()
+		# 三态样式：按按钮缓存实例（只改属性不新建，避免刷新期 GC 压力）
+		var st3 = cb.get_meta("styles") if cb.has_meta("styles") else null
+		if st3 == null:
+			var n0 := StyleBoxFlat.new()
+			var h0 := StyleBoxFlat.new()
+			var p0 := StyleBoxFlat.new()
+			cb.add_theme_stylebox_override("normal", n0)
+			cb.add_theme_stylebox_override("hover", h0)
+			cb.add_theme_stylebox_override("pressed", p0)
+			cb.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+			cb.set_meta("styles", [n0, h0, p0])
+			st3 = [n0, h0, p0]
+		var n: StyleBoxFlat = st3[0]
 		n.bg_color = base
 		n.border_color = border_col
 		n.set_border_width_all(int(bw))
-		var h := n.duplicate(); h.bg_color = base.lerp(Color(1, 1, 1), 0.10)
-		var pr := n.duplicate(); pr.bg_color = base.lerp(Color(0, 0, 0), 0.12)
-		cb.add_theme_stylebox_override("normal", n)
-		cb.add_theme_stylebox_override("hover", h)
-		cb.add_theme_stylebox_override("pressed", pr)
-		cb.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+		st3[1].bg_color = base.lerp(Color(1, 1, 1), 0.10)
+		st3[2].bg_color = base.lerp(Color(0, 0, 0), 0.12)
+		cb.queue_redraw()
 		cb.text = ""
 		if _phase == "select":
 			cb.visible = false

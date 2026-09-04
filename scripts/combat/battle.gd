@@ -1,6 +1,15 @@
 class_name Battle
 extends RefCounted
 ## 战棋 · 战斗管理器（1V1，3×3 主区 + 左右出生格）
+## 信号：log_appended=新增一行战报；state_changed=棋盘/回合状态变化；battle_ended=分出胜负
+
+signal log_appended(line: String)
+signal state_changed
+signal battle_ended(winner: String)
+
+func _add_log(line: String) -> void:
+	log.push_back(line)
+	log_appended.emit(line)
 ## 回合结构：每棋每回合 = 移动权 + 技能权（先移后放、各自可选；位移技不限制在未移动时使用）
 ## 驱动方式：
 ##   - run_step() 自动结算直到“轮到人类/分出胜负”，返回状态
@@ -30,7 +39,7 @@ func _init(red_hero_id: String, blue_hero_id: String) -> void:
 	_hd = load("res://scripts/combat/hero_defs.gd")
 	_se = load("res://scripts/combat/skill_effects.gd")
 	units = [_make(red_hero_id, 0, SPAWN_RED), _make(blue_hero_id, 1, SPAWN_BLUE)]
-	log.push_back("对局开始：红方 %s（速%d）vs 蓝方 %s（速%d）" % [units[0].name, units[0].speed, units[1].name, units[1].speed])
+	_add_log("对局开始：红方 %s（速%d）vs 蓝方 %s（速%d）" % [units[0].name, units[0].speed, units[1].name, units[1].speed])
 
 func _make(hero_id: String, team: int, cell: Vector2i) -> BattleUnit:
 	var u := BattleUnit.new(_hd.ALL[hero_id].duplicate(true))
@@ -63,20 +72,21 @@ func run_step() -> Dictionary:
 		_check_win()   # 每次行动后立刻判胜负（避免“已全灭仍继续”）
 	if winner == "":
 		winner = "僵局（%d 回合超时）" % MAX_ROUNDS
-		log.push_back("== %s ==" % winner)
+		_add_log("== %s ==" % winner)
 	return {"over": winner}
 
 func _start_round() -> void:
 	round += 1
-	log.push_back("—— 第 %d 回合 ——" % round)
+	_add_log("—— 第 %d 回合 ——" % round)
 	for u in units:
 		var s: String = u.on_turn_start()
 		if s != "":
-			log.push_back(s)
+			_add_log(s)
 	_queue = []
 	for u in units:
 		if u.alive:
 			_queue.append(u)
+	state_changed.emit()
 
 func _poll_next() -> BattleUnit:
 	if _queue.is_empty():
@@ -90,14 +100,14 @@ func _end_round() -> void:
 	for u in units:
 		var r: String = u.end_turn()
 		if r != "":
-			log.push_back(r)
+			_add_log(r)
 	_check_win()
 
 func _turn_ai(u: BattleUnit) -> void:
 	if not u.alive:
 		return
 	if u.has_flag("stun"):
-		log.push_back("%s 被眩晕，跳过本回合" % u.name)
+		_add_log("%s 被眩晕，跳过本回合" % u.name)
 		return
 	if u.has_flag("sanity_break"):
 		_crazy(u)
@@ -109,7 +119,7 @@ func _turn_ai(u: BattleUnit) -> void:
 		if cell in move_cells_of(u):
 			u.cell = cell
 			moved = true
-			log.push_back("%s 移动 → %s" % [u.name, cell])
+			_add_log("%s 移动 → %s" % [u.name, cell])
 	var sk: Dictionary = BattleAI.plan_skill(self, u, moved)
 	if sk.get("act", "") == "skill":
 		_exec_skill(u, int(sk.get("slot", 1)), sk.get("targets", []), moved)
@@ -121,7 +131,7 @@ func _crazy(u: BattleUnit) -> void:
 			all.append(x)
 	var slot := 1 + (randi() % 4)
 	var res: String = u.use_active(slot, {"targets": all, "mode": "1v1"})
-	log.push_back("【失控】%s 不受控制地释放技能：%s" % [u.name, res])
+	_add_log("【失控】%s 不受控制地释放技能：%s" % [u.name, res])
 
 ## =============== 人类操作接口 ===============
 func waiting() -> bool:
@@ -142,7 +152,8 @@ func human_move(cell: Vector2i) -> String:
 		return "!非法移动格"
 	_cur.cell = cell
 	_h_moved = true
-	log.push_back("%s 移动 → %s" % [_cur.name, cell])
+	_add_log("%s 移动 → %s" % [_cur.name, cell])
+	state_changed.emit()
 	return "%s 移动 → %s" % [_cur.name, cell]
 
 func human_cast(slot: int, enemy: BattleUnit = null, landing := Vector2i(-1, -1)) -> String:
@@ -189,7 +200,7 @@ func human_cast(slot: int, enemy: BattleUnit = null, landing := Vector2i(-1, -1)
 		return "!位移后目标不在射程内（敌人太远，先靠近或换落点）"
 	if dest != old:
 		u.cell = dest
-		log.push_back("%s %s至 %s" % [u.name, "冲刺" if is_charge(u, slot) else "跃迁", dest])
+		_add_log("%s %s至 %s" % [u.name, "冲刺" if is_charge(u, slot) else "跃迁", dest])
 	# 目标
 	var targets: Array = []
 	if not self_skill(u, slot):
@@ -204,7 +215,7 @@ func human_cast(slot: int, enemy: BattleUnit = null, landing := Vector2i(-1, -1)
 					break
 	var res: String = u.use_active(slot, {"targets": targets, "mode": "1v1"})
 	if res != "":
-		log.push_back(res)
+		_add_log(res)
 	_finish_human()
 	return res
 
@@ -394,7 +405,7 @@ func _exec_skill(u: BattleUnit, slot: int, targets: Array, moved: bool) -> void:
 		else:
 			u.cell = _best_land_cell(u, t0, dd)
 		if u.cell != old:
-			log.push_back("%s 位移 → %s" % [u.name, u.cell])
+			_add_log("%s 位移 → %s" % [u.name, u.cell])
 	# 位移后重算本技目标；打不到就回滚位置放弃
 	var final_targets: Array = []
 	if not self_skill(u, slot):
@@ -414,7 +425,7 @@ func _exec_skill(u: BattleUnit, slot: int, targets: Array, moved: bool) -> void:
 		return
 	var res: String = u.use_active(slot, {"targets": final_targets, "mode": "1v1"})
 	if res != "":
-		log.push_back(res)
+		_add_log(res)
 
 func _check_win() -> void:
 	if winner != "":
@@ -434,7 +445,8 @@ func _check_win() -> void:
 	elif not ba:
 		winner = "红方"
 	if winner != "":
-		log.push_back("== 胜者：%s（第 %d 回合）==" % [winner, round])
+		_add_log("== 胜者：%s（第 %d 回合）==" % [winner, round])
+		battle_ended.emit(winner)
 
 func result_text() -> String:
 	return "\n".join(log)

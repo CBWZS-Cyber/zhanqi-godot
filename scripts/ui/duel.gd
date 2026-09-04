@@ -40,8 +40,8 @@ var _skill_buttons: Array = []
 var _skill_desc: Label
 var _action_lab: Label
 var _hero_lab: Label
-var _hp_bar: ProgressBar
-var _en_bar: ProgressBar
+var _hp_bar: HBoxContainer
+var _en_bar: HBoxContainer
 var _sub_lab: Label
 var _foe_lab: Label
 var _over: Label
@@ -91,7 +91,7 @@ func _style_btn(b: Button) -> void:
 	b.add_theme_color_override("font_color", Color(0.92, 0.95, 0.99))
 	b.add_theme_color_override("font_hover_color", Color(1.0, 0.95, 0.8))
 
-func _make_bar(tag: String, col: Color, value: int, max_value: int) -> ProgressBar:
+func _make_bar(tag: String, col: Color, value: int, max_value: int) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	var tag_l := Label.new()
@@ -131,10 +131,14 @@ func _make_bar(tag: String, col: Color, value: int, max_value: int) -> ProgressB
 	row.add_child(bar)
 	return row
 
-func _update_bar(bar: ProgressBar, value: int, max_value: int, num_text: String) -> void:
+func _update_bar(bar: HBoxContainer, value: int, max_value: int, num_text: String) -> void:
 	bar.max_value = max_value if max_value > 0 else 1
 	bar.value = clampi(value, 0, bar.max_value)
 	for c in bar.get_children():
+		if c is ProgressBar:
+			var pb := c as ProgressBar
+			pb.max_value = max_value if max_value > 0 else 1
+			pb.value = clampi(value, 0, pb.max_value)
 		if c is Label:
 			(c as Label).text = num_text
 

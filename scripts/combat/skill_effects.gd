@@ -149,11 +149,11 @@ const DATA := {
 
 	"zhu_xin": {
 		"name": "诛心", "element": "金", "kind": "ultimate", "energy_cost": 10,
-		"range": 3,
+		"range": 2,
+		"dash_dist": 2,
 		"ai": {"dash": true},
 		"desc": "射程3格位移型斩杀：只能对生命≤30%的目标使用，将其斩杀；斩杀成功回复8点能量。",
 	},
-
 	"xing_he": {
 		"name": "星河",
 		"element": "光",
@@ -340,36 +340,36 @@ const DATA := {
 
 	# ===== 辛克莱（新表已定稿：理智上限25 初始0，可为负）=====
 
-	"he_bi": {"name": "何必如此", "element": "火", "kind": "passive",
-		"desc": "无能量机制，专属理智值（上限25，初始0）。每回合末回复30%缺损理智；使用技能使理智变负时下回合失控（随机放技不分敌我），随后回合末理智归0。"},
-
+	# ===== 辛克莱（新表已定稿：理智上限25 初始0，可为负）=====
+	"he_bi": {
+		"name": "何必如此", "element": "火", "kind": "passive",
+		"desc": "无能量机制，专属理智值（上限25，初始0）。每回合末回复30%缺损理智；使用技能使理智变负时下回合失控（随机放技不分敌我），随后回合末理智归0。对主属性为机械的目标（不论敌友）造成的伤害 +10%。",
+	},
 	"po_bu_de_yi": {
 		"name": "迫不得已的审判", "element": "火", "kind": "active", "energy_cost": 0,
-		"range": 2,
-		"ai": {"dash": true},
-		"desc": "向一个方向突进2格（战斗层）：穿过棋子则造成 2 点伤害，目标获得烧伤（持续中再获得则刷新时长）；理智 -7。",
+		"range": 1, "dash_dist": 1,
+		"ai": {"dash": true, "dash_kind": "charge"},
+		"desc": "向一个方向突进1格（冲刺落格）：穿过棋子则造成 2 点伤害，目标获得烧伤（持续中再获得则刷新时长）；理智 -7。",
 	},
-
 	"hei_bai": {
 		"name": "黑白不分的执行", "element": "火", "kind": "active", "energy_cost": 0,
-		"range": 3,
-		"ai": {"dash": true},
+		"range": 2, "dash_dist": 3,
+		"ai": {"dash": true, "dash_kind": "charge"},
 		"desc": "向一个方向快速突进直到碰壁（人或障碍）：对撞到的棋子造成 3 点伤害并施加 2 层重伤；理智 -10。",
 	},
-
 	"zi_wo_destroy": {
 		"name": "自我毁灭的审判", "element": "物理", "kind": "active", "energy_cost": 0,
-		"range": 1,
-		"ai": {"dash": true},
-		"desc": "向周围3格内某地点传送（战斗层），对周围格子敌人造成 2 点伤害、施加 3 层重伤；自身失去 3×命中数 理智。",
+		"range": 1, "dash_dist": 3,
+		"ai": {"dash": true, "land_aoe": true},
+		"desc": "向周围3格内某地点传送（跃迁落格），对周围格子敌人造成 2 点伤害、施加 3 层重伤；自身失去 3×命中数 理智。",
 	},
-
 	"xuan_zhong": {
 		"name": "因为我是被选中的", "element": "物理", "kind": "ultimate", "energy_cost": 0,
-		"range": 3,
-		"ai": {"dash": true},
-		"desc": "向前冲刺3格（战斗层）：对被穿过的棋子造成其已损生命 20% 的真伤；若其身上重伤≥4 层，再施加烧伤；理智 -15。",
+		"range": 2, "dash_dist": 2,
+		"ai": {"dash": true, "dash_kind": "charge"},
+		"desc": "向前冲刺2格（冲刺落格）：对被穿过的棋子造成其已损生命 20% 的真伤；若其身上重伤≥4 层，再施加烧伤；理智 -15。",
 	},
+	# 状态规则（烧伤：速度-10，每回合末1真伤，持续2回合，刷新式。重伤：受击额外 0.5×层真伤，回合末层-1）
 
 	"zhuilie_ymxb": {
 		"name": "以命相搏",
@@ -379,22 +379,16 @@ const DATA := {
 	},
 
 	"snap_shot": {
-		"name": "狙击",
+		"name": "狙击", "element": "机械", "kind": "active", "energy_cost": 0,
 		"range": 3,
-		"element": "机械",
-		"kind": "active",
-		"energy_cost": 0,
-		"cooldown": 0,
 		"desc": "射程3格，对1个目标造成1点伤害，附加「创伤」印记；积累3层时清空印记并触发「流血2级」。",
 	},
-
 	"hunt": {
 		"name": "追猎", "element": "机械", "kind": "active", "energy_cost": 3,
-		"range": 3,
+		"range": 2, "dash_dist": 1,
 		"ai": {"dash": true},
-		"desc": "位移后额外发动一次「狙击」。（位移由战斗层执行）",
+		"desc": "跃迁落格后额外发动一次「狙击」（落点由玩家选择）。",
 	},
-
 	"shield_up": {
 		"name": "架盾", "element": "机械", "kind": "active", "energy_cost": 0,
 		"range": 0,

@@ -344,6 +344,14 @@ func _on_skill(i: int) -> void:
 	var me := _battle.current()
 	if me == null:
 		return
+	if _battle.is_dash(me, i):
+		_cast_slot = i
+		if _battle.is_charge(me, i):
+			_hint.text = "冲刺技能：点击一个敌人作为冲刺方向"
+		else:
+			_hint.text = "位移技能：点击一个黄色高亮格子作为落点（落地后自动选取目标）"
+		_refresh_board_view()
+		return
 	if _battle.self_skill(me, i):
 		var r: String = _battle.human_cast(i)
 		if r.begins_with("!"):
@@ -407,6 +415,32 @@ func _unhandled_input(ev: InputEvent) -> void:
 func _handle_cell(cell: Vector2i) -> void:
 	var me := _battle.current()
 	if _cast_slot >= 1:
+		var slot := _cast_slot
+		if _battle.is_dash(me, slot):
+			if _battle.is_charge(me, slot):
+				# 冲刺：点敌人 → 朝其方向冲刺并结算
+				var tt := _unit_at(cell)
+				if tt != null and tt.team != me.team:
+					var rc: String = _battle.human_cast(slot, tt)
+					if rc.begins_with("!"):
+						_hint.text = rc
+					_step()
+				else:
+					_cast_slot = 0
+					_hint.text = "已取消冲刺"
+			else:
+				# 跃迁：点落点格 → 落地并自动选目标
+				var dd := _battle.dash_dist_of(me, slot)
+				if cell in _battle.landable_cells(me, dd):
+					var rj: String = _battle.human_cast(slot, null, cell)
+					if rj.begins_with("!"):
+						_hint.text = rj
+					else:
+						_step()
+				else:
+					_cast_slot = 0
+					_hint.text = "落点无效（需空格且在位移距离内），已取消"
+			return
 		# 选目标阶段：点击敌人 → 施放
 		var t := _unit_at(cell)
 		if t != null and t.team != me.team and t in _battle.targets_in_range(me, _cast_slot):
@@ -463,9 +497,18 @@ func _refresh_board_view() -> void:
 				if _focus != null and cell in _battle.move_cells_of(_focus):
 					st.bg_color = COL_MOVE
 				if _cast_slot >= 1:
-					var t2 := _unit_at(cell)
-					if t2 != null and t2.team != me.team and t2 in _battle.targets_in_range(me, _cast_slot):
-						st.bg_color = COL_CAST
+					if _battle.is_dash(me, _cast_slot):
+						if _battle.is_charge(me, _cast_slot):
+							var tc := _unit_at(cell)
+							if tc != null and tc.team != me.team:
+								st.bg_color = COL_CAST
+						else:
+							if cell in _battle.landable_cells(me, _battle.dash_dist_of(me, _cast_slot)):
+								st.bg_color = COL_CAST
+					else:
+						var t2 := _unit_at(cell)
+						if t2 != null and t2.team != me.team and t2 in _battle.targets_in_range(me, _cast_slot):
+							st.bg_color = COL_CAST
 		if u != null:
 			var mark := "红" if u.team == 0 else "蓝"
 			var col := COL_RED if u.team == 0 else COL_BLUE

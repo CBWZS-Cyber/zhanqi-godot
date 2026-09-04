@@ -144,7 +144,7 @@ func human_move(cell: Vector2i) -> String:
 	log.push_back("%s 移动 → %s" % [_cur.name, cell])
 	return "%s 移动 → %s" % [_cur.name, cell]
 
-func human_cast(slot: int, enemy: BattleUnit = null) -> String:
+func human_cast(slot: int, enemy: BattleUnit = null, landing := Vector2i(-1, -1)) -> String:
 	if not _wait or _cur == null:
 		return "!当前不在你的回合"
 	var u := _cur
@@ -159,11 +159,48 @@ func human_cast(slot: int, enemy: BattleUnit = null) -> String:
 		return "!技能冷却中"
 	if u.energy < sk.energy_cost:
 		return "!能量不足"
+	var old := u.cell
+	var dest := old
+	var dd := dash_dist_of(u, slot)
+
+	if is_dash(u, slot) and dd > 0:
+		if is_charge(u, slot):
+			if enemy == null:
+				return "!冲刺技能需先选择方向上的敌人"
+			dest = _charge_end_cell(u, enemy, dd)
+		else:
+			dest = landing if (landing in landable_cells(u, dd)) else _best_land_cell(u, enemy, dd)
+	# 位移落点可达性预检：失败则不移动
+	var rng := skill_range(u, slot)
+	var can := true
+	if not self_skill(u, slot):
+		if land_aoe(u, slot):
+			can = true
+		elif enemy != null:
+			can = _cell_dist(dest, enemy.cell) <= rng
+		else:
+			can = false
+			for f in alive_enemies_of(u):
+				if _cell_dist(dest, f.cell) <= rng:
+					can = true
+					break
+	if not can:
+		return "!位移后目标不在射程内（敌人太远，先靠近或换落点）"
+	if dest != old:
+		u.cell = dest
+		log.push_back("%s %s至 %s" % [u.name, "冲刺" if is_charge(u, slot) else "跃迁", dest])
+	# 目标
 	var targets: Array = []
 	if not self_skill(u, slot):
-		if enemy == null or not (enemy in targets_in_range(u, slot)):
-			return "!请选择射程内的敌人作为目标"
-		targets = [enemy]
+		if enemy != null:
+			targets = [enemy]
+		elif land_aoe(u, slot):
+			targets = _enemies_within(u, 1)
+		else:
+			for f in alive_enemies_of(u):
+				if _cell_dist(u.cell, f.cell) <= rng:
+					targets.append(f)
+					break
 	var res: String = u.use_active(slot, {"targets": targets, "mode": "1v1"})
 	if res != "":
 		log.push_back(res)
@@ -173,6 +210,89 @@ func human_cast(slot: int, enemy: BattleUnit = null) -> String:
 func human_done() -> void:
 	if _wait:
 		_finish_human()
+
+## =============== 真位移（落格） ===============
+## 普通位移 = 跃迁：跳到 dash_dist 内任意合法空格（无视路径；落地格必须无阻挡/无单位）
+## 冲刺（辛克莱等）= 朝目标方向逐格冲，停在被挡前一格 / 目标邻格 / 冲满
+func dash_dist_of(u: BattleUnit, slot: int) -> int:
+	var sk := u.get_skill(slot)
+	if sk == null:
+		return 0
+	return int(skill_data(sk.id).get("dash_dist", 0))
+
+func is_charge(u: BattleUnit, slot: int) -> bool:
+	var sk := u.get_skill(slot)
+	if sk == null:
+		return false
+	return str(skill_data(sk.id).get("ai", {}).get("dash_kind", "jump")) == "charge"
+
+func land_aoe(u: BattleUnit, slot: int) -> bool:
+	var sk := u.get_skill(slot)
+	if sk == null:
+		return false
+	return bool(skill_data(sk.id).get("ai", {}).get("land_aoe", false))
+
+func _cell_dist(a: Vector2i, b: Vector2i) -> int:
+	return absi(a.x - b.x) + absi(a.y - b.y)
+
+func _grid_free(cell: Vector2i) -> bool:
+	if cell.x < 0 or cell.x > 4 or cell.y < 1 or cell.y > 3:
+		return false
+	for x in units:
+		if x.cell == cell:
+			return false
+	return true
+
+## 跃迁可达格（距离<=dd 的合法空格，可含原地）
+func landable_cells(u: BattleUnit, dd: int) -> Array:
+	var out: Array = []
+	for y in range(1, 4):
+		for x in range(0, 5):
+			var c := Vector2i(x, y)
+			if c == u.cell:
+				out.append(c)
+				continue
+			if _grid_free(c) and absi(c.x - u.cell.x) + absi(c.y - u.cell.y) <= dd:
+				out.append(c)
+	return out
+
+func _best_land_cell(u: BattleUnit, enemy: BattleUnit, dd: int) -> Vector2i:
+	var cells := landable_cells(u, dd)
+	if enemy == null or cells.is_empty():
+		return u.cell
+	var best := u.cell
+	var bd := 9999
+	for c in cells:
+		var cc: Vector2i = c
+		var d := absi(enemy.cell.x - cc.x) + absi(enemy.cell.y - cc.y)
+		if d < bd:
+			bd = d
+			best = cc
+	return best
+
+## 冲刺：朝敌逐格推进至邻格 / 被挡前一格 / 冲满步数
+func _charge_end_cell(u: BattleUnit, enemy: BattleUnit, dd: int) -> Vector2i:
+	var cell := u.cell
+	for i in range(maxi(1, dd)):
+		if absi(enemy.cell.x - cell.x) + absi(enemy.cell.y - cell.y) <= 1:
+			break
+		var step := Vector2i.ZERO
+		if enemy.cell.x != cell.x:
+			step = Vector2i(1 if enemy.cell.x > cell.x else -1, 0)
+		elif enemy.cell.y != cell.y:
+			step = Vector2i(0, 1 if enemy.cell.y > cell.y else -1)
+		var nxt := cell + step
+		if not _grid_free(nxt):
+			break
+		cell = nxt
+	return cell
+
+func _enemies_within(u: BattleUnit, r: int) -> Array:
+	var out: Array = []
+	for f in alive_enemies_of(u):
+		if dist(u, f) <= r:
+			out.append(f)
+	return out
 
 func _finish_human() -> void:
 	_wait = false
@@ -250,16 +370,34 @@ func _exec_skill(u: BattleUnit, slot: int, targets: Array, moved: bool) -> void:
 	var sk := u.get_skill(slot)
 	if sk == null:
 		return
+	var old := u.cell
+	var dd := dash_dist_of(u, slot)
+	if is_dash(u, slot) and dd > 0 and not targets.is_empty():
+		var t0: BattleUnit = targets[0]
+		if is_charge(u, slot):
+			u.cell = _charge_end_cell(u, t0, dd)
+		else:
+			u.cell = _best_land_cell(u, t0, dd)
+		if u.cell != old:
+			log.push_back("%s 位移 → %s" % [u.name, u.cell])
+	# 位移后重算本技目标；打不到就回滚位置放弃
+	var final_targets: Array = []
 	if not self_skill(u, slot):
-		var legal := targets_in_range(u, slot)
-		var valid: Array = []
-		for t in targets:
-			if t in legal:
-				valid.append(t)
-		if valid.is_empty():
+		if land_aoe(u, slot):
+			final_targets = _enemies_within(u, 1)
+		else:
+			for t in targets:
+				if t in targets_in_range(u, slot):
+					final_targets.append(t)
+			if final_targets.is_empty():
+				final_targets = targets_in_range(u, slot)
+		if final_targets.is_empty():
+			if u.cell != old:
+				u.cell = old
 			return
-		targets = valid
-	var res: String = u.use_active(slot, {"targets": targets, "mode": "1v1"})
+	if final_targets.is_empty() and not self_skill(u, slot):
+		return
+	var res: String = u.use_active(slot, {"targets": final_targets, "mode": "1v1"})
 	if res != "":
 		log.push_back(res)
 

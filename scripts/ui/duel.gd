@@ -9,6 +9,11 @@ const COL_BG := Color(0.20, 0.18, 0.16)
 const COL_DARK := Color(0.55, 0.40, 0.28)
 const COL_LIGHT := Color(0.93, 0.87, 0.74)
 const COL_WING := Color(0.40, 0.56, 0.74)
+const COL_BORDER := Color(0.15, 0.12, 0.10)
+const COL_WING_EDGE := Color(0.16, 0.28, 0.44)
+const COL_TEXT := Color(0.18, 0.13, 0.09)
+const COL_PANEL := Color(0.10, 0.12, 0.19, 0.94)
+const COL_GOLD := Color(0.941, 0.780, 0.369)
 const COL_MOVE := Color(0.45, 0.85, 0.45)
 const COL_CAST := Color(0.95, 0.80, 0.3)
 const COL_RED := Color(0.78, 0.25, 0.18)
@@ -67,6 +72,20 @@ func _ready() -> void:
 	_last_cell = _board_cell_size()
 	_select_screen()
 
+func _style_btn(b: Button) -> void:
+	var n := StyleBoxFlat.new()
+	n.bg_color = Color(0.10, 0.12, 0.19, 0.9)
+	n.border_color = Color(0.45, 0.42, 0.30)
+	n.set_border_width_all(1)
+	n.set_corner_radius_all(8)
+	var h := n.duplicate(); h.bg_color = Color(0.20, 0.23, 0.36)
+	var pr := n.duplicate(); pr.bg_color = Color(0.08, 0.09, 0.15)
+	b.add_theme_stylebox_override("normal", n)
+	b.add_theme_stylebox_override("hover", h)
+	b.add_theme_stylebox_override("pressed", pr)
+	b.add_theme_color_override("font_color", Color(0.92, 0.95, 0.99))
+	b.add_theme_color_override("font_hover_color", Color(1.0, 0.95, 0.8))
+
 func _panel_style(col: Color, radius: int) -> StyleBoxFlat:
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = col
@@ -84,6 +103,7 @@ func _build_main() -> VBoxContainer:
 	var back := Button.new()
 	back.text = "‹ 返回菜单"
 	back.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/MainUI.tscn"))
+	_style_btn(back)
 	top.add_child(back)
 	_title = Label.new()
 	_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -93,6 +113,7 @@ func _build_main() -> VBoxContainer:
 	_end_turn_btn = Button.new()
 	_end_turn_btn.text = "结束回合"
 	_end_turn_btn.pressed.connect(_on_end_turn)
+	_style_btn(_end_turn_btn)
 	top.add_child(_end_turn_btn)
 	v.add_child(top)
 	# 中栏：左棋盘 / 右面板
@@ -112,11 +133,27 @@ func _build_main() -> VBoxContainer:
 	_hint.text = ""
 	_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	left.add_child(_hint)
-	# 右侧面板
+	# 右侧面板（对齐 4V4 battle_hud 风格）
+	var right_card := Panel.new()
+	var rcs := StyleBoxFlat.new()
+	rcs.bg_color = COL_PANEL
+	rcs.set_corner_radius_all(16)
+	right_card.add_theme_stylebox_override("panel", rcs)
+	right_card.custom_minimum_size = Vector2(400, 0)
+	right_card.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	mid.add_child(right_card)
+	var rmargin := MarginContainer.new()
+	rmargin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	rmargin.add_theme_constant_override("margin_left", 10)
+	rmargin.add_theme_constant_override("margin_right", 10)
+	rmargin.add_theme_constant_override("margin_top", 8)
+	rmargin.add_theme_constant_override("margin_bottom", 8)
+	right_card.add_child(rmargin)
 	var right := VBoxContainer.new()
-	right.custom_minimum_size = Vector2(430, 0)
-	mid.add_child(right)
+	right.add_theme_constant_override("separation", 6)
+	rmargin.add_child(right)
 	_unit_info = Label.new()
+	_unit_info.add_theme_color_override("font_color", Color(0.92, 0.95, 0.99))
 	_unit_info.text = ""
 	_unit_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	right.add_child(_unit_info)
@@ -127,9 +164,16 @@ func _build_main() -> VBoxContainer:
 	_skill_desc.text = ""
 	_skill_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	right.add_child(_skill_desc)
+	var log_title := Label.new()
+	log_title.text = "战斗日志"
+	log_title.add_theme_color_override("font_color", COL_GOLD)
+	right.add_child(log_title)
 	var log_panel := Panel.new()
 	log_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	log_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.12, 0.12, 0.14), 8))
+	var lps := StyleBoxFlat.new()
+	lps.bg_color = Color(0.06, 0.08, 0.14, 0.85)
+	lps.set_corner_radius_all(10)
+	log_panel.add_theme_stylebox_override("panel", lps)
 	var inner := MarginContainer.new()
 	inner.set_anchors_preset(Control.PRESET_FULL_RECT)
 	inner.add_theme_constant_override("margin_left", 8)
@@ -154,6 +198,7 @@ func _build_main() -> VBoxContainer:
 	_again_btn.text = "再来一局（重选英雄）"
 	_again_btn.visible = false
 	_again_btn.pressed.connect(_on_again)
+	_style_btn(_again_btn)
 	right.add_child(_again_btn)
 	return v
 
@@ -360,6 +405,7 @@ func _refresh_ui() -> void:
 		else:
 			nb.pressed.connect(func():
 				_on_skill(i))
+		_style_btn(nb)
 		_skill_buttons.append(nb)
 		_skill_row.add_child(nb)
 	_skill_desc.text = ""
@@ -513,47 +559,51 @@ func _refresh_board_view() -> void:
 		var cell: Vector2i = _cell_coords[i]
 		var cb: Button = _cell_buttons[i]
 		var u := _unit_at(cell) if _battle != null else null
-		var st: StyleBoxFlat = cb.get_theme_stylebox("normal")
-		if st == null:
-			st = _panel_style(Color(1, 1, 1), 6)
-			cb.add_theme_stylebox_override("normal", st)
-		if cell.x == 0 or cell.x == 4:
-			st.bg_color = COL_WING
-		else:
-			st.bg_color = COL_LIGHT if (cell.x + cell.y) % 2 == 0 else COL_DARK
-		# 状态色
+		# 底色：国际象棋木色 / 翼格蓝
+		var base := COL_WING if (cell.x == 0 or cell.x == 4) else (COL_LIGHT if (cell.x + cell.y) % 2 == 0 else COL_DARK)
+		var edge := COL_WING_EDGE if (cell.x == 0 or cell.x == 4) else COL_BORDER
+		var border_col := edge
+		var bw := 2.0
+		# 高亮
 		if _phase == "play" and _battle != null and _battle.waiting():
 			var me := _battle.current()
 			if me != null:
 				if _focus != null and cell in _battle.move_cells_of(_focus):
-					st.bg_color = COL_MOVE
+					base = base.lerp(COL_MOVE, 0.45)
 				if _cast_slot >= 1:
 					if _battle.is_dash(me, _cast_slot):
 						if _battle.is_charge(me, _cast_slot):
 							var tc := _unit_at(cell)
 							if tc != null and tc.team != me.team:
-								st.bg_color = COL_CAST
+								base = base.lerp(COL_CAST, 0.5)
 						else:
 							if cell in _battle.landable_cells(me, _battle.dash_dist_of(me, _cast_slot)):
-								st.bg_color = COL_CAST
+								base = base.lerp(COL_CAST, 0.5)
 					else:
 						var t2 := _unit_at(cell)
 						if t2 != null and t2.team != me.team and t2 in _battle.targets_in_range(me, _cast_slot):
-							st.bg_color = COL_CAST
+							base = base.lerp(COL_CAST, 0.5)
+		# 占格：保持木色，用阵营边框标识
 		if u != null:
-			var mark := "红" if u.team == 0 else "蓝"
-			var col := COL_RED if u.team == 0 else COL_BLUE
-			cb.text = "%s · %s\n%d/%d" % [mark, u.name, u.hp, u.max_hp]
-			if (u.team == 0 and cell.x == 0) or (u.team == 1 and cell.x == 4):
-				st.bg_color = col
-			else:
-				st.bg_color = st.bg_color.lerp(col, 0.82)
-			cb.add_theme_color_override("font_color", Color(1, 1, 1))
-			cb.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.7))
-			cb.add_theme_constant_override("shadow_offset_x", 1)
-			cb.add_theme_constant_override("shadow_offset_y", 1)
-		else:
-			cb.text = ""
+			border_col = COL_RED if u.team == 0 else COL_BLUE
+			bw = 3.0
+		# 三态样式（独立实例，避免共享主题样式互串）
+		var n := StyleBoxFlat.new()
+		n.bg_color = base
+		n.border_color = border_col
+		n.set_border_width_all(int(bw))
+		var h := n.duplicate(); h.bg_color = base.lerp(Color(1, 1, 1), 0.10)
+		var pr := n.duplicate(); pr.bg_color = base.lerp(Color(0, 0, 0), 0.12)
+		cb.add_theme_stylebox_override("normal", n)
+		cb.add_theme_stylebox_override("hover", h)
+		cb.add_theme_stylebox_override("pressed", pr)
+		cb.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+		cb.text = ("%s · %s\n%d/%d" % [("红" if u.team == 0 else "蓝"), u.name, u.hp, u.max_hp]) if u != null else ""
+		var txt_col := Color(1, 0.98, 0.92) if u != null else COL_TEXT
+		cb.add_theme_color_override("font_color", txt_col)
+		cb.add_theme_color_override("font_hover_color", txt_col)
+		cb.add_theme_color_override("font_pressed_color", txt_col)
+		cb.add_theme_color_override("font_focus_color", txt_col)
 		if _phase == "select":
 			cb.visible = false
 		else:

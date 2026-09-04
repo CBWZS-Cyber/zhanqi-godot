@@ -41,6 +41,7 @@ var _cell_coords: Array = []
 var _cell_buttons: Array = []
 var _end_turn_btn: Button
 var _again_btn: Button
+var _last_cell := -1.0
 
 func _ready() -> void:
 	var bg := Panel.new()
@@ -62,6 +63,8 @@ func _ready() -> void:
 	_hero_ids = []
 	for k in _HD.ALL:
 		_hero_ids.append(str(k))
+	_apply_board_size()
+	_last_cell = _board_cell_size()
 	_select_screen()
 
 func _panel_style(col: Color, radius: int) -> StyleBoxFlat:
@@ -154,6 +157,30 @@ func _build_main() -> VBoxContainer:
 	right.add_child(_again_btn)
 	return v
 
+func _board_cell_size() -> float:
+	var vp := get_viewport_rect().size
+	if vp.y <= 0 or vp.x <= 0:
+		return CELL
+	var side := vp.x * (300.0 / 1280.0)
+	var avail_h := vp.y - 150.0
+	var avail_w := vp.x - side - 60.0
+	return clampf(minf(avail_h / 3.0, avail_w / 5.0), 100.0, 250.0)
+
+func _apply_board_size() -> void:
+	if _board == null:
+		return
+	var cs := _board_cell_size()
+	for i in range(_cell_buttons.size()):
+		var b: Button = _cell_buttons[i]
+		b.custom_minimum_size = Vector2(cs, cs)
+		b.add_theme_font_size_override("font_size", maxi(14, int(cs * 0.17)))
+
+func _process(_d: float) -> void:
+	var cs := _board_cell_size()
+	if absf(cs - _last_cell) > 0.5:
+		_last_cell = cs
+		_apply_board_size()
+
 func _build_board(holder: CenterContainer) -> void:
 	_board = GridContainer.new()
 	_board.columns = 5
@@ -193,20 +220,23 @@ func _select_screen() -> void:
 	for b in _cell_buttons:
 		b.text = ""
 		b.visible = false
-	# 选人面板（悬浮层）
+	# 选人面板（悬浮层·全屏居中）
 	var ov := Panel.new()
 	ov.set_anchors_preset(Control.PRESET_FULL_RECT)
-	ov.add_theme_stylebox_override("panel", _panel_style(Color(0.13, 0.13, 0.15, 0.96), 12))
+	ov.add_theme_stylebox_override("panel", _panel_style(Color(0.13, 0.13, 0.15, 0.97), 0))
 	add_child(ov)
 	ov.name = "SelectOverlay"
+	var cc := CenterContainer.new()
+	cc.set_anchors_preset(Control.PRESET_FULL_RECT)
+	ov.add_child(cc)
 	var box := VBoxContainer.new()
-	box.set_anchors_preset(Control.PRESET_CENTER)
-	box.custom_minimum_size = Vector2(880, 0)
+	box.custom_minimum_size = Vector2(900, 0)
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
-	ov.add_child(box)
+	box.add_theme_constant_override("separation", 16)
+	cc.add_child(box)
 	var ti := Label.new(); ti.text = "你控制红方 —— 请选择双方英雄"
 	ti.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ti.add_theme_font_size_override("font_size", 24)
+	ti.add_theme_font_size_override("font_size", 28)
 	box.add_child(ti)
 	var sel := HBoxContainer.new()
 	box.add_child(sel)
@@ -223,7 +253,8 @@ func _select_screen() -> void:
 			var def: Dictionary = _HD.ALL[hid]
 			var nb := Button.new()
 			nb.text = "%s〔%s〕" % [def.name, def.element]
-			nb.custom_minimum_size = Vector2(200, 40)
+			nb.custom_minimum_size = Vector2(210, 52)
+			nb.add_theme_font_size_override("font_size", 17)
 			nb.pressed.connect(func():
 				if is_red:
 					_red_id = hid
@@ -241,7 +272,7 @@ func _select_screen() -> void:
 	box.add_child(_pick_lab)
 	var start := Button.new()
 	start.text = "开 始"
-	start.custom_minimum_size = Vector2(220, 50)
+	start.custom_minimum_size = Vector2(300, 60)
 	start.add_theme_font_size_override("font_size", 22)
 	start.pressed.connect(_on_start)
 	box.add_child(start)

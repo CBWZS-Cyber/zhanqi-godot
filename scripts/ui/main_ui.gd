@@ -47,20 +47,21 @@ func _ready() -> void:
 		cb2.add_theme_font_size_override("font_size", 17)
 		crow.add_child(cb2)
 	start_vbox.add_child(crow)
+	# 目前仅开放：离线 → 简单 → 1V1；其余入口点击弹“暂未开放”
 	_build_screen("mode", "选择模式", 44, false,
-		[["联机模式", Callable(self, "_on_online")],
+		[["联机模式", Callable(self, "_on_locked").bind("联机模式")],
 		 ["离线模式", Callable(self, "_on_offline")],
-		 ["剧情模式", Callable(self, "_on_story")]], "start")
+		 ["剧情模式", Callable(self, "_on_locked").bind("剧情模式")]], "start")
 	_build_screen("online", "联机模式 · 选择对局", 44, false,
-		[["1V1", Callable(self, "_on_battle").bind("online", "1v1")],
-		 ["4V4", Callable(self, "_on_battle").bind("online", "4v4")]], "mode")
+		[["1V1", Callable(self, "_on_locked").bind("联机 1V1")],
+		 ["4V4", Callable(self, "_on_locked").bind("联机 4V4")]], "mode")
 	_build_screen("diff", "离线模式 · 选择难度", 44, false,
 		[["简单", Callable(self, "_on_diff").bind("easy")],
-		 ["普通", Callable(self, "_on_diff").bind("normal")],
-		 ["困难", Callable(self, "_on_diff").bind("hard")]], "mode")
+		 ["普通", Callable(self, "_on_locked").bind("普通难度")],
+		 ["困难", Callable(self, "_on_locked").bind("困难难度")]], "mode")
 	_build_screen("offline", "离线模式 · 选择对局", 44, false,
 		[["1V1", Callable(self, "_on_battle").bind("offline", "1v1")],
-		 ["4V4", Callable(self, "_on_battle").bind("offline", "4v4")]], "diff")
+		 ["4V4", Callable(self, "_on_locked").bind("离线 4V4")]], "diff")
 	_build_result()
 
 	_show_panel("start")
@@ -404,3 +405,65 @@ func _codex_heroes() -> String:
 			var am: Dictionary = SE.DATA.get(aid, {})
 			out += "  [color=#c8f0c8]技能%d·%s[/color]：%s\n" % [i + 1, am.get("name", aid), am.get("desc", "")]
 	return out
+
+
+## ================= 未开放提示 =================
+var _locked_layer: Control = null
+
+func _on_locked(name: String) -> void:
+	_close_locked()
+	var layer := Panel.new()
+	layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.06, 0.07, 0.11, 0.9)
+	layer.add_theme_stylebox_override("panel", sb)
+	add_child(layer)
+	_locked_layer = layer
+	var cc := CenterContainer.new()
+	cc.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(cc)
+	var card := Panel.new()
+	var cs := StyleBoxFlat.new()
+	cs.bg_color = Color(0.10, 0.12, 0.19, 0.97)
+	cs.set_corner_radius_all(16)
+	card.add_theme_stylebox_override("panel", cs)
+	card.custom_minimum_size = Vector2(520, 0)
+	cc.add_child(card)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 16)
+	card.add_child(v)
+	var mg := MarginContainer.new()
+	mg.add_theme_constant_override("margin_left", 30)
+	mg.add_theme_constant_override("margin_right", 30)
+	mg.add_theme_constant_override("margin_top", 26)
+	mg.add_theme_constant_override("margin_bottom", 26)
+	v.add_child(mg)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 14)
+	mg.add_child(box)
+	var t := Label.new()
+	t.text = "暂未开放"
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	t.add_theme_font_size_override("font_size", 30)
+	t.add_theme_color_override("font_color", Color(0.941, 0.780, 0.369))
+	box.add_child(t)
+	var d := Label.new()
+	d.text = "「%s」暂未开放，敬请期待。" % name
+	d.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	d.add_theme_font_size_override("font_size", 17)
+	d.add_theme_color_override("font_color", Color(0.82, 0.86, 0.92))
+	box.add_child(d)
+	var back := Button.new()
+	back.text = "回到主菜单"
+	back.custom_minimum_size = Vector2(240, 48)
+	back.pressed.connect(func():
+		_close_locked()
+		_on_to_menu())
+	var bc := CenterContainer.new()
+	bc.add_child(back)
+	box.add_child(bc)
+
+func _close_locked() -> void:
+	if _locked_layer != null and is_instance_valid(_locked_layer):
+		_locked_layer.queue_free()
+	_locked_layer = null

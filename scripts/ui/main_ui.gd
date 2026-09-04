@@ -30,12 +30,21 @@ func _ready() -> void:
 		[["开始游戏", Callable(self, "_on_start")],
 		 ["退出", Callable(self, "_on_quit")]], "")
 	# 图鉴/介绍：横排独立一行（界面下部）
+	var start_card: PanelContainer = _panels["start"]
+	var clear_sb := StyleBoxFlat.new()
+	clear_sb.bg_color = Color(0.145, 0.176, 0.271, 0.0)
+	start_card.add_theme_stylebox_override("panel", clear_sb)
 	var start_vbox: VBoxContainer = _panels["start"].get_meta("vbox")
 	var crow := HBoxContainer.new()
 	crow.alignment = BoxContainer.ALIGNMENT_CENTER
 	crow.add_theme_constant_override("separation", 16)
 	for e in [["英雄图鉴", "hero"], ["武器图鉴", "weapon"], ["地形介绍", "terrain"], ["规则介绍", "rules"]]:
 		var cb2 := _make_button(e[0], Callable(self, "_open_codex").bind(e[1]))
+		cb2.custom_minimum_size = Vector2(190, 48)
+		cb2.set_meta("min_x", 190.0)
+		cb2.set_meta("min_y", 48.0)
+		cb2.set_meta("fz", 17.0)
+		cb2.add_theme_font_size_override("font_size", 17)
 		crow.add_child(cb2)
 	start_vbox.add_child(crow)
 	_build_screen("mode", "选择模式", 44, false,

@@ -25,19 +25,14 @@ func _draw() -> void:
 	draw_circle(c, r, _col)
 	draw_arc(c, r, 0.0, TAU, 48, Color(0.08, 0.06, 0.04), 3.0, true)
 	draw_circle(c + Vector2(-r * 0.3, -r * 0.32), r * 0.22, Color(1, 1, 1, 0.35))
-	# 名字：棋子上方
+	# 名字：棋子正中（长名自动缩小字号）
 	var f := get_theme_default_font()
-	if f != null:
-		var fs := maxi(12, int(size.y * 0.13))
-		var w := f.get_string_size(hero_name, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-		draw_string(f, Vector2(c.x - w / 2.0, c.y - r - 6.0), hero_name,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1, 0.98, 0.9, 0.98))
-		# 名字底影
-	# HP 数字：棋子中心
-	if f != null and hp_text != "":
-		var fs2 := maxi(12, int(size.y * 0.14))
-		var w2 := f.get_string_size(hp_text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs2).x
-		draw_string(f, Vector2(c.x - w2 / 2.0, c.y + fs2 * 0.35), hp_text,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, fs2, Color(1, 1, 1))
+	if f != null and hero_name != "":
+		var fs := int(size.y * 0.15)
+		var max_fs := int(r * 2.0 / maxi(2.0, hero_name.length() * 1.05))
+		fs = clampi(mini(fs, max_fs), 10, 22)
+		var w := f.get_string_size(hero_name, HORIZONTAL_ALIGNMENT_CENTER, -1, fs).x
+		draw_string(f, Vector2(c.x - w / 2.0, c.y + fs * 0.36), hero_name,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1, 1, 1), -1.0)
 	# mouse_filter 忽略，点击穿透到格子按钮
 	mouse_filter = Control.MOUSE_FILTER_IGNORE

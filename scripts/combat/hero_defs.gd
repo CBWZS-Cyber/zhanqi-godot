@@ -146,6 +146,7 @@ const ALL := {
 	"xin_kelai": {
 		"name": "辛克莱", "element": "火",
 		"hp": 6, "energy": 0, "energy_max": -1, "armor": 1, "speed": 136, "sanity_cap": 25,
+		"element_damage_bonus": {"机械": 10},
 		"turn_end_effects": [{"kind": "sanity", "ratio": 0.3}],
 		"skills": {"passive": "he_bi", "actives": ["po_bu_de_yi", "hei_bai", "zi_wo_destroy", "xuan_zhong"]},
 	},

@@ -321,8 +321,6 @@ func _refresh_ui() -> void:
 			why = "冷却%d" % sk.current_cd
 		elif me.has_flag("no_skill") or (i == 4 and me.has_flag("no_ult")) or me.has_flag("no_damage"):
 			why = "禁用"
-		elif _battle.is_dash(me, i) and _battle.human_moved():
-			why = "已移动·禁位移"
 		elif not _battle.self_skill(me, i) and _battle.targets_in_range(me, i).is_empty():
 			why = "射程内无目标"
 		nb.text = "%s(%d)%s" % [sk.display_name, sk.energy_cost, ("⚠" + why) if why != "" else ""]
@@ -430,7 +428,7 @@ func _handle_cell(cell: Vector2i) -> void:
 		if r2.begins_with("!"):
 			_hint.text = r2
 		else:
-			_hint.text = "已移动（位移技本回合禁用）。可点技能或结束回合"
+			_hint.text = "已移动。可点技能或结束回合"
 	elif unit != null and unit.team != me.team:
 		_hint.text = "敌方 %s（HP %d/%d）" % [unit.name, unit.hp, unit.max_hp]
 	else:

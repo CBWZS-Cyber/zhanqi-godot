@@ -1,7 +1,7 @@
 class_name Battle
 extends RefCounted
 ## 战棋 · 战斗管理器（1V1，3×3 主区 + 左右出生格）
-## 回合结构：每棋每回合 = 移动权 + 技能权（先移后放、各自可选；移过禁用位移技）
+## 回合结构：每棋每回合 = 移动权 + 技能权（先移后放、各自可选；位移技不限制在未移动时使用）
 ## 驱动方式：
 ##   - run_step() 自动结算直到“轮到人类/分出胜负”，返回状态
 ##   - 人类回合：human_move(cell) → human_cast(slot, enemy) / human_done()
@@ -159,8 +159,6 @@ func human_cast(slot: int, enemy: BattleUnit = null) -> String:
 		return "!技能冷却中"
 	if u.energy < sk.energy_cost:
 		return "!能量不足"
-	if is_dash(u, slot) and _h_moved:
-		return "!已移动，本回合不能使用位移技能"
 	var targets: Array = []
 	if not self_skill(u, slot):
 		if enemy == null or not (enemy in targets_in_range(u, slot)):
@@ -251,9 +249,6 @@ func move_cells_of(u: BattleUnit) -> Array:
 func _exec_skill(u: BattleUnit, slot: int, targets: Array, moved: bool) -> void:
 	var sk := u.get_skill(slot)
 	if sk == null:
-		return
-	if is_dash(u, slot) and moved:
-		log.push_back("%s 已移动，本回合无法使用位移技【%s】" % [u.name, sk.display_name])
 		return
 	if not self_skill(u, slot):
 		var legal := targets_in_range(u, slot)

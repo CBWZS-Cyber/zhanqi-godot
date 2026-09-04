@@ -85,6 +85,9 @@ func _init(def: Dictionary) -> void:
 	_revive_hp_pct = int(def.get("death_revive", {}).get("hp_pct", 50))
 	_revive_uses = int(def.get("death_revive", {}).get("per_game", 1))
 	sanity_cap = int(def.get("sanity_cap", 45))
+	var edb: Dictionary = def.get("element_damage_bonus", {})
+	for k in edb:
+		_dmg_bonus_ele[str(k)] = int(edb[k])
 	var sk: Dictionary = def.get("skills", {})
 	var passive_id := str(sk.get("passive", ""))
 	if passive_id != "":
@@ -143,6 +146,7 @@ func set_speed_buff(n: int) -> void:
 ## ---------- 伤害加成栈（按技能槽 1..4 / 0=全技能） ----------
 ## 用法：剑舞剑意“每次使用技能1后 技能1伤害+1（上限4）” → add_slot_damage(1, 1, 4)
 var _dmg_slot := {}          # slot(int) -> 加成值
+var _dmg_bonus_ele := {}     # 元素 -> +%（对“该主属性目标”造成伤害加成，敌我适用）
 var dmg_mult := 1.0          # 伤害倍率（狂怒×2 / 天机1.5 等）
 var _evasion_pct_default := 0
 var evasion_pct := 0         # 闪避率%（灵虚数影90%；攻击必中技除外）
@@ -170,6 +174,12 @@ func add_slot_damage(slot: int, amount: int, cap: int = -1) -> int:
 	if added > 0:
 		_dmg_slot[slot] = cur + added
 	return added
+
+func element_bonus_of(elem: String) -> int:
+	return int(_dmg_bonus_ele.get(elem, 0))
+
+func add_element_bonus(elem: String, pct: int) -> void:
+	_dmg_bonus_ele[elem] = int(_dmg_bonus_ele.get(elem, 0)) + pct
 
 func slot_damage(slot: int, base: int) -> int:
 	var all := int(_dmg_slot.get(0, 0))
@@ -329,6 +339,13 @@ func take_damage(amount: int, info := {}) -> Dictionary:
 	var attacker := info.get("attacker", null) as BattleUnit if info.has("attacker") else null
 	var element := str(info.get("element", ""))
 	var rest := amount
+	# 增伤按“攻击者对被击者主属性”加成（辛克莱：对机械属性目标伤害+10%，敌我适用）
+	var el_boost := 0
+	if attacker != null:
+		el_boost = attacker.element_bonus_of(element)
+	if el_boost > 0:
+		amount = maxi(1, ceili(float(amount) * float(100 + el_boost) / 100.0))
+		rest = amount
 	# 0) 免伤百分比（全局/该属性；来自锻体/防守态/血狱等）
 	var mit := int(_mitig.get("all", 0)) + int(_mitig.get(element, 0))
 	if attacker != null:

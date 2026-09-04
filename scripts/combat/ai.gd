@@ -60,10 +60,8 @@ static func plan_skill(battle, actor: BattleUnit, moved: bool) -> Dictionary:
 			return _skill_action(battle, actor, i)
 	return {}
 
-static func _castable(battle, actor: BattleUnit, slot: int, moved: bool) -> bool:
+static func _castable(battle, actor: BattleUnit, slot: int, _moved: bool) -> bool:
 	if not battle.base_usable(actor, slot):
-		return false
-	if battle.is_dash(actor, slot) and moved:
 		return false
 	if not battle.self_skill(actor, slot) and battle.targets_in_range(actor, slot).is_empty():
 		return false

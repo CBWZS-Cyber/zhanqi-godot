@@ -1518,7 +1518,7 @@ static func _ef_shuhai(user: BattleUnit, ctx: Dictionary) -> String:
 
 ## ========== 辛克莱（新表）效果 ==========
 static func _ef_hebi(user: BattleUnit, _ctx: Dictionary) -> String:
-	return "%s 的【何必如此】生效：理智 %d/%d（可为负；失控下回合自动行动）" % [user.name, user.sanity, user.sanity_cap]
+	return "%s 的【何必如此】生效：理智 %d/%d；对机械属性目标伤害 +10%%" % [user.name, user.sanity, user.sanity_cap]
 
 ## 迫不得已的审判：突进2格穿过目标 → 2伤 + 烧伤（刷新）；理智-7
 static func _ef_pbdy(user: BattleUnit, ctx: Dictionary) -> String:

@@ -79,6 +79,8 @@ func _ready() -> void:
 	pad.add_child(_build_main())
 	_hero_ids = []
 	for k in _HD.ALL:
+		if str(k) == "demo_hero":
+			continue   # 演示占位英雄不进选人池
 		_hero_ids.append(str(k))
 	_apply_board_size()
 	_last_cell = _board_cell_size()

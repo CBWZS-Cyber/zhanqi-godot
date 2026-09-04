@@ -378,6 +378,8 @@ func _codex_heroes() -> String:
 	var SE = preload("res://scripts/combat/skill_effects.gd")
 	var out := ""
 	for id in HD.ALL:
+		if id == "demo_hero":
+			continue   # 演示占位英雄不进图鉴
 		var d: Dictionary = HD.ALL[id]
 		var emax: int = int(d.get("energy_max", int(d.get("energy", 0))))
 		var en_txt := "%d/%d" % [int(d.get("energy", 0)), emax] if emax >= 0 else "%d（无上限）" % int(d.get("energy", 0))

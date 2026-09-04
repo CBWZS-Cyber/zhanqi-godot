@@ -235,8 +235,15 @@ func land_aoe(u: BattleUnit, slot: int) -> bool:
 func _cell_dist(a: Vector2i, b: Vector2i) -> int:
 	return absi(a.x - b.x) + absi(a.y - b.y)
 
+func _cell_exists(cell: Vector2i) -> bool:
+	if cell.x >= 1 and cell.x <= 3:
+		return cell.y >= 1 and cell.y <= 3
+	if cell.x == 0 or cell.x == 4:
+		return cell.y == 2   # 两侧各 1 个出生格
+	return false
+
 func _grid_free(cell: Vector2i) -> bool:
-	if cell.x < 0 or cell.x > 4 or cell.y < 1 or cell.y > 3:
+	if not _cell_exists(cell):
 		return false
 	for x in units:
 		if x.cell == cell:

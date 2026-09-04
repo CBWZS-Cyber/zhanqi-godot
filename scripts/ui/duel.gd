@@ -35,10 +35,15 @@ var _human_team := 0
 var _title: Label
 var _hint: Label
 var _log: RichTextLabel
-var _skill_row: HBoxContainer
+var _skill_row: GridContainer
 var _skill_buttons: Array = []
 var _skill_desc: Label
-var _unit_info: Label
+var _action_lab: Label
+var _hero_lab: Label
+var _hp_bar: ProgressBar
+var _en_bar: ProgressBar
+var _sub_lab: Label
+var _foe_lab: Label
 var _over: Label
 var _board: GridContainer
 var _cells: Array = []                 # 与 _board 子按钮对应 (列x 行 y) 11 个按钮索引
@@ -85,6 +90,53 @@ func _style_btn(b: Button) -> void:
 	b.add_theme_stylebox_override("pressed", pr)
 	b.add_theme_color_override("font_color", Color(0.92, 0.95, 0.99))
 	b.add_theme_color_override("font_hover_color", Color(1.0, 0.95, 0.8))
+
+func _make_bar(tag: String, col: Color, value: int, max_value: int) -> ProgressBar:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	var tag_l := Label.new()
+	tag_l.text = tag
+	tag_l.custom_minimum_size = Vector2(42, 0)
+	tag_l.add_theme_font_size_override("font_size", 15)
+	tag_l.add_theme_color_override("font_color", Color(0.84, 0.87, 0.92))
+	row.add_child(tag_l)
+	var bar := ProgressBar.new()
+	bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	bar.show_percentage = false
+	bar.min_value = 0
+	bar.max_value = max_value if max_value > 0 else 1
+	bar.value = clampi(value, 0, bar.max_value)
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bar.custom_minimum_size = Vector2(0, 26)
+	var fill := StyleBoxFlat.new()
+	fill.bg_color = col
+	fill.set_corner_radius_all(5)
+	var bgst := StyleBoxFlat.new()
+	bgst.bg_color = Color(0.04, 0.05, 0.09, 0.9)
+	bgst.set_corner_radius_all(5)
+	bar.add_theme_stylebox_override("fill", fill)
+	bar.add_theme_stylebox_override("background", bgst)
+	var num := Label.new()
+	num.text = "%d / %d" % [value, max_value]
+	num.set_anchors_preset(Control.PRESET_FULL_RECT)
+	num.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	num.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	num.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	num.add_theme_color_override("font_color", Color(1, 1, 1))
+	num.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.85))
+	num.add_theme_constant_override("shadow_offset_x", 2)
+	num.add_theme_constant_override("shadow_offset_y", 2)
+	bar.add_child(num)
+	row.add_child(bar)
+	return bar
+
+func _update_bar(bar: ProgressBar, value: int, max_value: int, num_text: String) -> void:
+	bar.max_value = max_value if max_value > 0 else 1
+	bar.value = clampi(value, 0, bar.max_value)
+	for c in bar.get_children():
+		if c is Label:
+			(c as Label).text = num_text
 
 func _panel_style(col: Color, radius: int) -> StyleBoxFlat:
 	var sb := StyleBoxFlat.new()
@@ -133,37 +185,66 @@ func _build_main() -> VBoxContainer:
 	_hint.text = ""
 	_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	left.add_child(_hint)
-	# 右侧面板（对齐 4V4 battle_hud 风格）
+	# 右侧面板（照 4V4 battle_hud 结构：行动指示/英雄名/血条能量条/技能/日志）
 	var right_card := Panel.new()
 	var rcs := StyleBoxFlat.new()
 	rcs.bg_color = COL_PANEL
 	rcs.set_corner_radius_all(16)
 	right_card.add_theme_stylebox_override("panel", rcs)
-	right_card.custom_minimum_size = Vector2(400, 0)
+	right_card.custom_minimum_size = Vector2(320, 0)
 	right_card.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	mid.add_child(right_card)
 	var rmargin := MarginContainer.new()
 	rmargin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	rmargin.add_theme_constant_override("margin_left", 10)
-	rmargin.add_theme_constant_override("margin_right", 10)
-	rmargin.add_theme_constant_override("margin_top", 8)
-	rmargin.add_theme_constant_override("margin_bottom", 8)
+	rmargin.add_theme_constant_override("margin_left", 12)
+	rmargin.add_theme_constant_override("margin_right", 12)
+	rmargin.add_theme_constant_override("margin_top", 10)
+	rmargin.add_theme_constant_override("margin_bottom", 10)
 	right_card.add_child(rmargin)
 	var right := VBoxContainer.new()
-	right.add_theme_constant_override("separation", 6)
+	right.add_theme_constant_override("separation", 8)
 	rmargin.add_child(right)
-	_unit_info = Label.new()
-	_unit_info.add_theme_color_override("font_color", Color(0.92, 0.95, 0.99))
-	_unit_info.text = ""
-	_unit_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	right.add_child(_unit_info)
-	var lab_skill := Label.new(); lab_skill.text = "技能"; right.add_child(lab_skill)
-	_skill_row = HBoxContainer.new()
+
+	_action_lab = Label.new()
+	_action_lab.add_theme_font_size_override("font_size", 15)
+	_action_lab.add_theme_color_override("font_color", COL_GOLD)
+	right.add_child(_action_lab)
+
+	_hero_lab = Label.new()
+	_hero_lab.add_theme_font_size_override("font_size", 26)
+	_hero_lab.add_theme_color_override("font_color", Color(0.95, 0.97, 1.0))
+	right.add_child(_hero_lab)
+
+	_hp_bar = _make_bar("生命", COL_RED, 1, 1)
+	right.add_child(_hp_bar)
+	_en_bar = _make_bar("能量", COL_BLUE, 1, 1)
+	right.add_child(_en_bar)
+
+	_sub_lab = Label.new()
+	_sub_lab.add_theme_font_size_override("font_size", 13)
+	_sub_lab.add_theme_color_override("font_color", Color(0.75, 0.80, 0.88))
+	right.add_child(_sub_lab)
+
+	_foe_lab = Label.new()
+	_foe_lab.add_theme_font_size_override("font_size", 13)
+	_foe_lab.add_theme_color_override("font_color", Color(0.62, 0.67, 0.75))
+	right.add_child(_foe_lab)
+
+	var lab_skill := Label.new()
+	lab_skill.text = "技能"
+	lab_skill.add_theme_color_override("font_color", COL_GOLD)
+	right.add_child(lab_skill)
+	_skill_row = GridContainer.new()
+	_skill_row.columns = 2
+	_skill_row.add_theme_constant_override("h_separation", 8)
+	_skill_row.add_theme_constant_override("v_separation", 8)
 	right.add_child(_skill_row)
 	_skill_desc = Label.new()
 	_skill_desc.text = ""
 	_skill_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_skill_desc.add_theme_color_override("font_color", Color(0.72, 0.77, 0.85))
 	right.add_child(_skill_desc)
+
 	var log_title := Label.new()
 	log_title.text = "战斗日志"
 	log_title.add_theme_color_override("font_color", COL_GOLD)
@@ -188,10 +269,11 @@ func _build_main() -> VBoxContainer:
 	_log.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	inner.add_child(_log)
 	right.add_child(log_panel)
+
 	_over = Label.new()
 	_over.text = ""
-	_over.add_theme_font_size_override("font_size", 30)
-	_over.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_over.add_theme_font_size_override("font_size", 26)
+	_over.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_over.add_theme_color_override("font_color", Color(1.0, 0.9, 0.6))
 	right.add_child(_over)
 	_again_btn = Button.new()
@@ -201,6 +283,7 @@ func _build_main() -> VBoxContainer:
 	_style_btn(_again_btn)
 	right.add_child(_again_btn)
 	return v
+
 
 func _board_cell_size() -> float:
 	var vp := get_viewport_rect().size
@@ -232,12 +315,17 @@ func _build_board(holder: CenterContainer) -> void:
 	_board.add_theme_constant_override("h_separation", 6)
 	_board.add_theme_constant_override("v_separation", 6)
 	holder.add_child(_board)
-	# 按视觉行 y=3..1，每行 x=0..4
+	# 按视觉行 y=3..1，每行 x=0..4；两侧角格不存在（出生格每边仅 1 个：y=2）
 	_cell_coords.clear()
 	_cell_buttons.clear()
 	for row in range(3):
 		var y := 3 - row
 		for x in range(5):
+			if (x == 0 or x == 4) and y != 2:
+				var ph := Control.new()
+				ph.custom_minimum_size = Vector2(CELL, CELL)
+				_board.add_child(ph)   # 空占位，保持网格对齐
+				continue
 			_cell_coords.append(Vector2i(x, y))
 			var b := Button.new()
 			b.custom_minimum_size = Vector2(CELL, CELL)
@@ -256,7 +344,6 @@ func _cell_button_at(cell: Vector2i) -> Button:
 func _select_screen() -> void:
 	_phase = "select"
 	_title.text = "选择英雄（你=红方 vs AI=蓝方）"
-	_unit_info.text = ""
 	_skill_desc.text = ""
 	_over.text = ""
 	_hint.text = ""
@@ -364,17 +451,26 @@ func _step() -> void:
 func _refresh_ui() -> void:
 	if _battle == null:
 		return
-	_unit_info.text = ""
-	# 双方信息
-	for u in _battle.units:
-		var line := "%s%s %s  HP %d/%d 能%d 盾%d 甲%d 速%d%s" % [
-			"🟥 " if u.team == 0 else "🟦 ", u.name, "（你）" if u.team == 0 else "（AI）",
-			u.hp, u.max_hp, u.energy, u.shield, u.armor, u.effective_speed(),
-			u.to_status_summary()]
-		if u == _focus:
-			line += "  ← 已选中"
-		_unit_info.text += line + "\n"
-	# 技能按钮
+	var shown: BattleUnit = null
+	if _battle.current() != null:
+		shown = _battle.current()
+	else:
+		shown = _battle.units[0]
+	# 行动指示 + 英雄名
+	_action_lab.text = "行动 · %s" % ("红方（你）" if shown.team == 0 else "蓝方（AI）")
+	_hero_lab.text = shown.name
+	# 血条 / 能量条
+	_update_bar(_hp_bar, shown.hp, shown.max_hp, "%d / %d" % [shown.hp, shown.max_hp])
+	if shown.max_energy < 0:
+		_update_bar(_en_bar, shown.energy, maxi(shown.energy, 1), "%d / ∞" % shown.energy)
+	else:
+		_update_bar(_en_bar, shown.energy, shown.max_energy, "%d / %d" % [shown.energy, shown.max_energy])
+	_sub_lab.text = "盾 %d · 甲 %d · 速 %d%s" % [shown.shield, shown.armor, shown.effective_speed(), shown.to_status_summary()]
+	# 对手简况
+	for x in _battle.units:
+		if x != shown:
+			_foe_lab.text = "对手：%s  HP %d/%d  盾%d 甲%d" % [x.name, x.hp, x.max_hp, x.shield, x.armor]
+	# 技能按钮（battle_hud 款式，2 列）
 	for nb in _skill_buttons:
 		if nb != null and is_instance_valid(nb):
 			nb.queue_free()
@@ -382,15 +478,15 @@ func _refresh_ui() -> void:
 	var me := _battle.current() if (_phase == "play" and _battle.waiting() and _battle.current() != null) else null
 	if me == null:
 		_skill_row.visible = false
+		_refresh_log()
 		return
 	_skill_row.visible = true
-	for i in range(1, 6):
+	for i in range(1, 5):
 		var sk := me.get_skill(i)
 		if sk == null:
 			continue
 		var nb := Button.new()
 		var why := ""
-		var en := !me.alive
 		if me.energy < sk.energy_cost:
 			why = "能量不足"
 		elif sk.current_cd > 0:
@@ -400,12 +496,26 @@ func _refresh_ui() -> void:
 		elif not _battle.self_skill(me, i) and _battle.targets_in_range(me, i).is_empty():
 			why = "射程内无目标"
 		nb.text = "%s(%d)%s" % [sk.display_name, sk.energy_cost, ("⚠" + why) if why != "" else ""]
+		nb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		nb.custom_minimum_size = Vector2(0, 42)
+		nb.add_theme_font_size_override("font_size", 15)
+		nb.add_theme_color_override("font_color", Color(0.92, 0.95, 0.99))
+		nb.add_theme_color_override("font_hover_color", Color(1.0, 0.95, 0.8))
+		var bn := StyleBoxFlat.new()
+		bn.bg_color = Color(0.16, 0.19, 0.29)
+		bn.border_color = Color(0.40, 0.36, 0.26)
+		bn.set_border_width_all(1)
+		bn.set_corner_radius_all(7)
+		var bh := bn.duplicate(); bh.bg_color = Color(0.23, 0.27, 0.42)
+		var bp := bn.duplicate(); bp.bg_color = Color(0.12, 0.15, 0.24)
+		nb.add_theme_stylebox_override("normal", bn)
+		nb.add_theme_stylebox_override("hover", bh)
+		nb.add_theme_stylebox_override("pressed", bp)
 		if why != "":
 			nb.disabled = true
 		else:
 			nb.pressed.connect(func():
 				_on_skill(i))
-		_style_btn(nb)
 		_skill_buttons.append(nb)
 		_skill_row.add_child(nb)
 	_skill_desc.text = ""
@@ -414,6 +524,7 @@ func _refresh_ui() -> void:
 		var s := me.get_skill(slot_i)
 		if s != null:
 			_skill_desc.text = s.desc
+	_refresh_log()
 
 func _on_skill(i: int) -> void:
 	if _battle == null or not _battle.waiting():

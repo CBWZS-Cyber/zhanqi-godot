@@ -3,7 +3,8 @@ extends Node
 ## 由主菜单进入棋盘前写入，棋盘/对局 HUD 据此区分布局模式。
 
 var battle_mode := "1v1"    # "1v1" | "4v4"（剧情等其它模式后续扩展）
-var offline_type := "pve"   # "pve"（人机）| "hotseat"（开房间·双人同机）
+var offline_type := "pve"
+var story_line := "knight"   # 剧情线："knight"（骑士线·白灵殿）| "engineer"（工程线·待开放）   # "pve"（人机）| "hotseat"（开房间·双人同机）
 
 func rules_text() -> String:
 	return """[color=#ffd95a]回合结构[/color]

@@ -51,13 +51,16 @@ func _ready() -> void:
 	_build_screen("mode", "选择模式", 44, false,
 		[["联机模式", Callable(self, "_on_locked").bind("联机模式")],
 		 ["离线模式", Callable(self, "_show_panel").bind("offline_type")],
-		 ["剧情模式", Callable(self, "_on_locked").bind("剧情模式")]], "start")
+		 ["剧情模式", Callable(self, "_on_story")]], "start")
 	_build_screen("online", "联机模式 · 选择对局", 44, false,
 		[["1V1", Callable(self, "_on_locked").bind("联机 1V1")],
 		 ["4V4", Callable(self, "_on_locked").bind("联机 4V4")]], "mode")
 	_build_screen("offline_type", "离线模式 · 选择类型", 44, false,
 		[["PVE（人机对战）", Callable(self, "_on_offline_type").bind("pve")],
 		 ["热座模式（双人同机）", Callable(self, "_on_offline_type").bind("hotseat")]], "mode")
+	_build_screen("story", "剧情模式", 44, false,
+		[["骑士线", Callable(self, "_on_story_line").bind("knight")],
+		 ["工程线", Callable(self, "_on_locked").bind("工程线")]], "mode")
 	_build_screen("diff", "离线模式 · 选择难度", 44, false,
 		[["简单", Callable(self, "_on_diff").bind("easy")],
 		 ["普通", Callable(self, "_on_locked").bind("普通难度")],
@@ -151,8 +154,12 @@ func _on_offline() -> void:
 	_show_panel("diff")
 
 func _on_story() -> void:
-	_config = {"mode": "story"}
-	_show_result()
+	_show_panel("story")
+
+func _on_story_line(line: String) -> void:
+	Global.battle_mode = "story"
+	Global.story_line = line
+	get_tree().change_scene_to_file("res://scenes/StoryMap.tscn")
 
 func _on_offline_type(t: String) -> void:
 	_config["offline_type"] = t

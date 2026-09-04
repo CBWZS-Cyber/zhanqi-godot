@@ -22,6 +22,8 @@ const COL_BLUE := Color(0.24, 0.42, 0.75)
 var _phase := "select"   # select / play / over
 var _battle: Battle = null
 var _pick_lab: Label
+var _red_pick_btns := {}
+var _blue_pick_btns := {}
 var _red_id := "crystal_dragon"
 var _blue_id := "xie_shen"
 var _hero_ids: Array = []
@@ -346,76 +348,151 @@ func _cell_button_at(cell: Vector2i) -> Button:
 
 func _select_screen() -> void:
 	_phase = "select"
-	_title.text = "选择英雄（你=红方 vs AI=蓝方）"
+	_title.text = "战棋 · 1V1"
 	_skill_desc.text = ""
 	_over.text = ""
 	_hint.text = ""
 	_end_turn_btn.visible = false
-	# 隐藏棋盘中点击作用；棋盘清空
-	for b in _cell_buttons:
-		b.text = ""
-		b.visible = false
-	# 选人面板（悬浮层·全屏居中）
+	for b2 in _cell_buttons:
+		b2.visible = false
+	# 全屏选人层
 	var ov := Panel.new()
 	ov.set_anchors_preset(Control.PRESET_FULL_RECT)
-	ov.add_theme_stylebox_override("panel", _panel_style(Color(0.13, 0.13, 0.15, 0.97), 0))
+	var osb := StyleBoxFlat.new()
+	osb.bg_color = Color(0.10, 0.12, 0.19, 0.97)
+	ov.add_theme_stylebox_override("panel", osb)
 	add_child(ov)
 	ov.name = "SelectOverlay"
-	var cc := CenterContainer.new()
-	cc.set_anchors_preset(Control.PRESET_FULL_RECT)
-	ov.add_child(cc)
-	var box := VBoxContainer.new()
-	box.custom_minimum_size = Vector2(900, 0)
-	box.alignment = BoxContainer.ALIGNMENT_CENTER
-	box.add_theme_constant_override("separation", 16)
-	cc.add_child(box)
-	var ti := Label.new(); ti.text = "你控制红方 —— 请选择双方英雄"
+	var m := MarginContainer.new()
+	m.set_anchors_preset(Control.PRESET_FULL_RECT)
+	m.add_theme_constant_override("margin_left", 50)
+	m.add_theme_constant_override("margin_right", 50)
+	m.add_theme_constant_override("margin_top", 26)
+	m.add_theme_constant_override("margin_bottom", 26)
+	ov.add_child(m)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 14)
+	m.add_child(v)
+	var ti := Label.new()
+	ti.text = "选择英雄"
 	ti.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ti.add_theme_font_size_override("font_size", 28)
-	box.add_child(ti)
-	var sel := HBoxContainer.new()
-	box.add_child(sel)
-	var _pick_column := func(title_txt: String, is_red: bool) -> VBoxContainer:
-		var col := VBoxContainer.new()
-		col.custom_minimum_size = Vector2(420, 0)
-		var lab := Label.new(); lab.text = title_txt
-		lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		col.add_child(lab)
-		var grid := GridContainer.new()
-		grid.columns = 2
-		col.add_child(grid)
-		for hid in _hero_ids:
-			var def: Dictionary = _HD.ALL[hid]
-			var nb := Button.new()
-			nb.text = "%s〔%s〕" % [def.name, def.element]
-			nb.custom_minimum_size = Vector2(210, 52)
-			nb.add_theme_font_size_override("font_size", 17)
-			nb.pressed.connect(func():
-				if is_red:
-					_red_id = hid
-				else:
-					_blue_id = hid
-				if is_instance_valid(_pick_lab):
-					_pick_lab.text = "已选择红方：%s ｜ 蓝方：%s" % [_HD.ALL[_red_id].name, _HD.ALL[_blue_id].name])
-			grid.add_child(nb)
-		return col
-	sel.add_child(_pick_column.call("红方（你）", true))
-	sel.add_child(_pick_column.call("蓝方（AI）", false))
+	ti.add_theme_font_size_override("font_size", 34)
+	ti.add_theme_color_override("font_color", COL_GOLD)
+	v.add_child(ti)
+	var sub := Label.new()
+	sub.text = "你控制红方 · 与 AI 对战（点击头像选择，再点一次可更换）"
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sub.add_theme_font_size_override("font_size", 14)
+	sub.add_theme_color_override("font_color", Color(0.66, 0.71, 0.79))
+	v.add_child(sub)
+	# 双方选择卡片
+	var cols := HBoxContainer.new()
+	cols.alignment = BoxContainer.ALIGNMENT_CENTER
+	cols.add_theme_constant_override("separation", 40)
+	v.add_child(cols)
+	_red_pick_btns = {}
+	_blue_pick_btns = {}
+	cols.add_child(_pick_card("红方（你）", COL_RED, true))
+	cols.add_child(_pick_card("蓝方（AI）", COL_BLUE, false))
+	# 已选提示 + 开始
 	_pick_lab = Label.new()
 	_pick_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_pick_lab.text = "已选择红方：%s ｜ 蓝方：%s" % [_HD.ALL[_red_id].name, _HD.ALL[_blue_id].name]
-	box.add_child(_pick_lab)
+	_pick_lab.text = "红方：%s ｜ 蓝方：%s" % [_HD.ALL[_red_id].name, _HD.ALL[_blue_id].name]
+	_pick_lab.add_theme_font_size_override("font_size", 16)
+	_pick_lab.add_theme_color_override("font_color", Color(0.85, 0.89, 0.95))
+	v.add_child(_pick_lab)
 	var start := Button.new()
-	start.text = "开 始"
-	start.custom_minimum_size = Vector2(300, 60)
+	start.text = "开 始 对 战"
+	start.custom_minimum_size = Vector2(300, 58)
 	start.add_theme_font_size_override("font_size", 22)
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.941, 0.780, 0.369)
+	sb.set_corner_radius_all(10)
+	var sh := sb.duplicate(); sh.bg_color = Color(1.0, 0.88, 0.55)
+	var sp := sb.duplicate(); sp.bg_color = Color(0.78, 0.62, 0.22)
+	start.add_theme_stylebox_override("normal", sb)
+	start.add_theme_stylebox_override("hover", sh)
+	start.add_theme_stylebox_override("pressed", sp)
+	start.add_theme_color_override("font_color", Color(0.12, 0.09, 0.05))
 	start.pressed.connect(_on_start)
-	box.add_child(start)
-	_end_turn_btn.visible = false
+	var sc := CenterContainer.new()
+	sc.add_child(start)
+	v.add_child(sc)
+
+## 一侧选择卡片（标题 + 2 列英雄按钮）
+func _pick_card(title_txt: String, col: Color, is_red: bool) -> Panel:
+	var card := Panel.new()
+	var cs := StyleBoxFlat.new()
+	cs.bg_color = COL_PANEL
+	cs.set_corner_radius_all(16)
+	cs.border_color = col
+	cs.set_border_width_all(1)
+	card.add_theme_stylebox_override("panel", cs)
+	card.custom_minimum_size = Vector2(430, 0)
+	var mg := MarginContainer.new()
+	mg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	mg.add_theme_constant_override("margin_left", 12)
+	mg.add_theme_constant_override("margin_right", 12)
+	mg.add_theme_constant_override("margin_top", 10)
+	mg.add_theme_constant_override("margin_bottom", 12)
+	card.add_child(mg)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	mg.add_child(v)
+	var lab := Label.new()
+	lab.text = title_txt
+	lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lab.add_theme_font_size_override("font_size", 19)
+	lab.add_theme_color_override("font_color", col)
+	v.add_child(lab)
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 10)
+	grid.add_theme_constant_override("v_separation", 10)
+	v.add_child(grid)
+	for hid in _hero_ids:
+		var def: Dictionary = _HD.ALL[hid]
+		var nb := Button.new()
+		nb.text = "%s\n〔%s〕" % [def.name, def.element]
+		nb.custom_minimum_size = Vector2(196, 54)
+		nb.add_theme_font_size_override("font_size", 15)
+		_apply_pick_style(nb, false, col)
+		if is_red:
+			_red_pick_btns[hid] = nb
+		else:
+			_blue_pick_btns[hid] = nb
+		nb.pressed.connect(func():
+			if is_red:
+				_red_id = hid
+			else:
+				_blue_id = hid
+			_refresh_pick_highlight())
+		grid.add_child(nb)
+	return card
+
+func _apply_pick_style(nb: Button, selected: bool, col: Color) -> void:
+	var n := StyleBoxFlat.new()
+	n.bg_color = Color(0.16, 0.19, 0.29) if not selected else col.lerp(Color(0.16, 0.19, 0.29), 0.35)
+	n.border_color = COL_GOLD if selected else Color(0.40, 0.36, 0.26)
+	n.set_border_width_all(2 if selected else 1)
+	n.set_corner_radius_all(8)
+	var h := n.duplicate(); h.bg_color = n.bg_color.lerp(Color(1, 1, 1), 0.08)
+	nb.add_theme_stylebox_override("normal", n)
+	nb.add_theme_stylebox_override("hover", h)
+	nb.add_theme_stylebox_override("pressed", n)
+	nb.add_theme_color_override("font_color", Color(1.0, 0.95, 0.8) if selected else Color(0.92, 0.95, 0.99))
 
 func _refresh_pick_highlight() -> void:
+	for hid in _red_pick_btns:
+		var nb: Button = _red_pick_btns[hid]
+		if is_instance_valid(nb):
+			_apply_pick_style(nb, hid == _red_id, COL_RED)
+	for hid in _blue_pick_btns:
+		var nb2: Button = _blue_pick_btns[hid]
+		if is_instance_valid(nb2):
+			_apply_pick_style(nb2, hid == _blue_id, COL_BLUE)
 	if is_instance_valid(_pick_lab):
-		_pick_lab.text = "已选择红方：%s ｜ 蓝方：%s" % [_HD.ALL[_red_id].name, _HD.ALL[_blue_id].name]
+		_pick_lab.text = "红方：%s ｜ 蓝方：%s" % [_HD.ALL[_red_id].name, _HD.ALL[_blue_id].name]
 
 func _on_start() -> void:
 	var ov := get_node_or_null("SelectOverlay")

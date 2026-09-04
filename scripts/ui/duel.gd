@@ -331,11 +331,14 @@ func _build_board(holder: CenterContainer) -> void:
 				ph.custom_minimum_size = Vector2(CELL, CELL)
 				_board.add_child(ph)   # 空占位，保持网格对齐
 				continue
-			_cell_coords.append(Vector2i(x, y))
+			var ccell := Vector2i(x, y)
+			_cell_coords.append(ccell)
 			var b := Button.new()
 			b.custom_minimum_size = Vector2(CELL, CELL)
 			b.toggle_mode = false
 			b.add_theme_font_size_override("font_size", 18)
+			b.focus_mode = Control.FOCUS_NONE
+			b.pressed.connect(func(): _on_cell_clicked(ccell))
 			_cell_buttons.append(b)
 			_board.add_child(b)
 	_refresh_board_view()
@@ -684,6 +687,11 @@ func _unhandled_input(ev: InputEvent) -> void:
 		_cast_slot = 0
 		_hint.text = "已取消选择"
 		_refresh_board_view()
+
+func _on_cell_clicked(cell: Vector2i) -> void:
+	if _phase != "play" or _battle == null or not _battle.waiting():
+		return
+	_handle_cell(cell)
 
 func _handle_cell(cell: Vector2i) -> void:
 	var me := _battle.current()

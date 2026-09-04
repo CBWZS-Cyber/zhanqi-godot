@@ -94,7 +94,7 @@ func _init(def: Dictionary) -> void:
 	for i in range(4):
 		var sid := str(act_ids[i]) if i < act_ids.size() else ""
 		actives.append(_make_skill(sid) if sid != "" else null)
-	actives.append(_make_skill("basic_attack"))   # 槽5：通用普攻（无技能时的兜底输出）
+
 
 func _make_skill(sid: String) -> Skill:
 	var s := Skill.new()

@@ -17,14 +17,6 @@ class_name SkillEffects
 ## “护盾技能/效果”加出来（add_shield / set_shield）。英雄基础属性里不放护盾值。
 
 const DATA := {
-	"basic_attack": {
-		"name": "普攻",
-		"element": "物理",
-		"kind": "active",
-		"energy_cost": 0,
-		"range": 1,
-		"desc": "普通攻击：对 1 格内目标造成 1 点物理伤害。",
-	},
 	"stub_passive": {
 		"name": "模板被动",
 		"element": "光",
@@ -474,7 +466,6 @@ const DATA := {
 ## 效果注册表：id -> Callable
 
 const EFFECTS := {
-	"basic_attack": Callable(SkillEffects, "_ef_basic_attack"),
 	"stub_passive": Callable(SkillEffects, "_ef_stub_passive"),
 	"stub_skill_1": Callable(SkillEffects, "_ef_stub_attack"),
 	"stub_skill_2": Callable(SkillEffects, "_ef_stub_shield"),
@@ -554,22 +545,6 @@ static func effect_stub(_user: BattleUnit, _ctx: Dictionary) -> String:
 ##   user.add_energy(x) / user.spend_energy(x)
 ##   ctx.get("targets", []) 可取目标数组（BattleUnit）
 
-
-## 普攻（通用兜底输出）：普伤 1
-static func _ef_basic_attack(user: BattleUnit, ctx: Dictionary) -> String:
-	var targets: Array = ctx.get("targets", [])
-	var out := "%s 普攻" % user.name
-	var hit := 0
-	for t in targets:
-		var tu := t as BattleUnit
-		if tu == null:
-			continue
-		var r: Dictionary = tu.take_damage(1, {"attacker": user, "element": "物理"})
-		out += "；%s 受 %d 伤" % [tu.name, r["hp_lost"] + r["absorbed"]]
-		hit += 1
-	if hit == 0:
-		out += "（未命中）"
-	return out
 
 static func _ef_stub_passive(user: BattleUnit, _ctx: Dictionary) -> String:
 	# TODO: 被动效果（例如“每回合开始回 X 血/加 X 盾”等）

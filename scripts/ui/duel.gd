@@ -48,6 +48,9 @@ var _sub_lab: Label
 var _foe_lab: Label
 var _over: Label
 var _board: GridContainer
+var _wrap: Control
+var _unit_layer: Control
+var _tokens := {}
 var _cells: Array = []                 # 与 _board 子按钮对应 (列x 行 y) 11 个按钮索引
 var _cell_coords: Array = []
 var _cell_buttons: Array = []
@@ -307,6 +310,15 @@ func _apply_board_size() -> void:
 		var b: Button = _cell_buttons[i]
 		b.custom_minimum_size = Vector2(cs, cs)
 		b.add_theme_font_size_override("font_size", maxi(14, int(cs * 0.17)))
+	if _wrap != null:
+		var w := cs * 5.0 + 6.0 * 4.0
+		var h := cs * 3.0 + 6.0 * 2.0
+		_wrap.custom_minimum_size = Vector2(w, h)
+		_unit_layer.size = Vector2(w, h)
+	for k in _tokens:
+		var tk = _tokens[k]
+		if is_instance_valid(tk):
+			tk.custom_minimum_size = Vector2(cs, cs)
 
 func _process(_d: float) -> void:
 	var cs := _board_cell_size()
@@ -315,11 +327,18 @@ func _process(_d: float) -> void:
 		_apply_board_size()
 
 func _build_board(holder: CenterContainer) -> void:
+	_wrap = Control.new()
+	holder.add_child(_wrap)
 	_board = GridContainer.new()
 	_board.columns = 5
 	_board.add_theme_constant_override("h_separation", 6)
 	_board.add_theme_constant_override("v_separation", 6)
-	holder.add_child(_board)
+	_board.position = Vector2.ZERO
+	_wrap.add_child(_board)
+	_unit_layer = Control.new()
+	_unit_layer.position = Vector2.ZERO
+	_unit_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_wrap.add_child(_unit_layer)
 	# 按视觉行 y=3..1，每行 x=0..4；两侧角格不存在（出生格每边仅 1 个：y=2）
 	_cell_coords.clear()
 	_cell_buttons.clear()
@@ -504,6 +523,8 @@ func _on_start() -> void:
 	_battle = _BAT.new(_red_id, _blue_id)
 	_battle.human_mode = true
 	_battle.human_team = 0
+	if Global.offline_type == "hotseat":
+		_battle.human_teams = [0, 1]
 	_focus = null
 	_cast_slot = 0
 	_title.text = "红方 %s（你）vs 蓝方 %s（AI）" % [_HD.ALL[_red_id].name, _HD.ALL[_blue_id].name]
@@ -802,17 +823,41 @@ func _refresh_board_view() -> void:
 		cb.add_theme_stylebox_override("hover", h)
 		cb.add_theme_stylebox_override("pressed", pr)
 		cb.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-		cb.text = ("%s · %s\n%d/%d" % [("红" if u.team == 0 else "蓝"), u.name, u.hp, u.max_hp]) if u != null else ""
-		var txt_col := Color(1, 0.98, 0.92) if u != null else COL_TEXT
-		cb.add_theme_color_override("font_color", txt_col)
-		cb.add_theme_color_override("font_hover_color", txt_col)
-		cb.add_theme_color_override("font_pressed_color", txt_col)
-		cb.add_theme_color_override("font_focus_color", txt_col)
+		cb.text = ""
 		if _phase == "select":
 			cb.visible = false
 		else:
 			cb.visible = true
+	_refresh_tokens()
 	_refresh_log()
+
+func _refresh_tokens() -> void:
+	if _battle == null or _unit_layer == null:
+		return
+	var cs := _board_cell_size()
+	var seen := {}
+	for u in _battle.units:
+		if not u.alive:
+			continue
+		var btn := _cell_button_at(u.cell)
+		if btn == null:
+			continue
+		var tok = _tokens.get(u)
+		if tok == null or not is_instance_valid(tok):
+			tok = preload("res://scripts/ui/unit_token.gd").new()
+			tok.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			_unit_layer.add_child(tok)
+			_tokens[u] = tok
+		tok.setup(u.team, u.name, str(u.hp), u == _focus)
+		tok.custom_minimum_size = Vector2(cs, cs)
+		tok.size = Vector2(cs, cs)
+		tok.position = btn.position + Vector2(3, 3)
+		tok.visible = _phase != "select"
+		seen[u] = true
+	for u in _tokens:
+		var tk = _tokens[u]
+		if is_instance_valid(tk) and not seen.has(u):
+			tk.visible = false
 
 func _refresh_log() -> void:
 	if _battle == null:

@@ -50,11 +50,14 @@ func _ready() -> void:
 	# 目前仅开放：离线 → 简单 → 1V1；其余入口点击弹“暂未开放”
 	_build_screen("mode", "选择模式", 44, false,
 		[["联机模式", Callable(self, "_on_locked").bind("联机模式")],
-		 ["离线模式", Callable(self, "_on_offline")],
+		 ["离线模式", Callable(self, "_show_panel").bind("offline_type")],
 		 ["剧情模式", Callable(self, "_on_locked").bind("剧情模式")]], "start")
 	_build_screen("online", "联机模式 · 选择对局", 44, false,
 		[["1V1", Callable(self, "_on_locked").bind("联机 1V1")],
 		 ["4V4", Callable(self, "_on_locked").bind("联机 4V4")]], "mode")
+	_build_screen("offline_type", "离线模式 · 选择类型", 44, false,
+		[["PVE（人机对战）", Callable(self, "_on_offline_type").bind("pve")],
+		 ["热座模式（双人同机）", Callable(self, "_on_offline_type").bind("hotseat")]], "mode")
 	_build_screen("diff", "离线模式 · 选择难度", 44, false,
 		[["简单", Callable(self, "_on_diff").bind("easy")],
 		 ["普通", Callable(self, "_on_locked").bind("普通难度")],
@@ -154,6 +157,10 @@ func _on_story() -> void:
 	_config = {"mode": "story"}
 	_show_result()
 
+func _on_offline_type(t: String) -> void:
+	_config["offline_type"] = t
+	_show_panel("diff")
+
 func _on_diff(d: String) -> void:
 	_config["difficulty"] = d
 	_show_panel("offline")
@@ -176,6 +183,7 @@ func _on_quit() -> void:
 func _on_enter_board() -> void:
 	var battle: String = _config.get("battle", "")
 	Global.battle_mode = battle if battle == "4v4" else "1v1"
+	Global.offline_type = str(_config.get("offline_type", "pve"))
 	# 1V1 = 可玩对局（选英雄 + 人机操作）；4V4 暂用展示棋盘
 	if battle == "1v1":
 		get_tree().change_scene_to_file("res://scenes/Duel.tscn")
@@ -357,30 +365,7 @@ func _codex_content(key: String) -> String:
 1V1：3×3 主对局区 + 双方各 1 个出生格
 4V4 / 标准：8×8 主对局区 + 左右翼各 4 格"""
 	if key == "rules":
-		return """[color=#ffd95a]回合结构[/color]
-· 每个棋子每回合 = 1 次移动权 + 1 次技能权
-· 先移动、后释放技能；两者都可放弃
-· 行动顺序按当前速度实时决定，速度变化立即影响后续顺序
-
-[color=#ffd95a]伤害口径[/color]
-· 普通伤害：护盾先吸收 → 护甲减免 → 扣生命
-· 真伤：只有明确标注「真伤」的伤害才无视盾甲
-· 百分比伤害未标真伤的一律按普伤结算
-
-[color=#ffd95a]状态规则[/color]
-· 烧伤：速度-10，每回合末受 1 真伤，持续 2 回合，重复施加刷新时长
-· 重伤：被攻击时额外受 0.5×层数 真伤，每回合末层数-1
-· 流血：行动（移动/施放）时受层数伤害，回合末层数-1
-· 眩晕：跳过行动；沉默：无法用技能；魅惑：无法造成伤害
-
-[color=#ffd95a]位移规则[/color]
-· 冲刺类（辛克莱审判系）：朝方向逐格冲，遇阻挡停止
-· 瞬移类（追猎/诛心/自我毁灭等）：直接跳到距离内任意空格
-· 落点必须为空格（无障碍/无棋子）
-
-[color=#ffd95a]胜负[/color]
-· 一方棋子全部阵亡即告负
-· 特殊：龙王单挑 6 层污染直接斩杀获胜等英雄专属规则"""
+		return Global.rules_text()
 	return "[color=#ffd95a]武器图鉴[/color]\n\n武器系统尚在设计中，敬请期待。"
 
 func _codex_heroes() -> String:

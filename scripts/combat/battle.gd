@@ -18,6 +18,7 @@ var round := 0
 var winner := ""
 var human_mode := false
 var human_team := 0
+var human_teams: Array = []   # 人类操作的阵营列表（开房间= [0,1]）
 var _hd: GDScript
 var _se: GDScript
 var _queue: Array = []
@@ -53,7 +54,7 @@ func run_step() -> Dictionary:
 		if actor == null:
 			_end_round()
 			continue
-		if human_mode and actor.team == human_team:
+		if _is_human_side(actor):
 			_wait = true
 			_h_moved = false
 			_cur = actor
@@ -306,6 +307,13 @@ func _finish_human() -> void:
 	_cur = null
 
 ## =============== 查询（AI 与 UI 共用） ===============
+func _is_human_side(u: BattleUnit) -> bool:
+	if not human_mode:
+		return false
+	if human_teams.is_empty():
+		return u.team == human_team
+	return human_teams.has(u.team)
+
 func alive_enemies_of(u: BattleUnit) -> Array:
 	var out: Array = []
 	for x in units:
@@ -359,7 +367,7 @@ func targets_in_range(u: BattleUnit, slot: int) -> Array:
 
 func move_cells_of(u: BattleUnit) -> Array:
 	var out: Array = []
-	for dv in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+	for dv in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1)]:
 		var d: Vector2i = dv
 		var c := u.cell + d
 		if c.x < 0 or c.x > 4 or c.y < 1 or c.y > 3:

@@ -28,6 +28,10 @@ func _ready() -> void:
 
 	_build_screen("start", "战棋", 80, true,
 		[["开始游戏", Callable(self, "_on_start")],
+		 ["英雄图鉴", Callable(self, "_open_codex").bind("hero")],
+		 ["武器图鉴", Callable(self, "_open_codex").bind("weapon")],
+		 ["地形介绍", Callable(self, "_open_codex").bind("terrain")],
+		 ["规则介绍", Callable(self, "_open_codex").bind("rules")],
 		 ["退出", Callable(self, "_on_quit")]], "")
 	_build_screen("mode", "选择模式", 44, false,
 		[["联机模式", Callable(self, "_on_online")],
@@ -269,3 +273,120 @@ func _btn_style(c: Color) -> StyleBoxFlat:
 	for r in ["top_left", "top_right", "bottom_left", "bottom_right"]:
 		s["corner_radius_" + r] = 10
 	return s
+
+
+## ================= 图鉴/介绍（开始界面入口） =================
+var _codex_layer: Control = null
+
+func _open_codex(key: String) -> void:
+	_close_codex()
+	var titles := {"hero": "英雄图鉴", "weapon": "武器图鉴", "terrain": "地形介绍", "rules": "规则介绍"}
+	var layer := Panel.new()
+	layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.10, 0.12, 0.19, 0.97)
+	layer.add_theme_stylebox_override("panel", sb)
+	add_child(layer)
+	_codex_layer = layer
+	var m := MarginContainer.new()
+	m.set_anchors_preset(Control.PRESET_FULL_RECT)
+	m.add_theme_constant_override("margin_left", 60)
+	m.add_theme_constant_override("margin_right", 60)
+	m.add_theme_constant_override("margin_top", 30)
+	m.add_theme_constant_override("margin_bottom", 30)
+	layer.add_child(m)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 12)
+	m.add_child(v)
+	var title := Label.new()
+	title.text = str(titles.get(key, "图鉴"))
+	title.add_theme_font_size_override("font_size", 32)
+	title.add_theme_color_override("font_color", Color(0.941, 0.780, 0.369))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(title)
+	var rt := RichTextLabel.new()
+	rt.bbcode_enabled = true
+	rt.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	rt.text = _codex_content(key)
+	v.add_child(rt)
+	var back := Button.new()
+	back.text = "返 回"
+	back.custom_minimum_size = Vector2(180, 44)
+	back.pressed.connect(_close_codex)
+	var bc := CenterContainer.new()
+	bc.add_child(back)
+	v.add_child(bc)
+
+func _close_codex() -> void:
+	if _codex_layer != null and is_instance_valid(_codex_layer):
+		_codex_layer.queue_free()
+	_codex_layer = null
+
+func _codex_content(key: String) -> String:
+	if key == "hero":
+		return _codex_heroes()
+	if key == "terrain":
+		return """[color=#ffd95a]基础地形表（标准棋盘 / 剧情地图通用）[/color]
+0 空地：无特殊效果
+1 障碍（可破坏）：不可通行，可被特定效果摧毁
+2 障碍（不可破坏）：不可通行
+3 森林：地形效果待定
+4 沼泽：地形效果待定
+5 水域：地形效果待定
+6 雪地：地形效果待定
+7 沙漠：地形效果待定
+8 山地：地形效果待定
+9 冰面：地形效果待定
+
+[color=#ffd95a]当前棋盘[/color]
+1V1：3×3 主对局区 + 双方各 1 个出生格
+4V4 / 标准：8×8 主对局区 + 左右翼各 4 格"""
+	if key == "rules":
+		return """[color=#ffd95a]回合结构[/color]
+· 每个棋子每回合 = 1 次移动权 + 1 次技能权
+· 先移动、后释放技能；两者都可放弃
+· 行动顺序按当前速度实时决定，速度变化立即影响后续顺序
+
+[color=#ffd95a]伤害口径[/color]
+· 普通伤害：护盾先吸收 → 护甲减免 → 扣生命
+· 真伤：只有明确标注「真伤」的伤害才无视盾甲
+· 百分比伤害未标真伤的一律按普伤结算
+
+[color=#ffd95a]状态规则[/color]
+· 烧伤：速度-10，每回合末受 1 真伤，持续 2 回合，重复施加刷新时长
+· 重伤：被攻击时额外受 0.5×层数 真伤，每回合末层数-1
+· 流血：行动（移动/施放）时受层数伤害，回合末层数-1
+· 眩晕：跳过行动；沉默：无法用技能；魅惑：无法造成伤害
+
+[color=#ffd95a]位移规则[/color]
+· 冲刺类（辛克莱审判系）：朝方向逐格冲，遇阻挡停止
+· 瞬移类（追猎/诛心/自我毁灭等）：直接跳到距离内任意空格
+· 落点必须为空格（无障碍/无棋子）
+
+[color=#ffd95a]胜负[/color]
+· 一方棋子全部阵亡即告负
+· 特殊：龙王单挑 6 层污染直接斩杀获胜等英雄专属规则"""
+	return "[color=#ffd95a]武器图鉴[/color]\n\n武器系统尚在设计中，敬请期待。"
+
+func _codex_heroes() -> String:
+	var HD = preload("res://scripts/combat/hero_defs.gd")
+	var SE = preload("res://scripts/combat/skill_effects.gd")
+	var out := ""
+	for id in HD.ALL:
+		var d: Dictionary = HD.ALL[id]
+		var emax: int = int(d.get("energy_max", int(d.get("energy", 0))))
+		var en_txt := "%d/%d" % [int(d.get("energy", 0)), emax] if emax >= 0 else "%d（无上限）" % int(d.get("energy", 0))
+		out += "\n[color=#ffd95a]%s〔%s〕[/color]  生命 %d · 能量 %s · 护甲 %d · 速度 %d\n" % [d.name, d.element, d.hp, en_txt, d.armor, d.speed]
+		var sk: Dictionary = d.get("skills", {})
+		var pid := str(sk.get("passive", ""))
+		if pid != "":
+			var pm: Dictionary = SE.DATA.get(pid, {})
+			out += "  [color=#9fd0ff]被动·%s[/color]：%s\n" % [pm.get("name", pid), pm.get("desc", "")]
+		var acts: Array = sk.get("actives", [])
+		for i in range(acts.size()):
+			var aid := str(acts[i])
+			if aid == "":
+				continue
+			var am: Dictionary = SE.DATA.get(aid, {})
+			out += "  [color=#c8f0c8]技能%d·%s[/color]：%s\n" % [i + 1, am.get("name", aid), am.get("desc", "")]
+	return out

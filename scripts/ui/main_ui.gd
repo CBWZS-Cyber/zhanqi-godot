@@ -159,7 +159,12 @@ func _on_story() -> void:
 
 func _on_offline_type(t: String) -> void:
 	_config["offline_type"] = t
-	_show_panel("diff")
+	if t == "hotseat":
+		# 热座双方都是玩家，无 AI 难度概念，直接进 1V1
+		_config["difficulty"] = "-"
+		_on_battle("offline", "1v1")
+	else:
+		_show_panel("diff")
 
 func _on_diff(d: String) -> void:
 	_config["difficulty"] = d

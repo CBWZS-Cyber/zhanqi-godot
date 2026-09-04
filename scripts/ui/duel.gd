@@ -420,8 +420,8 @@ func _select_screen() -> void:
 	v.add_child(sc)
 
 ## 一侧选择卡片（标题 + 2 列英雄按钮）
-func _pick_card(title_txt: String, col: Color, is_red: bool) -> Panel:
-	var card := Panel.new()
+func _pick_card(title_txt: String, col: Color, is_red: bool) -> PanelContainer:
+	var card := PanelContainer.new()
 	var cs := StyleBoxFlat.new()
 	cs.bg_color = COL_PANEL
 	cs.set_corner_radius_all(16)
@@ -430,7 +430,6 @@ func _pick_card(title_txt: String, col: Color, is_red: bool) -> Panel:
 	card.add_theme_stylebox_override("panel", cs)
 	card.custom_minimum_size = Vector2(430, 0)
 	var mg := MarginContainer.new()
-	mg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	mg.add_theme_constant_override("margin_left", 12)
 	mg.add_theme_constant_override("margin_right", 12)
 	mg.add_theme_constant_override("margin_top", 10)

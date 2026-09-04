@@ -272,6 +272,17 @@ func heal(amount: int) -> int:
 	hp = mini(max_hp, hp + amount)
 	return hp - before
 
+## 统一"受到真伤"入口：药师被动（存在护盾时免疫真伤）挂在这里；返回实际扣血量
+func take_true_damage(amount: int, _reason: String = "") -> int:
+	var dmg := maxi(0, amount)
+	if dmg <= 0:
+		return 0
+	if shield > 0 and has_flag("shield_true_immune"):
+		return 0
+	var before := hp
+	lose_hp(dmg)
+	return before - hp
+
 ## 直接扣血（已算护盾吸收后）；由 take_damage 调用，也可用于无视护盾的伤害
 func lose_hp(amount: int) -> void:
 	if not alive and not _corpse:
@@ -377,13 +388,13 @@ func take_damage(amount: int, info := {}) -> Dictionary:
 	if attacker != null and _reflect_pct > 0 and result["hp_lost"] > 0:
 		var back := ceili(float(result["hp_lost"]) * float(_reflect_pct) / 100.0)
 		if back > 0:
-			attacker.lose_hp(back)
+			attacker.take_true_damage(back, "反伤")
 			result["reflected"] = back
 	# 4b) 重伤：受击后额外受 0.5×层 真伤（每回合末层数-1，见 tick_end）
 	if result["hp_lost"] > 0 and status_stacks("heavy_wound") > 0:
 		var extra := ceili(float(status_stacks("heavy_wound")) * 0.5)
 		var b3 := hp
-		lose_hp(extra)
+		take_true_damage(extra, "重伤")
 		result["hp_lost"] += b3 - hp
 		result["killed"] = not alive
 	# 5) 受击事件（锻体/防守状态机等监听）
@@ -621,7 +632,7 @@ func _settle_share_drain() -> String:
 		var loss := ceili(float(tu.hp) * 0.3)
 		if loss <= 0:
 			continue
-		tu.lose_hp(loss)
+		tu.take_true_damage(loss, "失神吸取")
 		var got := heal(loss)
 		out += "%s 回合末吸取 %s：流失 %d 生命，邪神回 %d 血" % [name, tu.name, loss, got]
 	return out

@@ -241,7 +241,7 @@ const DATA := {
 		"name": "药灵", "element": "圣灵", "kind": "ultimate", "energy_cost": 12,
 		"range": 1,
 		"ai": {"self_buff": true, "self_kind": "heal"},
-		"desc": "生命降至1并获得等同于消耗生命值一半的护盾，本回合内血量最低为1（锁血），并对相邻敌人造成等同于当前护盾量的伤害。",
+		"desc": "生命降至1并获得等同于消耗生命值一半的护盾，本回合内血量最低为1（锁血），并对相邻敌人造成等同于当前护盾量的伤害（至少 2 点）。",
 	},
 
 	"duan_ti": {"name": "锻体", "element": "物理", "kind": "passive",
@@ -614,7 +614,7 @@ static func _ef_sui_jing_zhan(user: BattleUnit, ctx: Dictionary) -> String:
 		if tu == null:
 			continue
 		var before := tu.hp
-		tu.lose_hp(3)
+		tu.take_true_damage(3)
 		out += "；%s 受 %d 真伤" % [tu.name, before - tu.hp]
 	if targets.is_empty():
 		out += "（无目标）"
@@ -684,7 +684,7 @@ static func _ef_zhi_pei(user: BattleUnit, ctx: Dictionary) -> String:
 			continue
 		if mode == "1v1":
 			if tu.counter("污染") >= 8:
-				tu.lose_hp(tu.hp)
+				tu.take_true_damage(tu.hp)
 				out += "；单挑斩杀 %s（污染 %d ≥ 8）→ 邪神获胜" % [tu.name, tu.counter("污染")]
 				_call_win(ctx)
 			else:
@@ -734,7 +734,7 @@ static func _ef_hei_shan(user: BattleUnit, ctx: Dictionary) -> String:
 			out += "；%s 失去 %d 点生命（%d 层×10%%）" % [tu.name, r["hp_lost"] + r["absorbed"], layers]
 		if layers >= 6:
 			if mode == "1v1":
-				tu.lose_hp(tu.hp)
+				tu.take_true_damage(tu.hp)
 				out += "，单挑斩杀 %s → 邪神获胜" % tu.name
 				_call_win(ctx)
 			else:
@@ -758,7 +758,7 @@ static func hit_group(targets: Array, dmg: int, true_dmg := false) -> String:
 			continue
 		if true_dmg:
 			var before := tu.hp
-			tu.lose_hp(dmg)
+			tu.take_true_damage(dmg)
 			out += "，%s 受 %d 真伤" % [tu.name, before - tu.hp]
 		else:
 			var r: Dictionary = tu.take_damage(dmg)
@@ -769,7 +769,7 @@ static func hit_group(targets: Array, dmg: int, true_dmg := false) -> String:
 static func lose_pct_max_hp(t: BattleUnit, pct_per: int, times: int) -> int:
 	var loss := ceili(float(t.max_hp) * 0.01 * float(pct_per) * float(times))
 	if loss > 0:
-		t.lose_hp(loss)
+		t.take_true_damage(loss)
 	return loss
 
 ## 给一组目标各 +n 层资源（自动触发 layer_rules）
@@ -958,7 +958,7 @@ static func hp_pct(t: BattleUnit) -> int:
 ## 条件斩杀：目标当前生命 ≤ 最大生命的 pct% 时直接斩杀（返回真）
 static func cut_if_under_pct(t: BattleUnit, pct: int) -> bool:
 	if hp_pct(t) <= pct:
-		t.lose_hp(t.hp)
+		t.take_true_damage(t.hp)
 		return true
 	return false
 
@@ -1165,7 +1165,9 @@ static func _clear_random_debuff(t: BattleUnit) -> String:
 	return "无负面可清"
 
 static func _ef_gao_yu(user: BattleUnit, _ctx: Dictionary) -> String:
-	return "%s 的【膏腴】生效：能量无上限（当前 %d）" % [user.name, user.energy]
+	if not user.has_flag("shield_true_immune"):
+		user.add_flag("shield_true_immune")
+	return "%s 的【膏腴】生效：能量无上限（当前 %d）；存在护盾时免疫受到的真伤" % [user.name, user.energy]
 
 ## 主动1·建木生发：耗自身血=目标当前血一半 → 目标受“已损生命一半”伤害 → 回能=消耗量
 static func _ef_jian_mu_sheng_fa(user: BattleUnit, ctx: Dictionary) -> String:
@@ -1178,7 +1180,7 @@ static func _ef_jian_mu_sheng_fa(user: BattleUnit, ctx: Dictionary) -> String:
 		return "%s 生命不足（%d/%d），【建木生发】无法发动（需要 %d）" % [user.name, user.hp, user.max_hp, cost]
 	user.lose_hp(cost)
 	var lost := tu.max_hp - tu.hp
-	var dmg := ceili(float(maxi(0, lost)) * 0.5)
+	var dmg := maxi(2, ceili(float(maxi(0, lost)) * 0.5))
 	var r: Dictionary = tu.take_damage(dmg)
 	user.add_energy(cost)
 	return "%s 释放【建木生发】：消耗自身 %d 生命，%s 受 %d 伤，回复 %d 能量" % [user.name, cost, tu.name, r["hp_lost"] + r["absorbed"], cost]
@@ -1227,7 +1229,7 @@ static func _ef_yao_ling(user: BattleUnit, ctx: Dictionary) -> String:
 		if tu == null:
 			continue
 		var before := tu.hp
-		tu.lose_hp(user.shield)
+		tu.take_true_damage(maxi(2, user.shield), "药灵")
 		out += "；%s 受 %d 真伤" % [tu.name, before - tu.hp]
 	if targets.is_empty():
 		out += "（相邻无敌人）"
@@ -1299,7 +1301,7 @@ static func _ef_ptq(user: BattleUnit, ctx: Dictionary) -> String:
 	var out := "%s 释放【普通拳】：%s 受 %d 伤" % [user.name, tu.name, r["hp_lost"] + r["absorbed"]]
 	if tu.has_flag("taunted"):
 		var before := tu.hp
-		tu.lose_hp(1)
+		tu.take_true_damage(1)
 		out += "，嘲讽目标额外 %d 真伤" % (before - tu.hp)
 	user.add_energy(2)
 	return out
@@ -1582,7 +1584,7 @@ static func _ef_xuanzhong(user: BattleUnit, ctx: Dictionary) -> String:
 			continue
 		var dmg := ceili(float(maxi(0, tu.max_hp - tu.hp)) * 0.2)
 		var before := tu.hp
-		tu.lose_hp(dmg)
+		tu.take_true_damage(dmg)
 		out += "；%s 失去 %d 真伤（已损生命20%%）" % [tu.name, before - tu.hp]
 		if tu.status_stacks("heavy_wound") >= 4:
 			apply_burn(tu)

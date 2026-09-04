@@ -339,10 +339,10 @@ func take_damage(amount: int, info := {}) -> Dictionary:
 	var attacker := info.get("attacker", null) as BattleUnit if info.has("attacker") else null
 	var element := str(info.get("element", ""))
 	var rest := amount
-	# 增伤按“攻击者对被击者主属性”加成（辛克莱：对机械属性目标伤害+10%，敌我适用）
+	# 增伤按“攻击者对受击者主属性(self.element)”加成（辛克莱：机械目标+10%，敌我适用）
 	var el_boost := 0
 	if attacker != null:
-		el_boost = attacker.element_bonus_of(element)
+		el_boost = attacker.element_bonus_of(element if self.element == "" else self.element)
 	if el_boost > 0:
 		amount = maxi(1, ceili(float(amount) * float(100 + el_boost) / 100.0))
 		rest = amount

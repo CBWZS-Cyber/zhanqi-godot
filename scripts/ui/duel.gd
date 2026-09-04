@@ -129,7 +129,7 @@ func _make_bar(tag: String, col: Color, value: int, max_value: int) -> ProgressB
 	num.add_theme_constant_override("shadow_offset_y", 2)
 	bar.add_child(num)
 	row.add_child(bar)
-	return bar
+	return row
 
 func _update_bar(bar: ProgressBar, value: int, max_value: int, num_text: String) -> void:
 	bar.max_value = max_value if max_value > 0 else 1

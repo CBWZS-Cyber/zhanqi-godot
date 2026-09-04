@@ -132,8 +132,6 @@ func _make_bar(tag: String, col: Color, value: int, max_value: int) -> HBoxConta
 	return row
 
 func _update_bar(bar: HBoxContainer, value: int, max_value: int, num_text: String) -> void:
-	bar.max_value = max_value if max_value > 0 else 1
-	bar.value = clampi(value, 0, bar.max_value)
 	for c in bar.get_children():
 		if c is ProgressBar:
 			var pb := c as ProgressBar

@@ -137,8 +137,9 @@ func _update_bar(bar: HBoxContainer, value: int, max_value: int, num_text: Strin
 			var pb := c as ProgressBar
 			pb.max_value = max_value if max_value > 0 else 1
 			pb.value = clampi(value, 0, pb.max_value)
-		if c is Label:
-			(c as Label).text = num_text
+			for cc in pb.get_children():
+				if cc is Label:
+					(cc as Label).text = num_text
 
 func _panel_style(col: Color, radius: int) -> StyleBoxFlat:
 	var sb := StyleBoxFlat.new()
@@ -291,7 +292,7 @@ func _board_cell_size() -> float:
 	var vp := get_viewport_rect().size
 	if vp.y <= 0 or vp.x <= 0:
 		return CELL
-	var side := vp.x * (300.0 / 1280.0)
+	var side := vp.x * (340.0 / 1280.0)
 	var avail_h := vp.y - 150.0
 	var avail_w := vp.x - side - 60.0
 	return clampf(minf(avail_h / 3.0, avail_w / 5.0), 100.0, 250.0)
@@ -497,7 +498,13 @@ func _refresh_ui() -> void:
 			why = "禁用"
 		elif not _battle.self_skill(me, i) and _battle.targets_in_range(me, i).is_empty():
 			why = "射程内无目标"
-		nb.text = "%s(%d)%s" % [sk.display_name, sk.energy_cost, ("⚠" + why) if why != "" else ""]
+		nb.text = sk.display_name
+		var tip := "[%s] 耗能 %d" % [sk.display_name, sk.energy_cost]
+		if why != "":
+			tip += "（不可用：%s）" % why
+		tip += "\n" + sk.desc
+		nb.mouse_entered.connect(func(): _skill_desc.text = tip)
+		nb.mouse_exited.connect(func(): _skill_desc.text = "")
 		nb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		nb.custom_minimum_size = Vector2(0, 42)
 		nb.add_theme_font_size_override("font_size", 15)

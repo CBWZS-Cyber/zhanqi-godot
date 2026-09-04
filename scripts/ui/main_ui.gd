@@ -28,11 +28,16 @@ func _ready() -> void:
 
 	_build_screen("start", "战棋", 80, true,
 		[["开始游戏", Callable(self, "_on_start")],
-		 ["英雄图鉴", Callable(self, "_open_codex").bind("hero")],
-		 ["武器图鉴", Callable(self, "_open_codex").bind("weapon")],
-		 ["地形介绍", Callable(self, "_open_codex").bind("terrain")],
-		 ["规则介绍", Callable(self, "_open_codex").bind("rules")],
 		 ["退出", Callable(self, "_on_quit")]], "")
+	# 图鉴/介绍：横排独立一行（界面下部）
+	var start_vbox: VBoxContainer = _panels["start"].get_meta("vbox")
+	var crow := HBoxContainer.new()
+	crow.alignment = BoxContainer.ALIGNMENT_CENTER
+	crow.add_theme_constant_override("separation", 16)
+	for e in [["英雄图鉴", "hero"], ["武器图鉴", "weapon"], ["地形介绍", "terrain"], ["规则介绍", "rules"]]:
+		var cb2 := _make_button(e[0], Callable(self, "_open_codex").bind(e[1]))
+		crow.add_child(cb2)
+	start_vbox.add_child(crow)
 	_build_screen("mode", "选择模式", 44, false,
 		[["联机模式", Callable(self, "_on_online")],
 		 ["离线模式", Callable(self, "_on_offline")],

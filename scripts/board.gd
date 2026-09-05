@@ -26,7 +26,6 @@ var _hud: Control
 var _back_btn: Button
 
 func _ready() -> void:
-	get_viewport().size_changed.connect(_fit)
 	_duel = (Global.battle_mode == "1v1")
 	if _duel:
 		# 1V1 布局：主对局区 3×3（x1..3 / y1..3，y 向上），左右贴边各 1 个出生格（中间行 y=2）
@@ -85,6 +84,9 @@ func _make_back_button() -> void:
 	bl.add_child(_back_btn)
 
 ## 每帧都重排：不依赖 size_changed 信号，保证最大化/全屏必定生效
+func _process(_delta: float) -> void:
+	_fit()
+
 ## F11 在 Godot 里默认没绑任何事；这里手动切换真正的全屏/窗口模式
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F11:

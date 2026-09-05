@@ -275,6 +275,11 @@ func _test_heroes() -> void:
 	tar.team = 1
 	var lv: String = rp.use_active(1, {"targets": [tar]})
 	ck(tar.is_skill_lost("snap_shot"), "掠夺禁技")
+	ck(rp.get_skill(1).id == "lve_duo", "掠夺当回合仍是原技能")
+	rp.on_turn_start()
+	ck(rp.get_skill(1).id == "snap_shot" and rp.stolen_skill_id == "snap_shot", "下回合起第1槽换成掠夺技")
+	var blocked: String = tar.use_active(1, {"targets": [rp]})
+	ck(blocked.contains("被掠夺") and tar.is_skill_lost("snap_shot"), "被掠夺方本局无法释放该技")
 	rp.lose_hp(3)
 	var h1 := rp.hp
 	var sx: String = rp.use_active(3, {})

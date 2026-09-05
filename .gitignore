@@ -29,3 +29,7 @@ Desktop.ini
 build/
 Godot/
 installer/*.exe
+tools/dist/installer/
+Godot/
+tools/map_exe_app/dist/
+tools/map_exe_app/build/

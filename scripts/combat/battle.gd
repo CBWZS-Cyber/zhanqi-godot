@@ -1,15 +1,6 @@
 class_name Battle
 extends RefCounted
 ## 战棋 · 战斗管理器（1V1，3×3 主区 + 左右出生格）
-## 信号：log_appended=新增一行战报；state_changed=棋盘/回合状态变化；battle_ended=分出胜负
-
-signal log_appended(line: String)
-signal state_changed
-signal battle_ended(winner: String)
-
-func _add_log(line: String) -> void:
-	log.push_back(line)
-	log_appended.emit(line)
 ## 回合结构：每棋每回合 = 移动权 + 技能权（先移后放、各自可选；位移技不限制在未移动时使用）
 ## 驱动方式：
 ##   - run_step() 自动结算直到“轮到人类/分出胜负”，返回状态
@@ -28,6 +19,10 @@ var winner := ""
 var human_mode := false
 var human_team := 0
 var human_teams: Array = []   # 人类操作的阵营列表（开房间= [0,1]）
+var ai_level := "easy"        # easy / normal / hard（PVE 由对局脚本按 Global.difficulty 注入）
+var ai_backend := "llm"      # 困难后端："llm"(豆包) | "local"(本地)，_maybe_llm_plan 据此门控
+var _llm_plans := {}          # 最高难度：本回合豆包预案 idx_str -> plan
+var llm_tactics := {}        # 豆包战术倾向 {focus, posture, protect}（第2步规则 AI 消费）
 var _hd: GDScript
 var _se: GDScript
 var _queue: Array = []
@@ -39,7 +34,7 @@ func _init(red_hero_id: String, blue_hero_id: String) -> void:
 	_hd = load("res://scripts/combat/hero_defs.gd")
 	_se = load("res://scripts/combat/skill_effects.gd")
 	units = [_make(red_hero_id, 0, SPAWN_RED), _make(blue_hero_id, 1, SPAWN_BLUE)]
-	_add_log("对局开始：红方 %s（速%d）vs 蓝方 %s（速%d）" % [units[0].name, units[0].speed, units[1].name, units[1].speed])
+	log.push_back("对局开始：红方 %s（速%d）vs 蓝方 %s（速%d）" % [units[0].name, units[0].speed, units[1].name, units[1].speed])
 
 func _make(hero_id: String, team: int, cell: Vector2i) -> BattleUnit:
 	var u := BattleUnit.new(_hd.ALL[hero_id].duplicate(true))
@@ -72,21 +67,40 @@ func run_step() -> Dictionary:
 		_check_win()   # 每次行动后立刻判胜负（避免“已全灭仍继续”）
 	if winner == "":
 		winner = "僵局（%d 回合超时）" % MAX_ROUNDS
-		_add_log("== %s ==" % winner)
+		log.push_back("== %s ==" % winner)
 	return {"over": winner}
 
 func _start_round() -> void:
 	round += 1
-	_add_log("—— 第 %d 回合 ——" % round)
+	log.push_back("—— 第 %d 回合 ——" % round)
 	for u in units:
 		var s: String = u.on_turn_start()
 		if s != "":
-			_add_log(s)
+			log.push_back(s)
 	_queue = []
 	for u in units:
 		if u.alive:
 			_queue.append(u)
-	state_changed.emit()
+	_maybe_llm_plan()
+
+## 最高难度：回合开始为 AI 队伍生成一次豆包战术预案（同步阻塞）
+func _maybe_llm_plan() -> void:
+	_llm_plans = {}
+	if ai_level != "hard" or ai_backend != "llm":
+		return
+	var decide: Array = []
+	for u in units:
+		if u.alive and not _is_human_side(u):
+			decide.append(u)
+	if decide.is_empty():
+		return
+	if not AICfg.ready():
+		log.push_back("== 困难：未内置战术模型密钥，回退本地 AI ==")
+		return
+	log.push_back("== 敌方请来战术模型思考… ==")
+	_llm_plans = LLMDecider.plan_round(self, decide)
+	if _llm_plans.is_empty():
+		log.push_back("== 战术模型未响应，回退本地 AI ==")
 
 func _poll_next() -> BattleUnit:
 	if _queue.is_empty():
@@ -100,18 +114,22 @@ func _end_round() -> void:
 	for u in units:
 		var r: String = u.end_turn()
 		if r != "":
-			_add_log(r)
+			log.push_back(r)
 	_check_win()
 
 func _turn_ai(u: BattleUnit) -> void:
 	if not u.alive:
 		return
 	if u.has_flag("stun"):
-		_add_log("%s 被眩晕，跳过本回合" % u.name)
+		log.push_back("%s 被眩晕，跳过本回合" % u.name)
 		return
 	if u.has_flag("sanity_break"):
 		_crazy(u)
 		return
+	# 最高难度：若有豆包预案则执行；否则回退本地 AI
+	if ai_level == "hard" and _llm_plans.has(str(_idx_of(u))):
+		if _exec_llm_plan(u, _llm_plans[str(_idx_of(u))]):
+			return
 	var moved := false
 	var mv: Dictionary = BattleAI.plan_move(self, u)
 	if mv.get("act", "") == "move":
@@ -119,10 +137,14 @@ func _turn_ai(u: BattleUnit) -> void:
 		if cell in move_cells_of(u):
 			u.cell = cell
 			moved = true
-			_add_log("%s 移动 → %s" % [u.name, cell])
+			log.push_back("%s 移动 → %s" % [u.name, cell])
 	var sk: Dictionary = BattleAI.plan_skill(self, u, moved)
 	if sk.get("act", "") == "skill":
-		_exec_skill(u, int(sk.get("slot", 1)), sk.get("targets", []), moved)
+		var tg: BattleUnit = sk.get("target", null)
+		var tgs: Array = sk.get("targets", [])
+		if tgs.is_empty() and tg != null:
+			tgs = [tg]
+		_exec_skill(u, int(sk.get("slot", 1)), tgs, moved)
 
 func _crazy(u: BattleUnit) -> void:
 	var all: Array = []
@@ -131,7 +153,7 @@ func _crazy(u: BattleUnit) -> void:
 			all.append(x)
 	var slot := 1 + (randi() % 4)
 	var res: String = u.use_active(slot, {"targets": all, "mode": "1v1"})
-	_add_log("【失控】%s 不受控制地释放技能：%s" % [u.name, res])
+	log.push_back("【失控】%s 不受控制地释放技能：%s" % [u.name, res])
 
 ## =============== 人类操作接口 ===============
 func waiting() -> bool:
@@ -152,8 +174,7 @@ func human_move(cell: Vector2i) -> String:
 		return "!非法移动格"
 	_cur.cell = cell
 	_h_moved = true
-	_add_log("%s 移动 → %s" % [_cur.name, cell])
-	state_changed.emit()
+	log.push_back("%s 移动 → %s" % [_cur.name, cell])
 	return "%s 移动 → %s" % [_cur.name, cell]
 
 func human_cast(slot: int, enemy: BattleUnit = null, landing := Vector2i(-1, -1)) -> String:
@@ -200,7 +221,7 @@ func human_cast(slot: int, enemy: BattleUnit = null, landing := Vector2i(-1, -1)
 		return "!位移后目标不在射程内（敌人太远，先靠近或换落点）"
 	if dest != old:
 		u.cell = dest
-		_add_log("%s %s至 %s" % [u.name, "冲刺" if is_charge(u, slot) else "跃迁", dest])
+		log.push_back("%s %s至 %s" % [u.name, "冲刺" if is_charge(u, slot) else "跃迁", dest])
 	# 目标
 	var targets: Array = []
 	if not self_skill(u, slot):
@@ -215,7 +236,7 @@ func human_cast(slot: int, enemy: BattleUnit = null, landing := Vector2i(-1, -1)
 					break
 	var res: String = u.use_active(slot, {"targets": targets, "mode": "1v1"})
 	if res != "":
-		_add_log(res)
+		log.push_back(res)
 	_finish_human()
 	return res
 
@@ -405,7 +426,7 @@ func _exec_skill(u: BattleUnit, slot: int, targets: Array, moved: bool) -> void:
 		else:
 			u.cell = _best_land_cell(u, t0, dd)
 		if u.cell != old:
-			_add_log("%s 位移 → %s" % [u.name, u.cell])
+			log.push_back("%s 位移 → %s" % [u.name, u.cell])
 	# 位移后重算本技目标；打不到就回滚位置放弃
 	var final_targets: Array = []
 	if not self_skill(u, slot):
@@ -425,7 +446,7 @@ func _exec_skill(u: BattleUnit, slot: int, targets: Array, moved: bool) -> void:
 		return
 	var res: String = u.use_active(slot, {"targets": final_targets, "mode": "1v1"})
 	if res != "":
-		_add_log(res)
+		log.push_back(res)
 
 func _check_win() -> void:
 	if winner != "":
@@ -445,8 +466,41 @@ func _check_win() -> void:
 	elif not ba:
 		winner = "红方"
 	if winner != "":
-		_add_log("== 胜者：%s（第 %d 回合）==" % [winner, round])
-		battle_ended.emit(winner)
+		log.push_back("== 胜者：%s（第 %d 回合）==" % [winner, round])
 
 func result_text() -> String:
 	return "\n".join(log)
+
+## =============== 最高难度 · 豆包预案执行 ===============
+func _idx_of(u: BattleUnit) -> int:
+	for i in range(units.size()):
+		if units[i] == u:
+			return i
+	return -1
+
+## 执行 LLM 给单个单位的预案（move + skill）；返回 true=已按预案行动
+func _exec_llm_plan(u: BattleUnit, plan: Dictionary) -> bool:
+	var has_any := false
+	if bool(plan.get("has_move", false)):
+		has_any = true
+		var cell: Vector2i = plan.get("move", Vector2i(-1, -1))
+		if cell in move_cells_of(u):
+			u.cell = cell
+			log.push_back("%s 移动 → %s" % [u.name, cell])
+	var sk: Dictionary = plan.get("skill", {})
+	if not sk.is_empty() and not u.has_flag("no_skill"):
+		var slot := int(sk.get("slot", 1))
+		var ok := false
+		if u.get_skill(slot) != null and base_usable(u, slot) and not u.is_skill_lost(u.get_skill(slot).id):
+			var tid := int(sk.get("target", -1))
+			if self_skill(u, slot):
+				ok = true
+				_exec_skill(u, slot, [], false)
+			elif tid >= 0 and tid < units.size():
+				var t: BattleUnit = units[tid]
+				if t.alive and t.team != u.team and t in targets_in_range(u, slot):
+					ok = true
+					_exec_skill(u, slot, [t], false)
+		if ok:
+			has_any = true
+	return has_any

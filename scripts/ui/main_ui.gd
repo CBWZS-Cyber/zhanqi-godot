@@ -11,7 +11,7 @@ extends Control
 
 const BG_COLOR := Color(0.102, 0.125, 0.208)  # 深蓝灰
 const BASE := Vector2(1280, 720)               # 设计基准
-const BOARD_SCENE := "res://scenes/Board.tscn"
+const BOARD_SCENE := "res://scenes/TeamDuel.tscn"   # 4V4 走可玩对局场景（原 Board.tscn 展示棋盘）
 
 var _bg: ColorRect
 var _scale := 1.0
@@ -51,28 +51,29 @@ func _ready() -> void:
 	_build_screen("mode", "选择模式", 44, false,
 		[["联机模式", Callable(self, "_on_locked").bind("联机模式")],
 		 ["离线模式", Callable(self, "_show_panel").bind("offline_type")],
-		 ["剧情模式", Callable(self, "_on_story")]], "start")
+		 ["剧情模式", Callable(self, "_on_locked").bind("剧情模式")]], "start")
 	_build_screen("online", "联机模式 · 选择对局", 44, false,
 		[["1V1", Callable(self, "_on_locked").bind("联机 1V1")],
 		 ["4V4", Callable(self, "_on_locked").bind("联机 4V4")]], "mode")
 	_build_screen("offline_type", "离线模式 · 选择类型", 44, false,
 		[["PVE（人机对战）", Callable(self, "_on_offline_type").bind("pve")],
 		 ["热座模式（双人同机）", Callable(self, "_on_offline_type").bind("hotseat")]], "mode")
-	_build_screen("story", "剧情模式", 44, false,
-		[["骑士线", Callable(self, "_on_story_line").bind("knight")],
-		 ["工程线", Callable(self, "_on_locked").bind("工程线")]], "mode")
 	_build_screen("diff", "离线模式 · 选择难度", 44, false,
 		[["简单", Callable(self, "_on_diff").bind("easy")],
-		 ["普通", Callable(self, "_on_locked").bind("普通难度")],
-		 ["困难", Callable(self, "_on_locked").bind("困难难度")]], "mode")
+		 ["普通（中等）", Callable(self, "_on_diff").bind("normal")],
+		 ["困难（战术模型）", Callable(self, "_open_hard_cfg")]], "mode")
 	_build_screen("offline", "离线模式 · 选择对局", 44, false,
 		[["1V1", Callable(self, "_on_battle").bind("offline", "1v1")],
-		 ["4V4", Callable(self, "_on_locked").bind("离线 4V4")]], "diff")
+		 ["4V4", Callable(self, "_on_battle").bind("offline", "4v4")]], "diff")
 	_build_result()
 
 	_show_panel("start")
 	get_viewport().size_changed.connect(_fit)
 	call_deferred("_fit")
+
+func _process(_delta: float) -> void:
+	_fit()
+	_online_poll()
 
 ## 每帧：字号/间距/最小尺寸按 _scale 真实重算（不用 Control.scale 放大，避免全屏文字发糊），
 ## 卡片取最新内容尺寸后绕中心居中。
@@ -154,24 +155,22 @@ func _on_offline() -> void:
 	_show_panel("diff")
 
 func _on_story() -> void:
-	_show_panel("story")
-
-func _on_story_line(line: String) -> void:
-	Global.battle_mode = "story"
-	Global.story_line = line
-	get_tree().change_scene_to_file("res://scenes/StoryMap.tscn")
+	_config = {"mode": "story"}
+	_show_result()
 
 func _on_offline_type(t: String) -> void:
 	_config["offline_type"] = t
 	if t == "hotseat":
-		# 热座双方都是玩家，无 AI 难度概念，直接进 1V1
+		# 热座双方都是玩家，无 AI 难度概念 → 直接进“选择对局”（1V1 / 4V4）
 		_config["difficulty"] = "-"
-		_on_battle("offline", "1v1")
+		Global.difficulty = "-"
+		_show_panel("offline")
 	else:
 		_show_panel("diff")
 
 func _on_diff(d: String) -> void:
 	_config["difficulty"] = d
+	Global.difficulty = d
 	_show_panel("offline")
 
 func _on_battle(mode: String, battle: String) -> void:
@@ -209,7 +208,9 @@ func _show_result() -> void:
 	else:
 		parts.append("联机模式" if mode == "online" else "离线模式")
 		if mode == "offline" and diff != "":
-			parts.append(_diff_name(diff))
+			var dn := _diff_name(diff)
+			if dn != "":
+				parts.append(dn)
 		match battle:
 			"1v1":
 				parts.append("1V1")
@@ -219,7 +220,15 @@ func _show_result() -> void:
 	_show_panel("result")
 
 func _diff_name(d: String) -> String:
-	return "简单" if d == "easy" else ("普通" if d == "normal" else "困难")
+	if d == "" or d == "-":
+		return ""
+	match d:
+		"easy":
+			return "简单"
+		"normal":
+			return "普通"
+		_:
+			return "困难"
 
 # ---------- 构建界面 ----------
 func _build_screen(key: String, title: String, title_size: int, with_shadow: bool,
@@ -461,3 +470,179 @@ func _close_locked() -> void:
 	if _locked_layer != null and is_instance_valid(_locked_layer):
 		_locked_layer.queue_free()
 	_locked_layer = null
+
+## ================= 困难模式 · AI 后端选择弹窗 =================
+var _hard_layer: Control = null
+var _llm_btn: Button
+var _local_btn: Button
+var _online_lab: Label
+var _hard_choice := "llm"
+var _online_t0 := 0
+var _online_done := true
+var _online_http = null
+
+func _open_hard_cfg() -> void:
+	_close_hard_cfg()
+	var layer := Panel.new()
+	layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.10, 0.12, 0.19)
+	layer.add_theme_stylebox_override("panel", sb)
+	add_child(layer)
+	_hard_layer = layer
+	var cc := CenterContainer.new()
+	cc.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(cc)
+	var card := Panel.new()
+	var cs := StyleBoxFlat.new()
+	cs.bg_color = Color(0.145, 0.176, 0.271)
+	cs.set_corner_radius_all(16)
+	cs.border_color = Color(0.941, 0.780, 0.369, 0.5)
+	cs.set_border_width_all(1)
+	card.add_theme_stylebox_override("panel", cs)
+	card.custom_minimum_size = Vector2(560, 0)
+	cc.add_child(card)
+	var mg := MarginContainer.new()
+	for k in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
+		mg.add_theme_constant_override(k, 26)
+	card.add_child(mg)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 14)
+	mg.add_child(box)
+	var t := Label.new()
+	t.text = "困难模式 · 选择 AI 后端"
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	t.add_theme_font_size_override("font_size", 26)
+	t.add_theme_color_override("font_color", Color(0.941, 0.780, 0.369))
+	box.add_child(t)
+	var sub := Label.new()
+	sub.text = "战术模型更聪明多变（需要联网）；本地进阶 AI 离线也能打。"
+	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	sub.add_theme_color_override("font_color", Color(0.82, 0.86, 0.92))
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(sub)
+	# 单选行
+	_llm_btn = Button.new()
+	_llm_btn.text = "🤖 豆包战术模型（集火/姿态/守护，需联网）"
+	_llm_btn.toggle_mode = true
+	_llm_btn.button_pressed = true
+	_llm_btn.pressed.connect(_choose_llm)
+	box.add_child(_llm_btn)
+	_local_btn = Button.new()
+	_local_btn.text = "💻 本地进阶 AI（离线可用）"
+	_local_btn.toggle_mode = true
+	_local_btn.pressed.connect(_choose_local)
+	box.add_child(_local_btn)
+	_online_lab = Label.new()
+	_online_lab.text = "正在检测网络…"
+	_online_lab.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
+	_online_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(_online_lab)
+	# 底部按钮
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 16)
+	box.add_child(row)
+	var ok := Button.new()
+	ok.text = "开始（困难）"
+	ok.add_theme_font_size_override("font_size", 17)
+	ok.pressed.connect(_confirm_hard)
+	row.add_child(ok)
+	var back := Button.new()
+	back.text = "返回"
+	back.pressed.connect(_close_hard_cfg)
+	row.add_child(back)
+	# 统一深色按钮样式（normal）
+	for b in [_llm_btn, _local_btn, ok, back]:
+		var st := StyleBoxFlat.new()
+		st.bg_color = Color(0.16, 0.19, 0.29)
+		st.border_color = Color(0.45, 0.42, 0.30)
+		st.set_border_width_all(1)
+		st.set_corner_radius_all(8)
+		b.add_theme_stylebox_override("normal", st)
+		b.add_theme_color_override("font_color", Color(0.92, 0.95, 0.99))
+	_choose_llm()
+	_check_online_async()
+
+func _choose_llm() -> void:
+	_hard_choice = "llm"
+	if _llm_btn != null and _llm_btn.button_pressed:
+		if _local_btn != null and _local_btn.button_pressed:
+			_local_btn.button_pressed = false
+
+func _choose_local() -> void:
+	_hard_choice = "local"
+	if _local_btn != null and _local_btn.button_pressed:
+		if _llm_btn != null and _llm_btn.button_pressed:
+			_llm_btn.button_pressed = false
+
+## 异步联网检测：豆包轻问一句；带超时兜底（Godot 解析受限等环境因素也不卡 UI）
+func _check_online_async() -> void:
+	if _llm_btn == null:
+		return
+	_llm_btn.disabled = true
+	_online_lab.text = "正在检测网络…"
+	_online_t0 = Time.get_ticks_msec()
+	_online_done = false
+	if _online_http != null and is_instance_valid(_online_http):
+		_online_http.queue_free()
+	var http := HTTPRequest.new()
+	_online_http = http
+	add_child(http)
+	var body := JSON.stringify({
+		"model": "doubao-seed-evolving",
+		"input": [{"role": "user", "content": [{"type": "input_text", "text": "OK"}]}],
+	})
+	var err := http.request(
+		"https://ark.cn-beijing.volces.com/api/v3/responses",
+		["Authorization: Bearer " + AICfg.api_key(), "Content-Type: application/json"],
+		HTTPClient.METHOD_POST, body)
+	if err != OK:
+		_set_online(false, "无法发起请求")
+		return
+	http.request_completed.connect(_online_done_cb)
+
+func _online_done_cb(res: Array) -> void:
+	if _online_done:
+		return
+	_online_done = true
+	var code: int = res[1]
+	var why := "网络正常" if code == 200 else "请求失败(%d)" % code
+	_set_online(code == 200, why)
+
+func _set_online(ok: bool, why: String) -> void:
+	_online_done = true
+	if _llm_btn == null:
+		return
+	if ok:
+		_llm_btn.disabled = false
+		_llm_btn.button_pressed = true
+		_choose_llm()
+		_online_lab.text = "网络正常：可选用豆包战术模型"
+	else:
+		_llm_btn.disabled = true
+		_llm_btn.button_pressed = false
+		_choose_local()
+		_online_lab.text = "网络不可用（%s）：已用本地 AI" % why
+
+func _online_poll() -> void:
+	if _online_done or _online_t0 == 0:
+		return
+	if Time.get_ticks_msec() - _online_t0 > 7000:
+		_set_online(false, "超时")
+		if _online_http != null and is_instance_valid(_online_http):
+			_online_http.queue_free()
+			_online_http = null
+
+func _confirm_hard() -> void:
+	_config["difficulty"] = "hard"
+	_config["ai_backend"] = _hard_choice
+	Global.difficulty = "hard"
+	Global.ai_backend = _hard_choice
+	_close_hard_cfg()
+	_show_panel("offline")
+
+func _close_hard_cfg() -> void:
+	if _hard_layer != null and is_instance_valid(_hard_layer):
+		_hard_layer.queue_free()
+	_hard_layer = null

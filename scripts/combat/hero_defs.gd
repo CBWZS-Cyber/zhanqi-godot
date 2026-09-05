@@ -39,13 +39,20 @@ static func make(def_id: String) -> BattleUnit:
 	d["id"] = def_id
 	return BattleUnit.new(d)
 
+## 禁用英雄池：匹配/选人不可选（数据保留，待平衡后从列表移除即可恢复）
+const BANNED := []            # 禁用池（暂空；如需禁某英雄在此加 id）
+
+## 该英雄是否可进入选人/匹配池
+static func is_pickable(id: String) -> bool:
+	return not BANNED.has(id) and str(id) != "demo_hero" and str(id) != "example_hero"
+
 ## 全部英雄注册表（剧情名单由用户随后提供；demo_hero 仅用于链路验证）
 const ALL := {
 	# —— 剧情英雄 · 元晶龙王（老方案 = 英雄资料汇总 01：血7/能12/速175；元晶印记 第2回合起 +1）——
 	"crystal_dragon": {
 		"name": "元晶龙王",
 		"element": "元",
-		"hp": 7, "energy": 12, "armor": 2, "speed": 175,
+		"hp": 7, "shield_cap": 7, "energy": 12, "armor": 2, "speed": 175,
 		"counters": {
 			"元晶": {"start": 3, "per_turn": 1, "start_round": 2, "max": 0},
 		},
@@ -95,7 +102,7 @@ const ALL := {
 	"yao_shi": {
 		"name": "药师",
 		"element": "木",
-		"hp": 10, "energy": 0, "energy_max": -1, "armor": 1, "speed": 102,
+		"hp": 10, "shield_cap": 10, "energy": 0, "energy_max": -1, "armor": 1, "speed": 102,
 		"turn_end_effects": [
 			{"kind": "if_hp_shield", "hp_max": 4, "hp": 1, "shield": 1},
 		],
@@ -139,7 +146,7 @@ const ALL := {
 	# —— 剧情英雄 · 灵虚数影（辛子祺老师不离谱版 · 神秘 6/32/甲0/234；60%闪避/增伤/破甲）——
 	"ling_xu": {
 		"name": "灵虚数影", "element": "神秘",
-		"hp": 6, "energy": 32, "armor": 0, "speed": 234, "evasion_pct": 60,
+		"hp": 6, "shield_cap": 6, "energy": 32, "armor": 0, "speed": 234, "evasion_pct": 60,
 		"skills": {"passive": "shu_yu", "actives": ["tian_ji", "jie_xi", "ji_dian", "shu_hai_teng_nuo"]},
 	},
 	# —— 剧情英雄 · 辛克莱（新表：火 6血/理智机制 上限25/甲1/136）——

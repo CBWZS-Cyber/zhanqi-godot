@@ -24,13 +24,12 @@ var _tip_desc: Label
 var _confs: Array[Dictionary] = []   # 容器缩放配置
 
 func _ready() -> void:
-	get_viewport().size_changed.connect(_fit)
 	_build()
 	run_demo("1v1")
 	_refit()
 
 func _process(_delta: float) -> void:
-	# 仅 tooltip 需要逐帧跟随；其余重排由 size_changed 信号驱动
+	_fit()              # 每帧无条件重排：缩放/内容变化即时生效，杜绝错拍
 	if _tip.visible:
 		_place_tip()
 

@@ -17,6 +17,7 @@ var hp: int = 100
 var max_energy: int = 50
 var energy: int = 50
 var shield: int = 0
+var shield_cap: int = 0      # 护盾上限：0=不限；>0 时加盾/设盾被裁剪到该值（per-hero 由 def shield_cap 提供）
 var armor: int = 0
 var speed: int = 5          # 基础速度（行动先后由战斗层按 effective_speed 排序，大者先动）
 var speed_buff: int = 0     # 速度加成（增益，如“以命相搏”+200）
@@ -57,6 +58,7 @@ func _init(def: Dictionary) -> void:
 	max_energy = int(def.get("energy_max", int(def.get("energy", 50))))
 	energy = int(def.get("energy", max_energy))
 	shield = 0                                  # 初始一律 0，见文件头约定
+	shield_cap = int(def.get("shield_cap", 0))  # 护盾上限（0=不限）
 	armor = int(def.get("armor", 0))
 	speed = int(def.get("speed", 5))
 	var cc: Dictionary = def.get("counters", {})
@@ -161,6 +163,9 @@ var _revive_hp_pct := 0
 var _revive_uses := 1
 var _corpse := false         # 死亡待复活中
 var _lost_skills := {}       # 被掠夺/禁用的技能 id -> true（无法使用）
+var stolen_skill_id := ""    # 已夺得的技能 id（空=当前无掠夺技）
+var _stolen_pending := ""    # 掠夺所得、待“下回合开始”生效的技能 id
+var _stolen_slot := 0        # 掠夺技替换掉的技能槽（1..4）
 var _hp_flags := []          # def["hp_threshold_flags"]：生命跨阈值自动置/清 flag
 var hit_events: Array = []   # 受击回调：[Callable(attacker, element)]（锻体/防守计数等注册用）
 
@@ -272,17 +277,6 @@ func heal(amount: int) -> int:
 	hp = mini(max_hp, hp + amount)
 	return hp - before
 
-## 统一"受到真伤"入口：药师被动（存在护盾时免疫真伤）挂在这里；返回实际扣血量
-func take_true_damage(amount: int, _reason: String = "") -> int:
-	var dmg := maxi(0, amount)
-	if dmg <= 0:
-		return 0
-	if shield > 0 and has_flag("shield_true_immune"):
-		return 0
-	var before := hp
-	lose_hp(dmg)
-	return before - hp
-
 ## 直接扣血（已算护盾吸收后）；由 take_damage 调用，也可用于无视护盾的伤害
 func lose_hp(amount: int) -> void:
 	if not alive and not _corpse:
@@ -357,7 +351,7 @@ func take_damage(amount: int, info := {}) -> Dictionary:
 	if el_boost > 0:
 		amount = maxi(1, ceili(float(amount) * float(100 + el_boost) / 100.0))
 		rest = amount
-	# 0) 免伤百分比（全局/该属性；来自锻体/防守态/血狱等）
+# 0) 免伤百分比（全局/该属性；来自锻体/防守态/血狱等）
 	var mit := int(_mitig.get("all", 0)) + int(_mitig.get(element, 0))
 	if attacker != null:
 		mit += int(_mitig_att.get(attacker.get_instance_id(), {}).get("pct", 0))
@@ -388,13 +382,13 @@ func take_damage(amount: int, info := {}) -> Dictionary:
 	if attacker != null and _reflect_pct > 0 and result["hp_lost"] > 0:
 		var back := ceili(float(result["hp_lost"]) * float(_reflect_pct) / 100.0)
 		if back > 0:
-			attacker.take_true_damage(back, "反伤")
+			attacker.lose_hp(back)
 			result["reflected"] = back
 	# 4b) 重伤：受击后额外受 0.5×层 真伤（每回合末层数-1，见 tick_end）
 	if result["hp_lost"] > 0 and status_stacks("heavy_wound") > 0:
 		var extra := ceili(float(status_stacks("heavy_wound")) * 0.5)
 		var b3 := hp
-		take_true_damage(extra, "重伤")
+		lose_hp(extra)
 		result["hp_lost"] += b3 - hp
 		result["killed"] = not alive
 	# 5) 受击事件（锻体/防守状态机等监听）
@@ -408,6 +402,8 @@ func take_damage(amount: int, info := {}) -> Dictionary:
 func add_shield(amount: int) -> void:
 	if amount > 0:
 		shield += amount
+		if shield_cap > 0 and shield > shield_cap:
+			shield = shield_cap
 
 func remove_shield(amount: int) -> void:
 	shield = maxi(0, shield - amount)
@@ -417,6 +413,8 @@ func clear_shield() -> void:
 
 func set_shield(amount: int) -> void:
 	shield = maxi(0, amount)
+	if shield_cap > 0 and shield > shield_cap:
+		shield = shield_cap
 
 ## ---------- 护甲增减（支持上限封顶，如“架盾护甲+1，上限3”） ----------
 func add_armor(amount: int, max_cap: int = 0) -> int:
@@ -497,6 +495,26 @@ func mark_skill_lost(skill_id: String) -> void:
 
 func is_skill_lost(skill_id: String) -> bool:
 	return _lost_skills.has(skill_id)
+
+## 掠夺登记：夺得的技能在下个回合开始时替换第 slot 槽（默认 1 槽）
+func set_stolen_pending(skill_id: String, slot: int = 1) -> void:
+	if skill_id == "":
+		return
+	_stolen_pending = skill_id
+	_stolen_slot = clampi(slot, 1, 4)
+
+## 回合开始：把待生效的掠夺技装进技能槽（自身原技能被替换）
+func _apply_stolen_pending() -> String:
+	if _stolen_pending == "":
+		return ""
+	var sid := _stolen_pending
+	var slot := _stolen_slot if _stolen_slot >= 1 else 1
+	_stolen_pending = ""
+	if slot > actives.size():
+		return ""
+	actives[slot - 1] = _make_skill(sid)
+	stolen_skill_id = sid
+	return "；%s 掌握了掠夺来的【%s】（替换第 %d 技能槽）" % [name, actives[slot - 1].display_name, slot]
 
 ## ---------- 状态/印记（层数制：bleed 流血 / burn 灼烧 / wound 创伤…） ----------
 ## 层数 = 等级（“流血2级”=bleed 2 层）。tick 规则见 SkillEffects.tick_* 系列。
@@ -579,7 +597,9 @@ func use_active(i: int, ctx: Dictionary) -> String:
 	var action_log := SkillEffects.tick_action_statuses(self)
 	if not alive:
 		return action_log + "%s 因流血倒下了" % name
-	var out := sk.activate(self, ctx)
+	var ctx2: Dictionary = ctx.duplicate()
+	ctx2["slot"] = i      # 效果函数可据此定位自身技能槽（如掠夺替换槽位）
+	var out := sk.activate(self, ctx2)
 	if action_log != "":
 		out = action_log + "；" + out
 	return out
@@ -632,7 +652,7 @@ func _settle_share_drain() -> String:
 		var loss := ceili(float(tu.hp) * 0.3)
 		if loss <= 0:
 			continue
-		tu.take_true_damage(loss, "失神吸取")
+		tu.lose_hp(loss)
 		var got := heal(loss)
 		out += "%s 回合末吸取 %s：流失 %d 生命，邪神回 %d 血" % [name, tu.name, loss, got]
 	return out
@@ -642,6 +662,7 @@ func _settle_share_drain() -> String:
 func on_turn_start() -> String:
 	var out := ""
 	_rounds += 1
+	out += _apply_stolen_pending()
 	for k in _counters_cfg:
 		var cfg: Dictionary = _counters_cfg[k]
 		if int(cfg.get("per_turn", 0)) <= 0:
@@ -717,3 +738,76 @@ func to_summary() -> String:
 	if element != "":
 		tag = "%s〔%s〕" % [name, element]
 	return "%s  HP %d/%d  能量 %d/%d  盾 %d  甲 %d  速 %d" % [tag, hp, max_hp, energy, max_energy, shield, armor, speed]
+
+## =============== 前瞻推演 · 快照 / 回滚 ===============
+## 供战斗层做“多步推演选最优”用：记录当前全部会随战斗变化的字段，
+## 推演模拟后 restore() 还原 —— 同一实例原地存取，Timer 的 Callable 直接复用。
+func snapshot() -> Dictionary:
+	var s := {
+		"hp": hp, "energy": energy, "shield": shield, "armor": armor,
+		"alive": alive, "cell": cell, "speed_buff": speed_buff,
+		"_speed_mods": _speed_mods.duplicate(),
+		"counters": counters.duplicate(),
+		"statuses": statuses.duplicate(),
+		"flags": flags.duplicate(),
+		"_timers": _timers.duplicate(),
+		"dmg_mult": dmg_mult,
+		"evasion_pct": evasion_pct,
+		"_reflect_pct": _reflect_pct,
+		"_mitig": _mitig.duplicate(),
+		"_mitig_att": _mitig_att.duplicate(),
+		"dmg_slot": _dmg_slot.duplicate(),
+		"sanity": sanity,
+		"stolen_skill_id": stolen_skill_id,
+		"_corpse": _corpse,
+		"_revive_uses": _revive_uses,
+		"_share_active": _share_active,
+		"_share_targets": _share_targets.duplicate(),
+		"_passive_cd_round": _passive_cd_round,
+		"cds": [],
+	}
+	if passive != null:
+		s["cds"].append(passive.current_cd)
+	else:
+		s["cds"].append(0)
+	for sk in actives:
+		s["cds"].append(sk.current_cd if sk != null else 0)
+	return s
+
+func restore(s: Dictionary) -> void:
+	hp = int(s.get("hp", hp))
+	energy = int(s.get("energy", energy))
+	shield = int(s.get("shield", shield))
+	armor = int(s.get("armor", armor))
+	alive = bool(s.get("alive", alive))
+	cell = s.get("cell", cell) as Vector2i
+	speed_buff = int(s.get("speed_buff", speed_buff))
+	_speed_mods = (s.get("_speed_mods", {}) as Dictionary).duplicate()
+	counters = (s.get("counters", {}) as Dictionary).duplicate()
+	statuses = (s.get("statuses", {}) as Dictionary).duplicate()
+	flags = (s.get("flags", {}) as Dictionary).duplicate()
+	_timers = (s.get("_timers", {}) as Dictionary).duplicate()
+	dmg_mult = float(s.get("dmg_mult", dmg_mult))
+	evasion_pct = int(s.get("evasion_pct", evasion_pct))
+	_reflect_pct = int(s.get("_reflect_pct", _reflect_pct))
+	_mitig = (s.get("_mitig", {}) as Dictionary).duplicate()
+	_mitig_att = (s.get("_mitig_att", {}) as Dictionary).duplicate()
+	_dmg_slot = (s.get("dmg_slot", {}) as Dictionary).duplicate()
+	sanity = int(s.get("sanity", sanity))
+	stolen_skill_id = str(s.get("stolen_skill_id", stolen_skill_id))
+	_corpse = bool(s.get("_corpse", _corpse))
+	_revive_uses = int(s.get("_revive_uses", _revive_uses))
+	_share_active = bool(s.get("_share_active", _share_active))
+	_share_targets = (s.get("_share_targets", []) as Array).duplicate()
+	_passive_cd_round = int(s.get("_passive_cd_round", _passive_cd_round))
+	var cds: Array = s.get("cds", [])
+	var ci := 0
+	if passive != null and cds.size() > 0:
+		passive.current_cd = int(cds[ci]); ci += 1
+	elif cds.size() > 0:
+		ci += 1
+	for sk in actives:
+		if ci < cds.size():
+			if sk != null:
+				sk.current_cd = int(cds[ci])
+			ci += 1

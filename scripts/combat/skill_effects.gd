@@ -241,7 +241,7 @@ const DATA := {
 		"name": "药灵", "element": "圣灵", "kind": "ultimate", "energy_cost": 12,
 		"range": 1,
 		"ai": {"self_buff": true, "self_kind": "heal"},
-		"desc": "生命降至1并获得等同于消耗生命值一半的护盾，本回合内血量最低为1（锁血），并对相邻敌人造成等同于当前护盾量的伤害（至少 2 点）。",
+		"desc": "生命降至1并获得等同于消耗生命值一半的护盾，本回合内血量最低为1（锁血），并对相邻敌人造成等同于当前护盾量的伤害。",
 	},
 
 	"duan_ti": {"name": "锻体", "element": "物理", "kind": "passive",
@@ -273,7 +273,7 @@ const DATA := {
 
 	"lve_duo": {"name": "掠夺", "element": "神秘", "kind": "active", "energy_cost": 8,
 		"range": 1,
-		"desc": "掠夺相邻一个敌人身上的一个技能（大招除外）：该敌人本局无法再使用它，自己下回合起可使用（技能槽由战斗层替换显示）。"},
+		"desc": "掠夺相邻一个敌人身上的一个技能（大招除外）：该敌人本局无法再使用它，自己从下回合起在第 1 技能槽使用它（原第 1 槽技能被替换）。"},
 
 	"mei_huo": {"name": "魅惑", "element": "毒", "kind": "active", "energy_cost": 5,
 		"range": 2,
@@ -614,7 +614,7 @@ static func _ef_sui_jing_zhan(user: BattleUnit, ctx: Dictionary) -> String:
 		if tu == null:
 			continue
 		var before := tu.hp
-		tu.take_true_damage(3)
+		tu.lose_hp(3)
 		out += "；%s 受 %d 真伤" % [tu.name, before - tu.hp]
 	if targets.is_empty():
 		out += "（无目标）"
@@ -684,7 +684,7 @@ static func _ef_zhi_pei(user: BattleUnit, ctx: Dictionary) -> String:
 			continue
 		if mode == "1v1":
 			if tu.counter("污染") >= 8:
-				tu.take_true_damage(tu.hp)
+				tu.lose_hp(tu.hp)
 				out += "；单挑斩杀 %s（污染 %d ≥ 8）→ 邪神获胜" % [tu.name, tu.counter("污染")]
 				_call_win(ctx)
 			else:
@@ -734,7 +734,7 @@ static func _ef_hei_shan(user: BattleUnit, ctx: Dictionary) -> String:
 			out += "；%s 失去 %d 点生命（%d 层×10%%）" % [tu.name, r["hp_lost"] + r["absorbed"], layers]
 		if layers >= 6:
 			if mode == "1v1":
-				tu.take_true_damage(tu.hp)
+				tu.lose_hp(tu.hp)
 				out += "，单挑斩杀 %s → 邪神获胜" % tu.name
 				_call_win(ctx)
 			else:
@@ -758,7 +758,7 @@ static func hit_group(targets: Array, dmg: int, true_dmg := false) -> String:
 			continue
 		if true_dmg:
 			var before := tu.hp
-			tu.take_true_damage(dmg)
+			tu.lose_hp(dmg)
 			out += "，%s 受 %d 真伤" % [tu.name, before - tu.hp]
 		else:
 			var r: Dictionary = tu.take_damage(dmg)
@@ -769,7 +769,7 @@ static func hit_group(targets: Array, dmg: int, true_dmg := false) -> String:
 static func lose_pct_max_hp(t: BattleUnit, pct_per: int, times: int) -> int:
 	var loss := ceili(float(t.max_hp) * 0.01 * float(pct_per) * float(times))
 	if loss > 0:
-		t.take_true_damage(loss)
+		t.lose_hp(loss)
 	return loss
 
 ## 给一组目标各 +n 层资源（自动触发 layer_rules）
@@ -958,7 +958,7 @@ static func hp_pct(t: BattleUnit) -> int:
 ## 条件斩杀：目标当前生命 ≤ 最大生命的 pct% 时直接斩杀（返回真）
 static func cut_if_under_pct(t: BattleUnit, pct: int) -> bool:
 	if hp_pct(t) <= pct:
-		t.take_true_damage(t.hp)
+		t.lose_hp(t.hp)
 		return true
 	return false
 
@@ -1165,9 +1165,7 @@ static func _clear_random_debuff(t: BattleUnit) -> String:
 	return "无负面可清"
 
 static func _ef_gao_yu(user: BattleUnit, _ctx: Dictionary) -> String:
-	if not user.has_flag("shield_true_immune"):
-		user.add_flag("shield_true_immune")
-	return "%s 的【膏腴】生效：能量无上限（当前 %d）；存在护盾时免疫受到的真伤" % [user.name, user.energy]
+	return "%s 的【膏腴】生效：能量无上限（当前 %d）" % [user.name, user.energy]
 
 ## 主动1·建木生发：耗自身血=目标当前血一半 → 目标受“已损生命一半”伤害 → 回能=消耗量
 static func _ef_jian_mu_sheng_fa(user: BattleUnit, ctx: Dictionary) -> String:
@@ -1180,7 +1178,7 @@ static func _ef_jian_mu_sheng_fa(user: BattleUnit, ctx: Dictionary) -> String:
 		return "%s 生命不足（%d/%d），【建木生发】无法发动（需要 %d）" % [user.name, user.hp, user.max_hp, cost]
 	user.lose_hp(cost)
 	var lost := tu.max_hp - tu.hp
-	var dmg := maxi(2, ceili(float(maxi(0, lost)) * 0.5))
+	var dmg := ceili(float(maxi(0, lost)) * 0.5)
 	var r: Dictionary = tu.take_damage(dmg)
 	user.add_energy(cost)
 	return "%s 释放【建木生发】：消耗自身 %d 生命，%s 受 %d 伤，回复 %d 能量" % [user.name, cost, tu.name, r["hp_lost"] + r["absorbed"], cost]
@@ -1229,7 +1227,7 @@ static func _ef_yao_ling(user: BattleUnit, ctx: Dictionary) -> String:
 		if tu == null:
 			continue
 		var before := tu.hp
-		tu.take_true_damage(maxi(2, user.shield), "药灵")
+		tu.lose_hp(user.shield)
 		out += "；%s 受 %d 真伤" % [tu.name, before - tu.hp]
 	if targets.is_empty():
 		out += "（相邻无敌人）"
@@ -1301,7 +1299,7 @@ static func _ef_ptq(user: BattleUnit, ctx: Dictionary) -> String:
 	var out := "%s 释放【普通拳】：%s 受 %d 伤" % [user.name, tu.name, r["hp_lost"] + r["absorbed"]]
 	if tu.has_flag("taunted"):
 		var before := tu.hp
-		tu.take_true_damage(1)
+		tu.lose_hp(1)
 		out += "，嘲讽目标额外 %d 真伤" % (before - tu.hp)
 	user.add_energy(2)
 	return out
@@ -1324,23 +1322,24 @@ static func _ef_xue_yu(user: BattleUnit, ctx: Dictionary) -> String:
 static func _ef_kn(user: BattleUnit, _ctx: Dictionary) -> String:
 	return "%s 的【狂怒】生效：生命≤20%% 时伤害翻倍（当前倍率 %.1f）" % [user.name, user.dmg_mult]
 
-## 掠夺：目标失去一个主动技能（本局）；自身获得其 id（技能栏替换由战斗层）
+## 掠夺：目标失去一个主动技能（本局）；自身下回合起在第 slot 槽获得它
 static func _ef_lve(user: BattleUnit, ctx: Dictionary) -> String:
 	var targets: Array = ctx.get("targets", [])
 	if targets.is_empty():
 		return "%s 释放【掠夺】（无目标）" % user.name
 	var tu := targets[0] as BattleUnit
-	for s in tu.actives:
+	var slot := int(ctx.get("slot", 1))
+	for i in tu.actives.size():
+		if i >= 3:
+			break             # 第 4 槽（大招）不可掠夺
+		var s := tu.actives[i]
 		if s == null:
-			continue
-		var slot_i := tu.actives.find(s) + 1
-		if slot_i >= 4:
 			continue
 		if not tu.is_skill_lost(s.id):
 			tu.mark_skill_lost(s.id)
-			user.set_meta("stolen_skill", s.id)
+			user.set_stolen_pending(s.id, slot)
 			user.add_flag("has_stolen")
-			return "%s 掠夺了 %s 的【%s】（目标本局无法再用；下回合起可释放掠夺技）" % [user.name, tu.name, s.display_name]
+			return "%s 掠夺了 %s 的【%s】：目标本局无法再用，自己下回合起第 %d 技能槽换成该技能" % [user.name, tu.name, s.display_name, slot]
 	return "%s 释放【掠夺】：%s 没有可掠夺的技能（大招除外）" % [user.name, tu.name]
 
 ## 魅惑：≤2 目标本回合无法造成伤害
@@ -1584,7 +1583,7 @@ static func _ef_xuanzhong(user: BattleUnit, ctx: Dictionary) -> String:
 			continue
 		var dmg := ceili(float(maxi(0, tu.max_hp - tu.hp)) * 0.2)
 		var before := tu.hp
-		tu.take_true_damage(dmg)
+		tu.lose_hp(dmg)
 		out += "；%s 失去 %d 真伤（已损生命20%%）" % [tu.name, before - tu.hp]
 		if tu.status_stacks("heavy_wound") >= 4:
 			apply_burn(tu)

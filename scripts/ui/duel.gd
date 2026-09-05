@@ -58,6 +58,7 @@ var _cell_coords: Array = []
 var _cell_buttons: Array = []
 var _end_turn_btn: Button
 var _again_btn: Button
+var _settings: SettingsLayer = null
 var _last_cell := -1.0
 
 func _ready() -> void:
@@ -79,10 +80,9 @@ func _ready() -> void:
 	pad.add_child(_build_main())
 	_hero_ids = []
 	for k in _HD.ALL:
-		if str(k) == "demo_hero":
-			continue   # 演示占位英雄不进选人池
+		if not HeroDefs.is_pickable(str(k)):
+			continue
 		_hero_ids.append(str(k))
-	get_viewport().size_changed.connect(_apply_board_size)
 	_apply_board_size()
 	_last_cell = _board_cell_size()
 	_select_screen()
@@ -166,8 +166,8 @@ func _build_main() -> VBoxContainer:
 	# 顶栏
 	var top := HBoxContainer.new()
 	var back := Button.new()
-	back.text = "‹ 返回菜单"
-	back.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/MainUI.tscn"))
+	back.text = "⚙ 设置"
+	back.pressed.connect(_open_settings)
 	_style_btn(back)
 	top.add_child(back)
 	_title = Label.new()
@@ -324,6 +324,12 @@ func _apply_board_size() -> void:
 		var tk = _tokens[k]
 		if is_instance_valid(tk):
 			tk.custom_minimum_size = Vector2(cs, cs)
+
+func _process(_d: float) -> void:
+	var cs := _board_cell_size()
+	if absf(cs - _last_cell) > 0.5:
+		_last_cell = cs
+		_apply_board_size()
 
 func _build_board(holder: CenterContainer) -> void:
 	_wrap = Control.new()
@@ -529,36 +535,20 @@ func _on_start() -> void:
 	_battle = _BAT.new(_red_id, _blue_id)
 	_battle.human_mode = true
 	_battle.human_team = 0
-	if not _battle.log_appended.is_connected(_on_battle_log):
-		_battle.log_appended.connect(_on_battle_log)
-	if not _battle.state_changed.is_connected(_on_battle_state):
-		_battle.state_changed.connect(_on_battle_state)
-	if not _battle.battle_ended.is_connected(_on_battle_end):
-		_battle.battle_ended.connect(_on_battle_end)
 	if Global.offline_type == "hotseat":
 		_battle.human_teams = [0, 1]
+	else:
+		var diff := str(Global.difficulty)
+		if diff == "normal" or diff == "hard":
+			_battle.ai_level = diff
+			_battle.side_levels = {1: diff}
+			if diff == "hard":
+				_battle.ai_backend = str(Global.ai_backend)
 	_focus = null
 	_cast_slot = 0
 	_title.text = "红方 %s（你）vs 蓝方 %s（AI）" % [_HD.ALL[_red_id].name, _HD.ALL[_blue_id].name]
 	_end_turn_btn.visible = true
 	_step()
-
-func _on_battle_log(line: String) -> void:
-	if line.begins_with("——"):
-		_log.append_text("[color=#d8c9a0]%s[/color]\n" % line)
-	elif line.begins_with("=="):
-		_log.append_text("[color=#ffd95a]%s[/color]\n" % line)
-	else:
-		_log.append_text(line + "\n")
-
-func _on_battle_state() -> void:
-	_refresh_board_view()
-
-func _on_battle_end(winner: String) -> void:
-	_phase = "over"
-	_over.text = "对局结束：%s" % winner
-	_end_turn_btn.visible = false
-	_again_btn.visible = true
 
 func _step() -> void:
 	if _battle == null:
@@ -619,7 +609,9 @@ func _refresh_ui() -> void:
 			continue
 		var nb := Button.new()
 		var why := ""
-		if me.energy < sk.energy_cost:
+		if me.is_skill_lost(sk.id):
+			why = "被掠夺"
+		elif me.energy < sk.energy_cost:
 			why = "能量不足"
 		elif sk.current_cd > 0:
 			why = "冷却%d" % sk.current_cd
@@ -708,6 +700,20 @@ func _on_again() -> void:
 	_again_btn.visible = false
 	_battle = null
 	_select_screen()
+
+## 打开局内设置（含 Bug 上报）
+func _open_settings() -> void:
+	if _settings == null or not is_instance_valid(_settings):
+		_settings = SettingsLayer.new()
+		add_child(_settings)
+		_settings.visible = false
+	var mode := "1V1 · 热座" if Global.offline_type == "hotseat" else "1V1 · 离线 PVE"
+	_settings.ctx = {
+		"mode": mode,
+		"round": _battle.round if _battle != null else 0,
+		"logs": _battle.log if _battle != null else [],
+	}
+	_settings.open_popup()
 
 func _on_end_turn() -> void:
 	if _battle != null and _battle.waiting():
@@ -841,25 +847,17 @@ func _refresh_board_view() -> void:
 		if u != null:
 			border_col = COL_RED if u.team == 0 else COL_BLUE
 			bw = 3.0
-		# 三态样式：按按钮缓存实例（只改属性不新建，避免刷新期 GC 压力）
-		var st3 = cb.get_meta("styles") if cb.has_meta("styles") else null
-		if st3 == null:
-			var n0 := StyleBoxFlat.new()
-			var h0 := StyleBoxFlat.new()
-			var p0 := StyleBoxFlat.new()
-			cb.add_theme_stylebox_override("normal", n0)
-			cb.add_theme_stylebox_override("hover", h0)
-			cb.add_theme_stylebox_override("pressed", p0)
-			cb.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-			cb.set_meta("styles", [n0, h0, p0])
-			st3 = [n0, h0, p0]
-		var n: StyleBoxFlat = st3[0]
+		# 三态样式（独立实例，避免共享主题样式互串）
+		var n := StyleBoxFlat.new()
 		n.bg_color = base
 		n.border_color = border_col
 		n.set_border_width_all(int(bw))
-		st3[1].bg_color = base.lerp(Color(1, 1, 1), 0.10)
-		st3[2].bg_color = base.lerp(Color(0, 0, 0), 0.12)
-		cb.queue_redraw()
+		var h := n.duplicate(); h.bg_color = base.lerp(Color(1, 1, 1), 0.10)
+		var pr := n.duplicate(); pr.bg_color = base.lerp(Color(0, 0, 0), 0.12)
+		cb.add_theme_stylebox_override("normal", n)
+		cb.add_theme_stylebox_override("hover", h)
+		cb.add_theme_stylebox_override("pressed", pr)
+		cb.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 		cb.text = ""
 		if _phase == "select":
 			cb.visible = false

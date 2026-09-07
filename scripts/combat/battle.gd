@@ -1,0 +1,659 @@
+class_name Battle
+extends RefCounted
+## 战棋 · 战斗管理器（1V1，3×3 主区 + 左右出生格）
+## 回合结构：每棋每回合 = 移动权 + 技能权（先移后放、各自可选；位移技不限制在未移动时使用）
+## 驱动方式：
+##   - run_step() 自动结算直到“轮到人类/分出胜负”，返回状态
+##   - 人类回合：human_move(cell) → human_cast(slot, enemy) / human_done()
+##   - AI 回合：BattleAI 自动决策（plan_move + plan_skill）
+## simulate() = 全自动（测试用）
+
+const SPAWN_RED := Vector2i(0, 2)
+const SPAWN_BLUE := Vector2i(4, 2)
+const MAX_ROUNDS := 80
+
+var units: Array[BattleUnit] = []
+var log: Array[String] = []
+var round := 0
+var winner := ""
+var human_mode := false
+var human_team := 0
+var human_teams: Array = []   # 人类操作的阵营列表（开房间= [0,1]）
+var ai_level := "easy"        # easy / normal / hard（PVE 由对局脚本按 Global.difficulty 注入）
+var ai_backend := "llm"      # 困难后端："llm"(豆包) | "local"(本地)，_maybe_llm_plan 据此门控
+var _llm_plans := {}          # 最高难度：本回合豆包预案 idx_str -> plan
+var llm_tactics := {}        # 豆包战术倾向 {focus, posture, protect}（第2步规则 AI 消费）
+var _hd: GDScript
+var _se: GDScript
+var _queue: Array = []
+var _wait := false
+var _cur: BattleUnit = null
+var _h_moved := false
+var rng := RandomNumberGenerator.new()   # 联机确定性随机源（_init 默认 randomize；联机开局 set_rng_seed）
+
+func _init(red_hero_id: String, blue_hero_id: String) -> void:
+	_hd = load("res://scripts/combat/hero_defs.gd")
+	_se = load("res://scripts/combat/skill_effects.gd")
+	rng.randomize()
+	units = [_make(red_hero_id, 0, SPAWN_RED), _make(blue_hero_id, 1, SPAWN_BLUE)]
+	log.push_back("对局开始：红方 %s（速%d）vs 蓝方 %s（速%d）" % [units[0].name, units[0].speed, units[1].name, units[1].speed])
+
+## 联机确定性随机源：开局包设定同一种子 → 双方引擎随机结果一致
+func set_rng_seed(s: int) -> void:
+	rng.seed = s
+
+func _make(hero_id: String, team: int, cell: Vector2i) -> BattleUnit:
+	var u := BattleUnit.new(_hd.ALL[hero_id].duplicate(true))
+	u.team = team
+	u.cell = cell
+	_check_fear(u)
+	u.rng = rng
+	return u
+
+## 全自动跑完整局（测试用）
+func simulate() -> String:
+	while winner == "" and round < MAX_ROUNDS:
+		if run_step().has("over"):
+			break
+	return winner
+
+## 步进：结算至“人类待操作”或“对局结束”。
+func run_step() -> Dictionary:
+	while winner == "" and round < MAX_ROUNDS:
+		if _queue.is_empty():
+			# 修复：队列空 = 本回合行动完毕。旧版直接 _start_round 跳过了回合末结算，
+			# 导致灼烧/流血衰减、膏腴、理智回复与失控归零、剑域、掠夺解锁等
+			# 所有 end_turn 机制在真实对局中从未执行（单测直调 end_turn 掩盖了这一点）。
+			if round > 0:
+				_end_round()
+				if winner != "":
+					break
+			_start_round()
+		var actor := _poll_next()
+		if actor == null:
+			continue
+		if actor.has_flag("子体"):
+			_child_act(actor)
+			continue
+		if _is_human_side(actor):
+			if actor.has_flag("stun"):
+				log.push_back("%s 酒醉/眩晕，跳过本回合" % actor.name)
+				continue
+			if actor.sanity < 0:
+				_crazy(actor)
+				_check_win()
+				continue
+			_wait = true
+			_h_moved = false
+			_cur = actor
+			return {"wait": actor}
+		_turn_ai(actor)
+		_check_win()   # 每次行动后立刻判胜负（避免“已全灭仍继续”）
+	if winner == "":
+		winner = "僵局（%d 回合超时）" % MAX_ROUNDS
+		log.push_back("== %s ==" % winner)
+	return {"over": winner}
+
+func _start_round() -> void:
+	round += 1
+	log.push_back("—— 第 %d 回合 ——" % round)
+	for u in units:
+		var s: String = u.on_turn_start()
+		if s != "":
+			log.push_back(s)
+	_queue = []
+	for u in units:
+		if u.alive:
+			_queue.append(u)
+	# 2026-09-05 v2 调整：改为"每步现场决策"——回合初不再预生成预案，
+	# 每个 AI 单位行动前在 _turn_ai 中现问豆包（见 _maybe_llm_plan(u)）
+
+## 最高难度：为单个 AI 单位现场生成豆包预案（同步阻塞 ~1-4s/次）
+## v2：由 _turn_ai 在每个单位行动前调用，只决策当前单位 → 每步基于最新局面重新思考
+func _maybe_llm_plan(u: BattleUnit) -> void:
+	_llm_plans = {}
+	if ai_level != "hard" or ai_backend != "llm":
+		return
+	if u == null or not u.alive or _is_human_side(u):
+		return
+	if not AICfg.ready():
+		log.push_back("== 困难：未内置战术模型密钥，回退本地 AI ==")
+		return
+	log.push_back("== 敌方请来战术模型思考… ==")
+	_llm_plans = LLMDecider.plan_round(self, [u])
+	if _llm_plans.is_empty():
+		log.push_back("== 战术模型未响应，回退本地 AI ==")
+
+func _poll_next() -> BattleUnit:
+	if _queue.is_empty():
+		return null
+	var lst: Array = _se.speed_order(_queue)
+	var actor: BattleUnit = lst[0]
+	_queue.erase(actor)
+	return actor
+
+func _end_round() -> void:
+	for u in units:
+		var r: String = u.end_turn()
+		if r != "":
+			log.push_back(r)
+	_yumeiren_round_end()
+	_check_win()
+
+func _turn_ai(u: BattleUnit) -> void:
+	if not u.alive:
+		return
+	if u.has_flag("stun"):
+		log.push_back("%s 被眩晕，跳过本回合" % u.name)
+		return
+	if u.sanity < 0:
+		_crazy(u)
+		return
+	# 最高难度·豆包：每个 AI 单位行动前现场问豆包（v2，每步现想）；失败回退本地 AI
+	if ai_level == "hard" and ai_backend == "llm":
+		_maybe_llm_plan(u)
+		if _llm_plans.has(str(_idx_of(u))):
+			if _exec_llm_plan(u, _llm_plans[str(_idx_of(u))]):
+				return
+	var moved := false
+	var mv: Dictionary = BattleAI.plan_move(self, u)
+	if mv.get("act", "") == "move":
+		var cell: Vector2i = mv.get("cell", Vector2i.ZERO)
+		if cell in move_cells_of(u):
+			u.cell = cell
+			_check_fear(u)
+			moved = true
+			_check_fear(u)
+			log.push_back("%s 移动 → %s" % [u.name, cell])
+	var sk: Dictionary = BattleAI.plan_skill(self, u, moved)
+	if sk.get("act", "") == "skill":
+		var tg: BattleUnit = sk.get("target", null)
+		var tgs: Array = sk.get("targets", [])
+		if tgs.is_empty() and tg != null:
+			tgs = [tg]
+		_exec_skill(u, int(sk.get("slot", 1)), tgs, moved)
+
+func _crazy(u: BattleUnit) -> void:
+	var all: Array = []
+	for x in units:
+		# 失控不分敌我，但绝不会打到自己（设计稿：失控只是敌我不分）
+		if x.alive and x != u:
+			all.append(x)
+	u.add_flag("sanity_outbreak")   # 回合末 _apply_tefx 据此把理智归零
+	var slot := 1 + (rng.randi() % 4)
+	var res: String = u.use_active(slot, {"targets": all, "mode": "1v1", "battle": self, "allies": _allies_within(u, 1)})
+	log.push_back("【失控】%s 不受控制地释放技能：%s" % [u.name, res])
+
+## =============== 人类操作接口 ===============
+func waiting() -> bool:
+	return _wait
+
+func current() -> BattleUnit:
+	return _cur
+
+func human_moved() -> bool:
+	return _h_moved
+
+func human_move(cell: Vector2i) -> String:
+	if not _wait or _cur == null:
+		return "!当前不在你的回合"
+	if _h_moved:
+		return "!本回合已移动"
+	if not (cell in move_cells_of(_cur)):
+		return "!非法移动格"
+	_cur.cell = cell
+	_check_fear(_cur)
+	_h_moved = true
+	_check_fear(_cur)
+	log.push_back("%s 移动 → %s" % [_cur.name, cell])
+	return "%s 移动 → %s" % [_cur.name, cell]
+
+func human_cast(slot: int, enemy: BattleUnit = null, landing := Vector2i(-1, -1)) -> String:
+	if not _wait or _cur == null:
+		return "!当前不在你的回合"
+	var u := _cur
+	var sk := u.get_skill(slot)
+	if sk == null:
+		return "!技能槽无效"
+	if u.is_skill_lost(sk.id):
+		return "!该技能已被掠夺/禁用"
+	if u.has_flag("no_skill") or (slot == 4 and u.has_flag("no_ult")) or u.has_flag("no_damage"):
+		return "!当前状态禁止使用技能"
+	if sk.current_cd > 0:
+		return "!技能冷却中"
+	if u.energy < sk.energy_cost:
+		return "!能量不足"
+	var old := u.cell
+	var dest := old
+	if is_spread(u, slot):
+		if landing == Vector2i(-1, -1) or _cell_dist(landing, u.cell) != 1 or not _grid_free(landing):
+			return "!蔓延目标需为相邻空格"
+		if u.spread_used >= 2:
+			return "!本回合蔓延次数已用完（2/2）"
+		var _cc := 0
+		for _x in units:
+			if _x.has_flag("子体") and _x.team == u.team:
+				_cc += 1
+		if _cc >= CHILD_LIMIT:
+			return "!子体已达上限（%d）" % CHILD_LIMIT
+		u.spread_used += 1
+		var child := spawn_child(u, landing)
+		log.push_back("%s 蔓延出子体（HP %.0f）于 %s（本回合 %d/2）" % [u.name, child.hp, landing, u.spread_used])
+		return "%s 蔓延出子体于 %s（本回合 %d/2，不消耗行动）" % [u.name, landing, u.spread_used]
+	var dd := dash_dist_of(u, slot)
+
+	if is_dash(u, slot) and dd > 0:
+		if is_charge(u, slot):
+			if enemy == null:
+				return "!冲刺技能需先选择方向上的敌人"
+			dest = _charge_end_cell(u, enemy, dd)
+		else:
+			dest = landing if (landing in landable_cells(u, dd)) else _best_land_cell(u, enemy, dd)
+	# 位移落点可达性预检：失败则不移动
+	var rng := skill_range(u, slot)
+	var can := true
+	if not self_skill(u, slot):
+		if land_aoe(u, slot):
+			can = true
+		elif enemy != null:
+			can = _cell_dist(dest, enemy.cell) <= rng
+		else:
+			can = false
+			for f in alive_enemies_of(u):
+				if _cell_dist(dest, f.cell) <= rng:
+					can = true
+					break
+	if not can:
+		return "!位移后目标不在射程内（敌人太远，先靠近或换落点）"
+	if dest != old:
+		u.cell = dest
+		_check_fear(u)
+		log.push_back("%s %s至 %s" % [u.name, "冲刺" if is_charge(u, slot) else "跃迁", dest])
+	# 目标
+	var targets: Array = []
+	if not self_skill(u, slot):
+		if enemy != null:
+			targets = [enemy]
+		elif land_aoe(u, slot):
+			targets = _enemies_within(u, 1)
+		else:
+			for f in alive_enemies_of(u):
+				if _cell_dist(u.cell, f.cell) <= rng:
+					targets.append(f)
+					break
+	var res: String = u.use_active(slot, {"targets": targets, "mode": "1v1", "battle": self, "allies": _allies_within(u, 1)})
+	if res != "":
+		log.push_back(res)
+	_finish_human()
+	return res
+
+func human_done() -> void:
+	if _wait:
+		_finish_human()
+
+## =============== 真位移（落格） ===============
+## 普通位移 = 跃迁：跳到 dash_dist 内任意合法空格（无视路径；落地格必须无阻挡/无单位）
+## 冲刺（辛克莱等）= 朝目标方向逐格冲，停在被挡前一格 / 目标邻格 / 冲满
+func dash_dist_of(u: BattleUnit, slot: int) -> int:
+	var sk := u.get_skill(slot)
+	if sk == null:
+		return 0
+	return int(skill_data(sk.id).get("dash_dist", 0))
+
+func is_charge(u: BattleUnit, slot: int) -> bool:
+	var sk := u.get_skill(slot)
+	if sk == null:
+		return false
+	return str(skill_data(sk.id).get("ai", {}).get("dash_kind", "jump")) == "charge"
+
+func land_aoe(u: BattleUnit, slot: int) -> bool:
+	var sk := u.get_skill(slot)
+	if sk == null:
+		return false
+	return bool(skill_data(sk.id).get("ai", {}).get("land_aoe", false))
+
+## 格距：切比雪夫距离（斜对角算 1 格）——与 8 方向移动一致。
+## 旧版用曼哈顿距离，导致斜对角的敌人"看着在旁边"却判定为距离 2、打不到。
+func _cell_dist(a: Vector2i, b: Vector2i) -> int:
+	return maxi(absi(a.x - b.x), absi(a.y - b.y))
+
+func _cell_exists(cell: Vector2i) -> bool:
+	if cell.x >= 1 and cell.x <= 3:
+		return cell.y >= 1 and cell.y <= 3
+	if cell.x == 0 or cell.x == 4:
+		return cell.y == 2   # 两侧各 1 个出生格
+	return false
+
+func _grid_free(cell: Vector2i) -> bool:
+	if not _cell_exists(cell):
+		return false
+	for x in units:
+		if x.cell == cell and not x.non_solid:
+			return false
+	return true
+
+## 跃迁可达格（距离<=dd 的合法空格，可含原地）
+func landable_cells(u: BattleUnit, dd: int) -> Array:
+	var out: Array = []
+	for y in range(1, 4):
+		for x in range(0, 5):
+			var c := Vector2i(x, y)
+			if c == u.cell:
+				out.append(c)
+				continue
+			if _grid_free(c) and _cell_dist(c, u.cell) <= dd:
+				out.append(c)
+	return out
+
+func _best_land_cell(u: BattleUnit, enemy: BattleUnit, dd: int) -> Vector2i:
+	var cells := landable_cells(u, dd)
+	if enemy == null or cells.is_empty():
+		return u.cell
+	var best := u.cell
+	var bd := 9999
+	for c in cells:
+		var cc: Vector2i = c
+		var d := _cell_dist(cc, enemy.cell)
+		if d < bd:
+			bd = d
+			best = cc
+	return best
+
+## 冲刺：朝敌逐格推进至邻格 / 被挡前一格 / 冲满步数
+func _charge_end_cell(u: BattleUnit, enemy: BattleUnit, dd: int) -> Vector2i:
+	var cell := u.cell
+	for i in range(maxi(1, dd)):
+		if absi(enemy.cell.x - cell.x) + absi(enemy.cell.y - cell.y) <= 1:
+			break
+		var step := Vector2i.ZERO
+		if enemy.cell.x != cell.x:
+			step = Vector2i(1 if enemy.cell.x > cell.x else -1, 0)
+		elif enemy.cell.y != cell.y:
+			step = Vector2i(0, 1 if enemy.cell.y > cell.y else -1)
+		var nxt := cell + step
+		if not _grid_free(nxt):
+			break
+		cell = nxt
+	return cell
+
+func _enemies_within(u: BattleUnit, r: int) -> Array:
+	var out: Array = []
+	for f in alive_enemies_of(u):
+		if dist(u, f) <= r:
+			out.append(f)
+	return out
+
+func _finish_human() -> void:
+	_wait = false
+	_cur = null
+
+## =============== 查询（AI 与 UI 共用） ===============
+func _is_human_side(u: BattleUnit) -> bool:
+	if not human_mode:
+		return false
+	if human_teams.is_empty():
+		return u.team == human_team
+	return human_teams.has(u.team)
+
+func alive_enemies_of(u: BattleUnit) -> Array:
+	var out: Array = []
+	for x in units:
+		if x.alive and x != u and x.team != u.team:
+			out.append(x)
+	return out
+
+func dist(a: BattleUnit, b: BattleUnit) -> int:
+	return _cell_dist(a.cell, b.cell)
+
+func base_usable(u: BattleUnit, slot: int) -> bool:
+	var sk := u.get_skill(slot)
+	if sk == null or u.is_skill_lost(sk.id) or sk.exhausted():
+		return false
+	if u.has_flag("no_skill") or u.has_flag("no_damage"):
+		return false
+	if slot == 4 and u.has_flag("no_ult"):
+		return false
+	if sk.current_cd > 0 or u.energy < sk.energy_cost:
+		return false
+	return true
+
+func skill_data(id: String) -> Dictionary:
+	return _se.DATA.get(id, {}) as Dictionary
+
+func skill_range(u: BattleUnit, slot: int) -> int:
+	var sk := u.get_skill(slot)
+	if sk == null:
+		return 0
+	return int(skill_data(sk.id).get("range", 1))
+
+func is_dash(u: BattleUnit, slot: int) -> bool:
+	var sk := u.get_skill(slot)
+	if sk == null:
+		return false
+	return bool(skill_data(sk.id).get("ai", {}).get("dash", false))
+
+func self_skill(u: BattleUnit, slot: int) -> bool:
+	var sk := u.get_skill(slot)
+	if sk == null:
+		return false
+	return bool(skill_data(sk.id).get("ai", {}).get("self_buff", false))
+
+func targets_in_range(u: BattleUnit, slot: int) -> Array:
+	var r := skill_range(u, slot)
+	var shape := ""
+	var sk := u.get_skill(slot)
+	if sk != null:
+		shape = str(skill_data(sk.id).get("range_shape", ""))
+	var out: Array = []
+	for f in alive_enemies_of(u):
+		if shape == "diamond":
+			# 菱形（曼哈顿距离）：如流萤超新星的"九宫格+两轴外扩"13 格
+			if absi(u.cell.x - f.cell.x) + absi(u.cell.y - f.cell.y) <= r:
+				out.append(f)
+		elif dist(u, f) <= r:
+			out.append(f)
+	return out
+
+func move_cells_of(u: BattleUnit) -> Array:
+	var out: Array = []
+	for dv in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1)]:
+		var d: Vector2i = dv
+		var c := u.cell + d
+		if c.x < 0 or c.x > 4 or c.y < 1 or c.y > 3:
+			continue
+		var occ := false
+		for x in units:
+			if x.alive and x != u and not x.non_solid and x.cell == c:
+				occ = true
+				break
+		if not occ:
+			out.append(c)
+	return out
+
+func _exec_skill(u: BattleUnit, slot: int, targets: Array, moved: bool) -> void:
+	var sk := u.get_skill(slot)
+	if sk == null:
+		return
+	var old := u.cell
+	var dd := dash_dist_of(u, slot)
+	if is_dash(u, slot) and dd > 0 and not targets.is_empty():
+		var t0: BattleUnit = targets[0]
+		if is_charge(u, slot):
+			u.cell = _charge_end_cell(u, t0, dd)
+			_check_fear(u)
+		else:
+			u.cell = _best_land_cell(u, t0, dd)
+			_check_fear(u)
+		if u.cell != old:
+			log.push_back("%s 位移 → %s" % [u.name, u.cell])
+	# 位移后重算本技目标；打不到就回滚位置放弃
+	var final_targets: Array = []
+	if not self_skill(u, slot):
+		if land_aoe(u, slot):
+			final_targets = _enemies_within(u, 1)
+		else:
+			for t in targets:
+				if t in targets_in_range(u, slot):
+					final_targets.append(t)
+			if final_targets.is_empty():
+				final_targets = targets_in_range(u, slot)
+		if final_targets.is_empty():
+			if u.cell != old:
+				u.cell = old
+			return
+	if final_targets.is_empty() and not self_skill(u, slot):
+		return
+	var res: String = u.use_active(slot, {"targets": final_targets, "mode": "1v1", "battle": self, "allies": _allies_within(u, 1)})
+	if res != "":
+		log.push_back(res)
+
+func _check_win() -> void:
+	if winner != "":
+		return
+	# 虞美人母体阵亡 → 其子体瞬间枯萎
+	for mu in units:
+		if mu.def_id == "yu_mei_ren" and not mu.has_flag("子体") and not mu.alive:
+			for cu in units:
+				if cu.has_flag("子体") and cu.team == mu.team and cu.alive:
+					cu.hp = 0.0
+					cu.alive = false
+					log.push_back("虞美人阵亡，其子体随之枯萎")
+	var ra := false
+	var ba := false
+	for u in units:
+		if u.alive and not u.has_flag("子体"):
+			if u.team == 0:
+				ra = true
+			else:
+				ba = true
+	if not ra and not ba:
+		winner = "平局"
+	elif not ra:
+		winner = "蓝方"
+	elif not ba:
+		winner = "红方"
+	if winner != "":
+		log.push_back("== 胜者：%s（第 %d 回合）==" % [winner, round])
+
+func result_text() -> String:
+	return "\n".join(log)
+
+## =============== 最高难度 · 豆包预案执行 ===============
+func _idx_of(u: BattleUnit) -> int:
+	for i in range(units.size()):
+		if units[i] == u:
+			return i
+	return -1
+
+## 执行 LLM 给单个单位的预案（move + skill）；返回 true=已按预案行动
+func _exec_llm_plan(u: BattleUnit, plan: Dictionary) -> bool:
+	var has_any := false
+	if bool(plan.get("has_move", false)):
+		has_any = true
+		var cell: Vector2i = plan.get("move", Vector2i(-1, -1))
+		if cell in move_cells_of(u):
+			u.cell = cell
+			_check_fear(u)
+			log.push_back("%s 移动 → %s" % [u.name, cell])
+	var sk: Dictionary = plan.get("skill", {})
+	if not sk.is_empty() and not u.has_flag("no_skill"):
+		var slot := int(sk.get("slot", 1))
+		var ok := false
+		if u.get_skill(slot) != null and base_usable(u, slot) and not u.is_skill_lost(u.get_skill(slot).id):
+			var tid := int(sk.get("target", -1))
+			if self_skill(u, slot):
+				ok = true
+				_exec_skill(u, slot, [], false)
+			elif tid >= 0 and tid < units.size():
+				var t: BattleUnit = units[tid]
+				if t.alive and t.team != u.team and t in targets_in_range(u, slot):
+					ok = true
+					_exec_skill(u, slot, [t], false)
+		if ok:
+			has_any = true
+	return has_any
+
+## ========== 虞美人·蔓延子体 / 恐惧 ==========
+func is_spread(u: BattleUnit, slot: int) -> bool:
+	var sk := u.get_skill(slot)
+	if sk == null:
+		return false
+	return bool(skill_data(sk.id).get("ai", {}).get("spread", false))
+
+func spawn_child(parent: BattleUnit, cell: Vector2i) -> BattleUnit:
+	var child := BattleUnit.new({"name": "虞美人子体", "element": "木", "hp": 5, "energy": 0, "armor": 0, "speed": 0, "skills": {}})
+	child.def_id = "yu_mei_ren"
+	child.team = parent.team
+	child.cell = cell
+	child.hp = 5.0
+	child.max_hp = 5.0
+	child.non_solid = true
+	child.add_flag("子体")
+	child.rng = rng
+	units.append(child)
+	return child
+
+func _allies_within(u: BattleUnit, r: int) -> Array:
+	var out: Array = []
+	for x in units:
+		if x.alive and x.team == u.team and _cell_dist(x.cell, u.cell) <= r:
+			out.append(x)
+	return out
+
+func _check_fear(u: BattleUnit) -> void:
+	var n := u.status_stacks("fear")
+	if n <= 0:
+		return
+	for x in units:
+		if x.alive and x.def_id == "yu_mei_ren" and x != u and _cell_dist(x.cell, u.cell) <= 1:
+			var dmg: float = ceili(float(n) * 0.5)
+			u.set_status("fear", 0)
+			var before: float = u.hp
+			u.lose_hp(dmg)
+			log.push_back("【恐惧】%s 逼近虞美人：恐惧 %d 层发作，受 %.2f 真伤" % [u.name, n, before - u.hp])
+			return
+
+## 虞美人回合末：治疗光环（3×3 友方回 20% 最大生命）+ 刷新「你不再爱我」庇佑标记
+func _yumeiren_round_end() -> void:
+	var ym: Array = []
+	for x in units:
+		if x.alive and x.def_id == "yu_mei_ren":
+			ym.append(x)
+	# 清旧庇佑
+	for x in units:
+		if x.has_flag("yumeiren_protect"):
+			x.clear_flag("yumeiren_protect")
+	if ym.is_empty():
+		return
+	for x in units:
+		if x.alive and x.team == ym[0].team:
+			var near := false
+			for y in ym:
+				if _cell_dist(x.cell, y.cell) <= 1:
+					near = true
+					break
+			if near:
+				# 治疗光环：3×3 内友方（含虞美人自己）回 20% 最大生命
+				var h := x.heal(x.max_hp * 0.2)
+				if h > 0:
+					log.push_back("【苦楚】%s 回复 %.2f 生命" % [x.name, h])
+				if x.def_id != "yu_mei_ren":
+					x.add_flag("yumeiren_protect")
+
+const CHILD_LIMIT := 3   # 虞美人子体上限（1V1=3 / 4V4=5）
+
+## 子体自动行动：暗影刺 —— 对相邻（切比雪夫1）所有敌人各造成 1 点暗系伤害
+func _child_act(child: BattleUnit) -> void:
+	var foes: Array = alive_enemies_of(child)
+	var out := "%s（子体）发动【暗影刺】" % child.name
+	var hit := 0
+	for f in foes:
+		var fu := f as BattleUnit
+		if fu == null or not fu.alive:
+			continue
+		if _cell_dist(fu.cell, child.cell) <= 1:
+			var r: Dictionary = fu.take_damage(1, {"element": "暗", "attacker": child})
+			out += "；%s 受 %.2f 伤" % [fu.name, float(r["hp_lost"]) + float(r["absorbed"])]
+			hit += 1
+	if hit > 0:
+		log.push_back(out)

@@ -1,0 +1,10 @@
+[gd_scene format=3 uid="uid://bcv7a0g1ktku8"]
+
+[ext_resource type="Script" path="res://scripts/ui/story_video_knight.gd" id="1_svk"]
+
+[node name="StoryVideoKnight" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("1_svk")

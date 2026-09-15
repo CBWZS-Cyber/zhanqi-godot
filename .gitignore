@@ -1,0 +1,59 @@
+# Godot 4
+.godot/
+*.import
+*.translation
+
+# 构建产物（地图设计器 EXE / PyInstaller）
+tools/map_exe_app/build/
+tools/map_exe_app/dist/
+tools/map_exe_app/*.spec
+tools/*.exe
+map_exe_app/build/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# 临时截图 / 调试产物
+.tmp_*.png
+*.tmp_board_ui*.png
+
+# 系统
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# 个人/辅助目录
+.workbuddy/
+build/
+Godot/
+installer/*.exe
+tools/dist/installer/
+Godot/
+tools/map_exe_app/dist/
+tools/map_exe_app/build/
+
+# ── 仓库体积控制（媒体本体不进 Git）──
+# Gitee 单仓库容量有限；视频/图片/音频素材本体只在网盘主程序包中留存，
+# 这里仅保留 Godot 资源索引（*.uid / *-db 的 *.json 骨骼数据）以便工程结构完整。
+*.ogv
+*.mp4
+*.webm
+*.mov
+*.avi
+*.wav
+*.ogg
+*.mp3
+*.flac
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.bmp
+*.gif
+*.tga
+*.docx
+*.doc
+*.xlsx
+*.psd

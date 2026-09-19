@@ -1,0 +1,52 @@
+# Godot 4
+.godot/
+*.import
+*.translation
+
+# 构建产物（地图设计器 EXE / PyInstaller）
+tools/map_exe_app/build/
+tools/map_exe_app/dist/
+tools/map_exe_app/*.spec
+tools/*.exe
+map_exe_app/build/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# 临时截图 / 调试产物
+.tmp_*.png
+*.tmp_board_ui*.png
+
+# 系统
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# 个人/辅助目录
+.workbuddy/
+build/
+Godot/
+installer/*.exe
+tools/dist/installer/
+Godot/
+tools/map_exe_app/dist/
+tools/map_exe_app/build/
+
+# 媒体文件（受仓库体积限制，不纳入版本库）：视频 / 图片
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif
+*.bmp
+*.tga
+*.mp4
+*.webm
+*.avi
+*.mov
+*.ogv
+*.ogv.uid
+*.mkv
+*.flv

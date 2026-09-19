@@ -1,0 +1,44 @@
+extends Node
+## 全局对战状态（autoload: Global）
+## 由主菜单进入棋盘前写入，棋盘/对局 HUD 据此区分布局模式。
+
+var battle_mode := "1v1"    # "1v1" | "4v4"（剧情等其它模式后续扩展）
+var offline_type := "pve"   # "pve"（人机）| "hotseat"（开房间·双人同机）
+var difficulty := "easy"   # 离线 PVE 难度：easy / normal / hard（由主菜单写入）
+var ai_backend := "llm"    # 困难难度后端："llm"（豆包战术模型）| "local"（本地进阶 AI）
+
+# ---------- 联机（Net autoload 配合使用）----------
+var net_mode := false       # true = 本局为联机对局（duel/team_duel 按此分支）
+var net_is_host := false    # host=红方 / joiner=蓝方
+var net_port := 3457
+var net_seed := 0           # host 生成的确定性随机种子（开局包下发）
+var net_red_hero := ""      # 开局包同步的红方英雄 id
+var net_blue_hero := ""     # 开局包同步的蓝方英雄 id
+var net_transport := "enet" # "enet"=局域网UDP直连 | "ws"=公网穿透（WebSocket/TCP + cpolar 隧道）
+
+func rules_text() -> String:
+	return """[color=#ffd95a]回合结构[/color]
+· 每个棋子每回合 = 1 次移动权 + 1 次技能权
+· 先移动、后释放技能；两者都可放弃
+· 行动顺序按当前速度实时决定，速度变化立即影响后续顺序
+
+[color=#ffd95a]伤害口径[/color]
+· 普通伤害：护盾先吸收 → 护甲减免 → 扣生命
+· 真伤：只有明确标注「真伤」的伤害才无视盾甲
+· 百分比伤害未标真伤的一律按普伤结算
+
+[color=#ffd95a]状态规则[/color]
+· 烧伤：速度-10，每回合末受 1 真伤，持续 2 回合，重复施加刷新时长
+· 重伤：被攻击时额外受 0.5×层数 真伤，每回合末层数-1
+· 流血：被攻击时额外受真伤（1级20%／2级30%）；1级持续2回合，2级持续3回合且每回合末受1真伤
+· 眩晕：跳过行动；沉默：无法用技能；魅惑：无法造成伤害
+
+[color=#ffd95a]位移规则[/color]
+· 冲刺类（辛克莱审判系）：朝方向逐格冲，遇阻挡停止
+· 瞬移类（追猎/诛心/自我毁灭等）：直接跳到距离内任意空格
+· 落点必须为空格（无障碍/无棋子）
+· 棋子可向周围 8 个方向移动（含斜向）
+
+[color=#ffd95a]胜负[/color]
+· 一方棋子全部阵亡即告负
+· 特殊：龙王单挑 6 层污染直接斩杀获胜等英雄专属规则"""

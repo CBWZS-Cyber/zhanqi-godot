@@ -33,20 +33,16 @@ tools/dist/installer/
 Godot/
 tools/map_exe_app/dist/
 tools/map_exe_app/build/
-
-# 媒体文件（受仓库体积限制，不纳入版本库）：视频 / 图片
-*.png
-*.jpg
-*.jpeg
-*.webp
-*.gif
-*.bmp
-*.tga
+# ===== 媒体与大型二进制（GitHub 私有仓体积控制 · 推送任务第5节）=====
+*.ogv
+*.ogv.uid
 *.mp4
 *.webm
 *.avi
 *.mov
-*.ogv
-*.ogv.uid
 *.mkv
 *.flv
+*.psd
+*.blend
+# 超大源贴图（>5MB，不入库）
+assets/db/ц╡БшРд_tex.png

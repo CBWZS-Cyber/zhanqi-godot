@@ -34,7 +34,7 @@ Godot/
 tools/map_exe_app/dist/
 tools/map_exe_app/build/
 
-# 媒体文件（受仓库体积限制，不纳入版本库）：视频 / 图片
+# 媒体文件（受仓库体积限制，不纳入版本库）：视频 / 音频 / 图片
 *.png
 *.jpg
 *.jpeg
@@ -42,7 +42,11 @@ tools/map_exe_app/build/
 *.gif
 *.bmp
 *.tga
+*.ogv
 *.mp4
 *.webm
 *.avi
 *.mov
+*.wav
+*.mp3
+*.ogg

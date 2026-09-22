@@ -34,21 +34,28 @@ Godot/
 tools/map_exe_app/dist/
 tools/map_exe_app/build/
 
-# 媒体文件（受仓库体积限制，不纳入版本库）：视频 / 图片
-*.png
-*.jpg
-*.jpeg
-*.webp
-*.gif
-*.bmp
-*.tga
+# 媒体素材（仓库不收录二进制媒体，仅保留代码/数据/文本）
+# 指令强制要求项
+*.ogv
+*.ogv.uid
 *.mp4
 *.webm
 *.avi
 *.mov
-
-# 媒体（自动化补）
-*.ogv
-*.ogv.uid
 *.mkv
 *.flv
+*.psd
+*.blend
+# 同步时一并剔除的二进制媒体（保持仓库精简）
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.webp
+*.wav
+*.mp3
+*.ogg
+*.m4a
+*.flac
+*.docx

@@ -55,15 +55,3 @@ tools/map_exe_app/build/
 *.flac
 *.m4a
 *.aac
-*.webp
-*.gif
-*.bmp
-*.tga
-*.ogv
-*.mp4
-*.webm
-*.avi
-*.mov
-*.wav
-*.mp3
-*.ogg

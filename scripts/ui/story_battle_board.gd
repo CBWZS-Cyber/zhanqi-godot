@@ -260,7 +260,7 @@ func center_on(cell: Vector2i) -> void:
 
 # ------------------------------------------------------------ 绘制
 func _draw() -> void:
-	draw_rect(Rect2(Vector2.ZERO, size), Color(0.13, 0.12, 0.11))
+	draw_rect(Rect2(Vector2.ZERO, size), UiDesign.BOARD_FRAME)
 	if cells.is_empty():
 		return
 	for k in cells:

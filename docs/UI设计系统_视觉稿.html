@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>战棋 · 「墨金」UI 设计系统 视觉稿</title>
+<style>
+/* ==========================================================================
+   令牌来源：scripts/ui/ui_design.gd（class_name UiDesign）
+   本文件里的每个变量都**一一对应**代码里的同名常量，改一处两边都要改。
+   页面底色用浅色（便于在浅色 IDE 里审阅），游戏画面用其真实的深色。
+   ========================================================================== */
+:root{
+  /* 墨阶（数字越小越亮） */
+  --ink-950:#0A0D17; --ink-900:#10121F; --ink-800:#1A1F30; --ink-750:#1F263D;
+  --ink-700:#293047; --ink-650:#333D5C; --ink-600:#3B456B; --ink-550:#545F85;
+  --ink-500:#737FA3; --ink-400:#949EB8; --ink-300:#ADB8CC; --ink-250:#BFCBDF;
+  --ink-200:#D6DEEB; --ink-100:#EBF2FC; --ink-050:#F7F9FE;
+  /* 金阶 */
+  --gold-700:#9E7A29; --gold-600:#C79E38; --gold-500:#F0C75E; --gold-400:#FFE08C;
+  --gold-300:#FFF2CC; --gold-200:#FFF7E0; --gold-100:#FFFCF2;
+  /* 语义 */
+  --ok:#5FBF74; --warn:#E0A030; --danger:#D9483B; --info:#4E8FD6;
+  /* 阵营（中国习惯：红 = 我方） */
+  --ally:#C7402E; --ally-soft:#EB7866; --enemy:#3D6BBF; --enemy-soft:#80ADF2;
+  /* 资源条 */
+  --hp:#6BC25C; --shield:#54ADF2; --energy:#D9A640; --sanity:#9E7AD1; --track:#0A0D17;
+  /* 棋盘 */
+  --board-bg:#332E29; --board-light:#EDDEBD; --board-dark:#8C6647; --board-frame:#262019;
+  --board-ink:#3D301F; --board-text:#2E2117; --spawn:#668FBD; --spawn-edge:#294770;
+  --hl-move:#73D973; --hl-cast:#F2CC4D;
+  /* 表面 */
+  --app-bg:#1A2035; --surface-panel:rgba(26,31,48,.94);
+  --surface-card:#1A1F30; --surface-modal:#10121F;
+  --overlay-dim:rgba(13,18,31,.45);
+  /* 描边 / 焦点 */
+  --border:#594D42; --border-warm:#665C42; --border-strong:#C79E38; --focus:#FFE08C;
+  /* 字号 */
+  --fs-xs:12px; --fs-sm:14px; --fs-base:16px; --fs-lg:18px; --fs-xl:20px;
+  --fs-2xl:24px; --fs-3xl:30px; --fs-display:44px;
+  /* 间距 / 圆角 */
+  --s-xxs:2px; --s-xs:4px; --s-sm:8px; --s-md:12px; --s-lg:16px; --s-xl:24px; --s-2xl:32px; --s-3xl:48px;
+  --r-xs:4px; --r-sm:6px; --r-md:8px; --r-lg:10px; --r-xl:12px; --r-2xl:16px; --r-pill:999px;
+  --font:"Microsoft YaHei","PingFang SC","Noto Sans SC","Hiragino Sans GB",sans-serif;
+  /* 标题字体：游戏里打包的是「马善政毛笔楷书」(assets/fonts/MaShanZheng-Regular.ttf, 5.6MB, OFL)。
+     网页里没法直接引用它，这里用系统楷体近似 + 同样的字距，只为示意观感。 */
+  --font-display:"Ma Shan Zheng","KaiTi","STKaiti","Kaiti SC","Noto Serif SC",serif;
+  --font-serif:"Noto Serif SC","Source Han Serif SC","STSong","SimSun",serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:var(--font); background:var(--ink-050); color:var(--ink-800);
+  font-size:var(--fs-base); line-height:1.6; padding:var(--s-2xl) var(--s-xl) 80px;
+}
+.wrap{max-width:1180px;margin:0 auto}
+h1{font-size:var(--fs-3xl);letter-spacing:.04em;color:var(--ink-900)}
+h1 .sub{display:block;font-size:var(--fs-base);font-weight:400;color:var(--ink-500);letter-spacing:0;margin-top:var(--s-sm)}
+h2{
+  font-size:var(--fs-xl);margin:var(--s-3xl) 0 var(--s-md);padding-bottom:var(--s-sm);
+  border-bottom:2px solid var(--gold-500);display:flex;align-items:baseline;gap:var(--s-md)
+}
+h2 .n{font-size:var(--fs-sm);color:var(--gold-600);letter-spacing:.12em;font-weight:700}
+h3{font-size:var(--fs-lg);margin:var(--s-xl) 0 var(--s-sm);color:var(--ink-800)}
+p.note{color:var(--ink-500);font-size:var(--fs-sm);margin:var(--s-sm) 0}
+
+/* ---- 令牌板 ---- */
+.swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:var(--s-sm)}
+.sw{border:1px solid var(--ink-200);border-radius:var(--r-sm);overflow:hidden;background:#fff}
+.sw .chip{height:52px;display:block}
+.sw .meta{padding:6px 8px;font-size:11px;line-height:1.45}
+.sw .name{font-weight:700;color:var(--ink-800);font-family:ui-monospace,Consolas,monospace}
+.sw .hex{color:var(--ink-500);font-family:ui-monospace,Consolas,monospace}
+.sw .cr{color:var(--ink-500)}
+.sw .cr b{color:var(--ok)}
+.sw .cr.warn b{color:var(--warn)}
+.grp{margin:var(--s-lg) 0}
+.grp>h4{font-size:var(--fs-sm);color:var(--ink-500);letter-spacing:.08em;margin-bottom:var(--s-sm);font-weight:700}
+
+/* ---- 游戏画面外框 ---- */
+.screen{
+  background:var(--ink-900); border-radius:var(--r-2xl); overflow:hidden;
+  border:1px solid var(--ink-700); box-shadow:0 18px 40px rgba(16,18,31,.22);
+  color:var(--ink-100); margin-top:var(--s-md)
+}
+.screen .bar{
+  display:flex;align-items:center;gap:var(--s-sm);padding:10px var(--s-lg);
+  background:var(--ink-800);border-bottom:1px solid var(--ink-700)
+}
+.screen .bar .dot{width:10px;height:10px;border-radius:50%;background:var(--ink-600)}
+.screen .bar .t{font-size:var(--fs-sm);color:var(--ink-300);margin-left:var(--s-sm)}
+.screen .bar .tag{
+  margin-left:auto;font-size:var(--fs-xs);color:var(--gold-400);
+  border:1px solid var(--gold-600);border-radius:var(--r-pill);padding:1px 10px
+}
+.stage{padding:var(--s-xl);position:relative;min-height:392px}
+
+/* ---- 主菜单 ---- */
+.menu-bg{
+  position:absolute;inset:0;
+  background:
+    radial-gradient(120% 100% at 50% 0%,rgba(240,199,94,.10),transparent 60%),
+    linear-gradient(160deg,#242C46,#161B2B 55%,#0E111D);
+}
+.menu-bg::after{content:"";position:absolute;inset:0;background:var(--overlay-dim)}
+.menu-bg .filmtag{
+  position:absolute;right:14px;bottom:12px;font-size:11px;color:var(--ink-400);
+  background:rgba(10,13,23,.7);border:1px solid var(--ink-600);border-radius:var(--r-sm);padding:3px 8px
+}
+.menu-inner{position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:392px;gap:var(--s-xl)}
+.game-title{
+  font-family:var(--font-display);
+  font-size:var(--fs-display);letter-spacing:.34em;text-indent:.34em;color:var(--gold-500);
+  text-shadow:0 3px 18px rgba(240,199,94,.28),0 0 2px rgba(0,0,0,.5)
+}
+.game-title small{display:block;font-size:var(--fs-xs);letter-spacing:.5em;text-indent:.5em;color:var(--gold-600);margin-top:6px;font-weight:400}
+.cta-row{display:flex;flex-direction:column;align-items:center;gap:var(--s-md)}
+.btn{
+  font-family:var(--font);font-size:var(--fs-lg);cursor:pointer;
+  border-radius:var(--r-md);padding:10px var(--s-lg);border:1px solid transparent;
+  transition:background .12s ease,border-color .12s ease,color .12s ease
+}
+.btn-primary{
+  background:var(--gold-500);border-color:var(--gold-600);color:#1F170D;font-weight:700;
+  font-size:var(--fs-2xl);padding:14px var(--s-3xl);min-width:300px;letter-spacing:.1em
+}
+.btn-secondary{background:rgba(26,31,48,.9);border-color:#736B4D;color:var(--ink-100)}
+.btn-ghost{background:transparent;color:var(--ink-300)}
+.codex-row{display:flex;gap:var(--s-md);flex-wrap:nowrap}
+.codex-row .btn{font-size:var(--fs-base);padding:9px var(--s-lg);min-width:104px}
+.acct{
+  position:absolute;left:var(--s-lg);top:var(--s-lg);z-index:3;display:flex;align-items:center;gap:var(--s-sm);
+  background:rgba(26,31,48,.88);border:1px solid var(--ink-650);border-radius:var(--r-pill);
+  padding:5px 14px 5px 6px;font-size:var(--fs-sm);color:var(--ink-200)
+}
+.acct .av{width:24px;height:24px;border-radius:50%;background:linear-gradient(140deg,var(--gold-500),var(--gold-700));display:grid;place-items:center;color:#1F170D;font-size:12px;font-weight:700}
+.acct .lv{margin-left:var(--s-xs);font-size:var(--fs-xs);color:var(--gold-400);border:1px solid #4A4229;border-radius:var(--r-pill);padding:0 8px}
+
+/* ---- 对局 ---- */
+.duel{display:grid;grid-template-columns:1fr 300px;height:100%;min-height:392px}
+.board-area{position:relative;background:var(--board-bg);border-right:1px solid var(--ink-700);padding:var(--s-lg);display:flex;align-items:center;justify-content:center}
+.board{display:grid;grid-template-columns:repeat(5,84px);grid-template-rows:repeat(3,84px);gap:6px}
+.cell{
+  border-radius:var(--r-sm);position:relative;display:grid;place-items:center;
+  border:1px solid var(--board-frame)
+}
+.cell.light{background:var(--board-light)}
+.cell.dark{background:var(--board-dark)}
+.cell.spawn{background:var(--spawn);border-color:var(--spawn-edge)}
+.cell.mv{box-shadow:inset 0 0 0 4px var(--hl-move)}
+.cell.cs{box-shadow:inset 0 0 0 4px var(--hl-cast)}
+.cell .coord{position:absolute;left:4px;top:2px;font-size:9px;color:rgba(0,0,0,.32)}
+.piece{
+  width:62px;height:62px;border-radius:50%;display:grid;place-items:center;
+  font-size:13px;font-weight:700;color:#fff;letter-spacing:.02em;
+  border:3px solid rgba(255,255,255,.9);text-shadow:0 1px 2px rgba(0,0,0,.55);
+  position:relative;z-index:2
+}
+.piece.ally{background:var(--ally)}
+.piece.enemy{background:var(--enemy)}
+.piece.dummy{background:#6E6257}
+.piece .rng{
+  position:absolute;top:-7px;right:-7px;width:20px;height:20px;border-radius:50%;
+  background:var(--ink-950);border:2px solid var(--hl-cast);color:var(--gold-400);
+  font-size:11px;display:grid;place-items:center
+}
+/* 棋子头顶三条迷你条（生命/护盾/能量各自独立，一色一义，均带深色描边）
+   自上而下：护盾(蓝) → 生命(绿) → 能量(琥珀)。与 unit_token._draw_overhead 一致。 */
+.mini{
+  position:absolute;left:50%;transform:translateX(-50%);bottom:calc(100% + 5px);
+  width:56px;display:flex;flex-direction:column;gap:2px
+}
+.mini i{
+  display:block;height:6px;background:var(--track);border:1px solid rgba(0,0,0,.85);
+  border-radius:2px;position:relative;overflow:hidden
+}
+.mini i b{position:absolute;left:0;top:0;bottom:0;display:block}
+.side{
+  background:var(--surface-panel);padding:var(--s-md);display:flex;flex-direction:column;
+  gap:var(--s-md);font-size:var(--fs-sm)
+}
+.side .who{display:flex;align-items:center;gap:var(--s-sm)}
+.side .who .nm{font-size:var(--fs-lg);font-weight:700}
+.side .who .team{font-size:var(--fs-xs);padding:1px 8px;border-radius:var(--r-pill);background:rgba(199,64,46,.22);border:1px solid var(--ally);color:#F2B4AA}
+.bar-row{display:grid;grid-template-columns:34px 1fr;align-items:center;gap:var(--s-sm)}
+.bar-row .tg{font-size:var(--fs-xs);color:var(--ink-200)}
+.bar{height:22px;border-radius:var(--r-sm);background:var(--track);position:relative;overflow:hidden;border:1px solid rgba(255,255,255,.06)}
+.bar>i{position:absolute;inset:0 auto 0 0;border-radius:var(--r-sm)}
+.bar>span{position:absolute;inset:0;display:grid;place-items:center;font-size:var(--fs-sm);color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.85)}
+.skills{display:flex;flex-direction:column;gap:6px;margin-top:auto}
+.sk{
+  display:flex;align-items:center;justify-content:center;gap:var(--s-sm);
+  background:rgba(42,50,74,.9);border:1px solid #736B4D;border-radius:var(--r-md);
+  padding:9px var(--s-md);font-size:var(--fs-base);color:var(--ink-100);cursor:pointer
+}
+.sk:hover{background:var(--ink-650);border-color:var(--border-strong);color:var(--gold-300)}
+.sk .cost{margin-left:auto;font-size:var(--fs-xs);color:var(--energy)}
+.sk.on{background:var(--ink-650);border-color:var(--gold-500);color:var(--gold-300)}
+.tip{
+  position:absolute;left:calc(100% + 10px);top:50%;transform:translateY(-50%);
+  width:250px;background:var(--surface-modal);border:1px solid var(--border-strong);
+  border-radius:var(--r-md);padding:10px var(--s-md);font-size:var(--fs-xs);
+  color:var(--ink-200);box-shadow:0 12px 28px rgba(0,0,0,.5);z-index:9;line-height:1.55
+}
+.tip b{color:var(--gold-300);display:block;margin-bottom:3px;font-size:var(--fs-sm)}
+.end-turn{
+  margin-top:var(--s-sm);text-align:center;background:var(--gold-500);color:#1F170D;
+  font-weight:700;border-radius:var(--r-md);padding:10px;border:1px solid var(--gold-600);cursor:pointer
+}
+.turnline{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:var(--s-sm)}
+.turnline .u{font-size:var(--fs-xs);padding:2px 8px;border-radius:var(--r-pill);background:var(--ink-800);border:1px solid var(--ink-650)}
+.turnline .u.now{background:rgba(240,199,94,.18);border-color:var(--gold-500);color:var(--gold-300)}
+
+/* ---- 图鉴 ---- */
+.codex{padding:var(--s-lg);background:var(--app-bg);position:relative;min-height:392px}
+.codex::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent,rgba(10,13,23,.5))}
+.codex-h{position:relative;z-index:2;display:flex;align-items:center;gap:var(--s-md);margin-bottom:var(--s-md)}
+.codex-h .ttl{font-family:var(--font-display);font-size:var(--fs-xl);color:var(--gold-500);letter-spacing:.16em}
+.codex-h .cnt{font-size:var(--fs-xs);color:var(--ink-400)}
+.cards{position:relative;z-index:2;display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:var(--s-md)}
+.card{
+  background:var(--surface-card);border:1px solid var(--border);border-radius:var(--r-xl);
+  overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,.35)
+}
+.card:hover{border-color:var(--border-strong)}
+.card .art{height:88px;position:relative;display:grid;place-items:center;font-size:34px;
+  background:linear-gradient(155deg,#2B3350,#171C2C)}
+.card .art .role{position:absolute;left:8px;top:6px;font-size:10px;color:var(--ink-300);
+  border:1px solid var(--ink-600);border-radius:var(--r-pill);padding:0 7px;background:rgba(10,13,23,.6)}
+.card .body{padding:var(--s-sm) var(--s-md) var(--s-md)}
+.card .nm{font-size:var(--fs-lg);font-weight:700;color:var(--ink-100)}
+.card .tag{font-size:var(--fs-xs);color:var(--ink-300);margin-top:2px}
+.card .stats{display:flex;gap:var(--s-sm);margin-top:var(--s-sm);font-size:var(--fs-xs);color:var(--ink-200)}
+.card .stats i{font-style:normal;color:var(--gold-400)}
+
+/* ---- 组件陈列 ---- */
+.specimens{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:var(--s-lg);margin-top:var(--s-md)}
+.spec{background:#fff;border:1px solid var(--ink-200);border-radius:var(--r-xl);padding:var(--s-lg)}
+.spec h5{font-size:var(--fs-sm);color:var(--ink-500);letter-spacing:.08em;margin-bottom:var(--s-md)}
+.row{display:flex;gap:var(--s-sm);flex-wrap:wrap;align-items:center;margin-bottom:var(--s-sm)}
+.on-dark{background:var(--surface-card);padding:var(--s-lg);border-radius:var(--r-xl);border:1px solid var(--ink-700)}
+.on-dark .spec{background:transparent;border-color:var(--ink-650);color:var(--ink-100)}
+.on-dark .spec h5{color:var(--ink-300)}
+.f-input{
+  width:100%;background:var(--ink-900);border:1px solid var(--border);border-radius:var(--r-md);
+  padding:10px var(--s-md);color:var(--ink-100);font-family:var(--font);font-size:var(--fs-lg)
+}
+.f-input.focus{border-color:var(--focus);box-shadow:0 0 0 2px rgba(255,224,140,.35)}
+.f-input::placeholder{color:var(--ink-400)}
+.f-label{font-size:var(--fs-xs);color:var(--ink-400);margin-bottom:var(--s-xs)}
+.focus-swatch{outline:3px solid var(--focus);outline-offset:1px}
+table{width:100%;border-collapse:collapse;font-size:var(--fs-sm);margin-top:var(--s-sm)}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--ink-200)}
+th{color:var(--ink-500);font-size:var(--fs-xs);letter-spacing:.06em}
+td code{font-family:ui-monospace,Consolas,monospace;font-size:var(--fs-xs);background:var(--ink-050);padding:1px 5px;border-radius:var(--r-xs)}
+.legend{display:flex;gap:var(--s-lg);flex-wrap:wrap;font-size:var(--fs-sm);color:var(--ink-500);margin-top:var(--s-sm)}
+.legend b{color:var(--ink-800)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>战棋 ·「墨金」UI 设计系统
+  <span class="sub">令牌 + 组件库 + 三张关键画面视觉稿　|　对应代码 <code>scripts/ui/ui_design.gd</code> · <code>ui_theme.gd</code></span>
+</h1>
+
+<p class="note">
+本稿里的颜色值**全部取自代码令牌**，两边同名同值。画面里的深色是游戏本身的配色（游戏是深色调），
+页面外壳用浅色只为便于在浅色环境里审阅。
+</p>
+
+<!-- ====================================================================== -->
+<h2><span class="n">01</span>设计令牌</h2>
+
+<div class="grp">
+  <h4>墨阶 INK —— 中性色阶（数字越小越亮）</h4>
+  <div class="swatches" id="sw-ink"></div>
+</div>
+<div class="grp">
+  <h4>金阶 GOLD —— 全工程唯一强调色</h4>
+  <div class="swatches" id="sw-gold"></div>
+</div>
+<div class="grp">
+  <h4>语义 / 阵营 / 资源条</h4>
+  <div class="swatches" id="sw-sem"></div>
+</div>
+<div class="grp">
+  <h4>棋盘</h4>
+  <div class="swatches" id="sw-board"></div>
+</div>
+<div class="grp">
+  <h4>表面与描边</h4>
+  <div class="swatches" id="sw-surf"></div>
+</div>
+<div class="grp">
+  <h4>RichText 内联色 MD_*（bbcode 只能吃 #RRGGBB，故单独一组，但有断言与 Color 令牌同源）</h4>
+  <div class="swatches" id="sw-md"></div>
+</div>
+
+<h3>文字可读性（实测对比度）</h3>
+<table>
+  <thead><tr><th>用途</th><th>前景</th><th>背景</th><th>对比度</th><th>判定</th></tr></thead>
+  <tbody>
+    <tr><td>正文</td><td><code>INK_100</code></td><td><code>卡片</code></td><td>14.60</td><td>✅ 远超 AA</td></tr>
+    <tr><td>标签</td><td><code>INK_200</code></td><td><code>卡片</code></td><td>12.12</td><td>✅</td></tr>
+    <tr><td>说明文字</td><td><code>INK_300</code></td><td><code>卡片</code></td><td>8.20</td><td>✅</td></tr>
+    <tr><td>输入框占位符</td><td><code>INK_400</code></td><td><code>卡片</code></td><td>6.14</td><td>✅</td></tr>
+    <tr><td>主 CTA 文字</td><td><code>金底深字</code></td><td><code>GOLD_500</code></td><td>10.99</td><td>✅</td></tr>
+    <tr><td>金色标题</td><td><code>GOLD_500</code></td><td><code>菜单底</code></td><td>10.01</td><td>✅</td></tr>
+    <tr><td>棋盘正文</td><td><code>BOARD_TEXT</code></td><td><code>浅格</code></td><td>11.71</td><td>✅</td></tr>
+    <tr><td>我方色（图形）</td><td><code>ALLY</code></td><td><code>卡片</code></td><td>3.28</td><td>⚠️ 仅图形</td></tr>
+    <tr><td>敌方色（图形）</td><td><code>ENEMY</code></td><td><code>卡片</code></td><td>3.18</td><td>⚠️ 仅图形</td></tr>
+    <tr><td>禁用态文字</td><td><code>INK_500</code></td><td><code>卡片</code></td><td>4.16</td><td>⚠️ 仅禁用</td></tr>
+  </tbody>
+</table>
+<p class="note">
+① <b>阵营色不得当正文用</b>（3.28/3.18 &lt; 4.5）—— 需要文字时用 <code>ALLY_SOFT</code> 或 <code>INK_100</code>，阵营色只做条/圆/描边这类图形。<br>
+② <b><code>INK_500</code> 只许用于禁用态</b>（4.16 &lt; 4.5）—— 它看起来"够亮了"，但做正文不达标。这两条已写成断言钉死。
+</p>
+
+<!-- ====================================================================== -->
+<h2><span class="n">02</span>主菜单</h2>
+<p class="note">
+背景仍用你的 <code>assets/video/menu_bg.ogv</code> 循环播放（此处以渐变示意），上面压 <code>OVERLAY_DIM</code> 保证标题与按钮可读。
+底部四个图鉴入口<b>横排一行</b>，主 CTA「开始游戏」为全屏唯一的金底深字按钮。
+</p>
+<div class="screen">
+  <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+    <span class="t">scenes/MainUI.tscn</span><span class="tag">开始界面 · start</span></div>
+  <div class="stage" style="padding:0">
+    <div class="menu-bg"><span class="filmtag">背景视频：assets/video/menu_bg.ogv（沿用，未替换）</span></div>
+    <div class="acct">
+      <span class="av">曹</span>曹博文<span class="lv">Lv.7</span>
+    </div>
+    <div class="menu-inner">
+      <div class="game-title">战　棋<small>ZHAN QI</small></div>
+      <div class="cta-row">
+        <button class="btn btn-primary">开 始 游 戏</button>
+        <button class="btn btn-secondary" style="font-size:var(--fs-base);padding:9px var(--s-xl);min-width:300px">新手教程</button>
+      </div>
+      <div class="codex-row">
+        <button class="btn btn-secondary">英雄图鉴</button>
+        <button class="btn btn-secondary">武器图鉴</button>
+        <button class="btn btn-secondary">地形介绍</button>
+        <button class="btn btn-secondary">规则介绍</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
+<h2><span class="n">03</span>对局界面（1V1）</h2>
+<p class="note">
+棋盘 <b>5 × 3</b>＝中间 3×3 主区域 + 两侧各 1 出生格（<code>(0,2)</code> / <code>(4,2)</code>，蓝色）。
+棋子是<b>实心圆 + 队伍色 + 名字居中</b>，<b>不显示血量</b>（血量在右侧信息栏）。
+技能按钮<b>只显示名字</b>，悬停才展开完整描述（示例已展开一个）。
+</p>
+<div class="screen">
+  <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+    <span class="t">scenes/Duel.tscn</span><span class="tag">1V1 · 轮到红方</span></div>
+  <div class="duel">
+    <div class="board-area">
+      <div class="board" id="board"></div>
+    </div>
+    <div class="side">
+      <div class="turnline" id="turnline"></div>
+      <div class="who"><span class="nm">元晶龙王</span><span class="team">红方</span></div>
+      <div class="bar-row"><span class="tg">生命</span>
+        <div class="bar"><i style="width:78%;background:var(--hp)"></i><span>7 / 9</span></div></div>
+      <div class="bar-row"><span class="tg">护盾</span>
+        <div class="bar"><i style="width:33%;background:var(--shield)"></i><span>2 / 6</span></div></div>
+      <div class="bar-row"><span class="tg">能量</span>
+        <div class="bar"><i style="width:60%;background:var(--energy)"></i><span>3 / 5</span></div></div>
+      <div class="skills">
+        <button class="sk">凝晶为刃<span class="cost">2</span></button>
+        <button class="sk on" style="position:relative">晶壁守护<span class="cost">1</span>
+          <span class="tip"><b>晶壁守护　·　自身技</b>获得 2 点护盾，持续 2 回合。
+            护盾期间受到的<b>真伤</b>减半。冷却 3 回合。</span>
+        </button>
+        <button class="sk">碎晶穿心<span class="cost">3</span></button>
+        <div class="end-turn">结束回合</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
+<h2><span class="n">04</span>英雄图鉴</h2>
+<p class="note">
+卡片走<b>不透明</b>面（不是弹窗，但同样不用半透）；角色视频在卡片内静音循环（此处以图形占位，视频文件全部沿用）。
+</p>
+<div class="screen">
+  <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+    <span class="t">MainUI → 英雄图鉴层</span><span class="tag">14 位英雄</span></div>
+  <div class="codex">
+    <div class="codex-h"><span class="ttl">英 雄 图 鉴</span><span class="cnt">共 14 位 · 按速度排序</span></div>
+    <div class="cards" id="cards"></div>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
+<h2><span class="n">05</span>组件库</h2>
+<p class="note">四类按钮 × 三态、输入框两态、资源条。所有样式由 <code>UiTheme</code> 生成，界面不再手写颜色。</p>
+
+<div class="on-dark" style="margin-top:var(--s-md)">
+  <div class="specimens">
+    <div class="spec">
+      <h5>按钮 · 默认态</h5>
+      <div class="row"><button class="btn btn-primary" style="font-size:var(--fs-base);padding:8px var(--s-lg)">主 CTA</button>
+        <button class="btn btn-secondary">次级</button>
+        <button class="btn btn-ghost">Ghost</button></div>
+      <h5 style="margin-top:var(--s-md)">悬停 / 按下</h5>
+      <div class="row">
+        <button class="btn btn-primary" style="font-size:var(--fs-base);padding:8px var(--s-lg);background:var(--gold-400)">悬停</button>
+        <button class="btn btn-secondary" style="background:var(--ink-650);border-color:var(--border-strong);color:var(--gold-300)">悬停</button>
+        <button class="btn btn-secondary" style="background:var(--ink-900);border-color:var(--gold-600)">按下</button>
+      </div>
+      <h5 style="margin-top:var(--s-md)">焦点环（原先完全缺失）</h5>
+      <div class="row"><button class="btn btn-secondary focus-swatch">键盘选中</button>
+        <span style="font-size:var(--fs-xs);color:var(--ink-400)">WCAG 2.4.7</span></div>
+    </div>
+    <div class="spec">
+      <h5>输入框</h5>
+      <div class="f-label">默认</div>
+      <input class="f-input" placeholder="昵称">
+      <div class="f-label" style="margin-top:var(--s-md)">聚焦（金环）</div>
+      <input class="f-input focus" value="曹博文">
+      <p class="note" style="margin-top:var(--s-sm)">原先输入框<b>完全没有皮肤</b>，且聚焦看不出差别；现在两态分明。</p>
+    </div>
+    <div class="spec">
+      <h5>资源条</h5>
+      <div class="bar-row"><span class="tg">生命</span><div class="bar"><i style="width:78%;background:var(--hp)"></i><span>7 / 9</span></div></div>
+      <div class="bar-row" style="margin-top:6px"><span class="tg">护盾</span><div class="bar"><i style="width:45%;background:var(--shield)"></i><span>3 / 7</span></div></div>
+      <div class="bar-row" style="margin-top:6px"><span class="tg">能量</span><div class="bar"><i style="width:60%;background:var(--energy)"></i><span>3 / 5</span></div></div>
+      <div class="bar-row" style="margin-top:6px"><span class="tg">理智</span><div class="bar"><i style="width:52%;background:var(--sanity)"></i><span>26 / 50</span></div></div>
+      <p class="note" style="margin-top:var(--s-sm)">四种资源色在 1V1 / 4V4 / 剧情关<b>共用同一令牌</b>，不再各写一份。</p>
+    </div>
+    <div class="spec">
+      <h5>棋子头顶三条（2026-10-04 重做）</h5>
+      <p class="note" style="margin:0 0 var(--s-md)">
+        改前：生命与护盾挤在<b>同一根条</b>里只靠颜色分，能量又借用了<b>敌方阵营蓝</b> —— 三者分不出谁是谁。
+        现在<b>一色一义、各占一条</b>，每条都带深色描边（在羊皮纸浅格上也看得清边界）。
+      </p>
+      <div style="display:flex;align-items:center;gap:var(--s-lg)">
+        <div class="mini" style="position:static;transform:none;bottom:auto;width:72px">
+          <i><b style="width:33%;background:var(--shield)"></b></i>
+          <i><b style="width:78%;background:var(--hp)"></b></i>
+          <i><b style="width:60%;background:var(--energy)"></b></i>
+        </div>
+        <div style="font-size:var(--fs-xs);color:var(--ink-300);line-height:2">
+          <div>护盾　<span style="color:var(--shield)">■</span> 蓝（有盾才占一行）</div>
+          <div>生命　<span style="color:var(--hp)">■</span> 绿（带白条残影）</div>
+          <div>能量　<span style="color:var(--energy)">■</span> 琥珀（理智系英雄换成紫）</div>
+        </div>
+      </div>
+    </div>
+    <div class="spec">
+      <h5>棋盘格</h5>
+      <div style="display:grid;grid-template-columns:repeat(4,52px);grid-template-rows:repeat(2,52px);gap:4px">
+        <div class="cell light"></div><div class="cell dark"></div>
+        <div class="cell spawn"></div><div class="cell light"></div>
+        <div class="cell dark"></div><div class="cell mv"></div>
+        <div class="cell cs"></div><div class="cell dark"></div>
+      </div>
+      <p class="note" style="margin-top:var(--s-sm)">
+        浅/深格区分度 3.84 &gt; 3.0；绿框＝可移动、金框＝技能落点、蓝格＝出生格。
+      </p>
+    </div>
+  </div>
+</div>
+
+<h3>间距 / 圆角 / 字号刻度</h3>
+<table>
+  <thead><tr><th>类别</th><th>刻度</th></tr></thead>
+  <tbody>
+    <tr><td>间距（8 点网格）</td><td><code>2</code> <code>4</code> <code>8</code> <code>12</code> <code>16</code> <code>24</code> <code>32</code> <code>48</code> <code>64</code></td></tr>
+    <tr><td>圆角</td><td><code>4</code> <code>6</code> <code>8</code> <code>10</code> <code>12</code> <code>16</code> <code>999(胶囊)</code></td></tr>
+    <tr><td>字号（基准 1280×720）</td><td><code>12</code> <code>14</code> <code>16</code> <code>18</code> <code>20</code> <code>24</code> <code>30</code> <code>44</code> <code>80</code></td></tr>
+    <tr><td>动效</td><td><code>60ms 瞬时</code> <code>120ms 悬停</code> <code>180ms 面板</code> <code>320ms 转场</code>（cubic）</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="n">06</span>字体三档</h2>
+<p class="note">
+  <b>小字要清晰，大字要有性格</b> —— 一副字体做不好这两件事，所以分三档。
+  档位之间是<b>硬字号阈值</b>：毛笔 ≥60 ／ 宋体 ≥22 ／ 黑体 &lt;22（毛笔小字会糊，宋体小字不如黑体清楚）。
+  网页里无法直接引用打包的字体，这里用系统近似字体示意观感。
+</p>
+<div class="on-dark" style="margin-top:var(--s-md)">
+  <div class="specimens">
+    <div class="spec" style="grid-column:span 2">
+      <h5>① 主视觉 · 马善政毛笔楷书（5.6 MB · 只给超大字）</h5>
+      <div style="font-family:var(--font-display);font-size:48px;color:var(--gold-500);letter-spacing:.34em;line-height:1.6">战　棋</div>
+      <p class="note" style="margin-top:var(--s-sm)">
+        主菜单大标题、结算 / 胜利标题。字距随字号缩放（80px→7px、60px→5px）——
+        <b>毛笔体 + 字距</b>才是"设计感"的主要来源。
+      </p>
+    </div>
+    <div class="spec">
+      <h5>② 小标题 · 思源宋体 Bold（11.5 MB）</h5>
+      <div style="font-family:var(--font-serif);font-size:26px;color:var(--gold-400);letter-spacing:.08em;line-height:1.7">英雄图鉴</div>
+      <div style="font-family:var(--font-serif);font-size:22px;color:var(--ink-100);line-height:1.7">选择模式　骑士线</div>
+      <div style="font-family:var(--font-serif);font-size:22px;color:var(--ink-100);line-height:1.7">元晶龙王　追猎</div>
+      <p class="note" style="margin-top:var(--s-sm)">
+        面板标题 / 章节名 / 关卡名 / <b>英雄名</b>（≥22px）。宋体在深底上有「刻本」感，比黑体雅。
+      </p>
+    </div>
+    <div class="spec">
+      <h5>③ 正文 · 思源黑体（17.0 MB · <b>可变字重</b>）</h5>
+      <div style="font-family:var(--font);font-size:var(--fs-lg);line-height:1.9">
+        <div style="color:var(--ink-100)">生命 7 / 9　能量 3 / 5</div>
+        <div style="color:var(--ink-300);font-weight:500">按钮用 Medium（500）</div>
+        <div style="color:var(--ink-100);font-weight:700">强调用 SemiBold（600）</div>
+      </div>
+      <p class="note" style="margin-top:var(--s-sm)">
+        正文 / 按钮 / 数值 / 标签（&lt;22px）。<b>可变字重</b>是打包它的主要理由 ——
+        系统字体只给得到一个 400，界面会显得「平」；另外也保证 Windows 与 Android <b>渲染完全一致</b>。
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="legend">
+  <span><b>红 = 我方</b>（中国习惯）</span><span><b>蓝 = 敌方</b></span>
+  <span>金 = 唯一强调色</span><span>弹窗底色<b>不透明</b></span>
+  <span>资源条<b>四色四义</b>：生命绿 / 护盾蓝 / 能量琥珀 / 理智紫</span>
+</div>
+
+<script>
+/* 令牌数据 —— 与 ui_design.gd 一一对应 */
+const INK=[
+ ["INK_950","#0A0D17","最深：资源条底槽"],["INK_900","#10121F","弹窗不透明底"],
+ ["INK_800","#1A1F30","卡片/面板面"],["INK_750","#1F263D","深面"],
+ ["INK_700","#293047","过渡面"],["INK_650","#333D5C","悬停面"],
+ ["INK_600","#3B456B","分隔"],["INK_550","#545F85","次级分隔"],
+ ["INK_500","#737FA3","仅禁用态"],["INK_400","#949EB8","占位符"],
+ ["INK_300","#ADB8CC","说明文字"],["INK_250","#BFCBDF","二级半文字"],
+ ["INK_200","#D6DEEB","标签"],["INK_100","#EBF2FC","正文"],["INK_050","#F7F9FE","强调正文"]];
+const GOLD=[
+ ["GOLD_700","#9E7A29","凹陷/按下阴影"],["GOLD_600","#C79E38","按下态/描边"],
+ ["GOLD_500","#F0C75E","主强调 ★"],["GOLD_400","#FFE08C","悬停态/焦点环"],
+ ["GOLD_300","#FFF2CC","高亮文字"],["GOLD_200","#FFF7E0","极浅"],["GOLD_100","#FFFCF2","近白偏暖"]];
+const SEM=[
+ ["OK","#5FBF74","成功"],["WARN","#E0A030","警告"],["DANGER","#D9483B","危险"],["INFO","#4E8FD6","信息"],
+ ["ALLY","#C7402E","我方（红）"],["ALLY_SOFT","#EB7866","我方浅态"],["ENEMY","#3D6BBF","敌方（蓝）"],["ENEMY_SOFT","#80ADF2","敌方浅态"],
+ ["HP","#6BC25C","生命条·绿"],["SHIELD","#54ADF2","护盾条·蓝"],["ENERGY","#D9A640","能量条·琥珀"],["SANITY","#9E7AD1","理智条·紫"]];
+const BOARD=[
+ ["BOARD_BG","#332E29","棋盘底"],["BOARD_LIGHT","#EDDEBD","浅格·羊皮纸"],["BOARD_DARK","#8C6647","深格·木"],
+ ["BOARD_FRAME","#262019","格线/外框"],["BOARD_INK","#3D301F","棋盘深棕"],["BOARD_TEXT","#2E2117","棋盘正文"],
+ ["SPAWN","#668FBD","出生格"],["SPAWN_EDGE","#294770","出生格描边"],
+ ["CELL_HL_MOVE","#73D973","可移动"],["CELL_HL_CAST","#F2CC4D","技能落点"]];
+const SURF=[
+ ["APP_BG","#1A2035","菜单纯色兜底"],["SURFACE_CARD","#1A1F30","卡片·不透明"],
+ ["SURFACE_MODAL","#10121F","弹窗·不透明"],["BORDER","#594D42","面板描边"],
+ ["BORDER_WARM","#665C42","暖调描边"],["BORDER_STRONG","#C79E38","强调描边"],
+ ["FOCUS","#FFE08C","焦点环"]];
+
+function render(id,list,opts){
+  opts=opts||{};
+  const box=document.getElementById(id);
+  box.innerHTML=list.map(([n,h,role])=>`
+    <div class="sw"><span class="chip" style="background:${h}"></span>
+      <div class="meta"><div class="name">${n}</div><div class="hex">${h}</div>
+      <div class="cr ${opts.warn&&opts.warn.includes(n)?'warn':''}">${role}</div></div></div>`).join("");
+}
+render("sw-ink",INK);
+render("sw-gold",GOLD);
+render("sw-sem",SEM,{warn:["INK_500"]});
+render("sw-board",BOARD);
+const MD=[
+ ["MD_OK","#5EBF73","地形/技能名"],["MD_GOLD","#FFE08C","标题/武器名"],
+ ["MD_HL","#FFD95A","正文内联高亮"],["MD_DIM","#ADB8CC","次要说明"],
+ ["MD_MUTED","#949EB8","障碍/分隔"],["MD_INFO","#4F8FD6","被动"],
+ ["MD_WARN","#EB7866","警告/被禁用"]];
+render("sw-surf",SURF);
+render("sw-md",MD);
+
+/* 棋盘：5×3，出生格在 x=0 / x=4（第 3 行，即 y=2） */
+const board=document.getElementById("board");
+const pieces={ "0,2":{cls:"ally",name:"元晶龙王"}, "4,2":{cls:"enemy",name:"追猎"}, "2,1":{cls:"dummy",name:"木桩"} };
+const moveSet=new Set(["1,1","1,2","1,3","2,2","2,3"]);
+let html="";
+for(let y=0;y<3;y++)for(let x=0;x<5;x++){
+  const k=x+","+y;
+  let cls=(x===0||x===4)?"spawn":(((x+y)%2===0)?"light":"dark");
+  if(moveSet.has(k)) cls+=" mv";
+  if(k==="3,1") cls+=" cs";
+  const p=pieces[k];
+  // 棋子头顶三条（自下而上：能量 → 生命 → 护盾），与 unit_token._draw_overhead 的同序
+  const mini = (p && p.cls==="ally")
+    ? `<span class="mini">`
+      + `<i><b style="width:33%;background:var(--shield)"></b></i>`
+      + `<i><b style="width:78%;background:var(--hp)"></b></i>`
+      + `<i><b style="width:60%;background:var(--energy)"></b></i>`
+      + `</span>`
+    : "";
+  html+=`<div class="cell ${cls}"><span class="coord">${x},${y}</span>`
+     + (p?`<div class="piece ${p.cls}">${mini}${p.name}${p.cls==="ally"?'<span class="rng">3</span>':''}</div>`:"")
+     + `</div>`;
+}
+board.innerHTML=html;
+
+/* 行动顺序（按速度） */
+document.getElementById("turnline").innerHTML=
+  ["元晶龙王","追猎","训练木桩"].map((n,i)=>
+    `<span class="u${i===0?" now":""}">${i+1}. ${n}</span>`).join("");
+
+/* 英雄图鉴卡片 */
+const HEROES=[
+ ["元晶龙王","控制","9","3","4"],["追猎","刺客","7","3","5"],["剑舞","剑士","8","2","4"],
+ ["孤狼","游侠","8","2","4"],["李太白","剑仙","7","2","5"],["流萤","术士","6","1","3"],
+ ["药师","辅助","7","2","3"],["虞美人","召唤","6","1","3"],["睡神","控制","7","2","4"],
+ ["邪神","术士","8","2","3"],["灵虚","幻术","6","1","4"],["光玉","圣职","7","2","3"],
+ ["辛克莱","机械","9","4","2"],["仙尊","宗师","8","3","4"]];
+document.getElementById("cards").innerHTML=HEROES.map(([n,role,hp,atk,spd],i)=>`
+  <div class="card">
+    <div class="art"><span class="role">${role}</span>${["◆","▲","✦","◈","❖","✧","◉","❂"][i%8]}</div>
+    <div class="body">
+      <div class="nm">${n}</div>
+      <div class="tag">${role}　·　速度 ${spd}</div>
+      <div class="stats"><span>生命 <i>${hp}</i></span><span>攻击 <i>${atk}</i></span></div>
+    </div>
+  </div>`).join("");
+</script>
+</div>
+</body>
+</html>

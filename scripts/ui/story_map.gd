@@ -13,11 +13,11 @@ const MAP_PATH := "res://maps/白灵殿.json"
 const CHARS_PATH := "res://data/story_chars.json"
 const GridBoardCls = preload("res://scripts/combat/grid_board.gd")
 const GRID := 48.0
-const BG := Color(0.16, 0.15, 0.13)
+const BG := UiDesign.BOARD_FRAME
 const PANEL := Color(0.08, 0.10, 0.15, 0.88)
 const REACH_COL := Color(0.36, 0.78, 0.55, 0.42)
 const REACH_EDGE := Color(0.55, 0.95, 0.70, 0.9)
-const TEAM_COL := {0: Color(0.80, 0.27, 0.20), 1: Color(0.26, 0.45, 0.80)}
+const TEAM_COL := {0: UiDesign.ALLY, 1: Color(0.26, 0.45, 0.80)}
 
 ## 剧情单位（轻量运行时状态；数值来自 data/story_chars.json）
 class StoryUnit extends RefCounted:
@@ -329,13 +329,13 @@ func _build_ui() -> void:
 	_back_btn.add_theme_font_size_override("font_size", 16)
 	_back_btn.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/MainUI.tscn"))
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.10, 0.12, 0.19, 0.92)
-	sb.border_color = Color(0.45, 0.42, 0.30)
+	sb.bg_color = UiDesign.SURFACE_PANEL
+	sb.border_color = UiDesign.BTN_BORDER
 	sb.set_border_width_all(1); sb.set_corner_radius_all(8)
-	var sbh := sb.duplicate(); sbh.bg_color = Color(0.20, 0.23, 0.36)
+	var sbh := sb.duplicate(); sbh.bg_color = UiDesign.INK_650
 	_back_btn.add_theme_stylebox_override("normal", sb)
 	_back_btn.add_theme_stylebox_override("hover", sbh)
-	_back_btn.add_theme_color_override("font_color", Color(0.92, 0.95, 0.99))
+	_back_btn.add_theme_color_override("font_color", UiDesign.INK_100)
 	add_child(_back_btn)
 
 	_free_btn = Button.new()
@@ -345,7 +345,7 @@ func _build_ui() -> void:
 	_free_btn.pressed.connect(_on_toggle_free)
 	_free_btn.add_theme_stylebox_override("normal", sb)
 	_free_btn.add_theme_stylebox_override("hover", sbh)
-	_free_btn.add_theme_color_override("font_color", Color(0.92, 0.95, 0.99))
+	_free_btn.add_theme_color_override("font_color", UiDesign.INK_100)
 	add_child(_free_btn)
 
 	_next_btn = Button.new()
@@ -355,7 +355,7 @@ func _build_ui() -> void:
 	_next_btn.pressed.connect(_advance_turn)
 	_next_btn.add_theme_stylebox_override("normal", sb)
 	_next_btn.add_theme_stylebox_override("hover", sbh)
-	_next_btn.add_theme_color_override("font_color", Color(0.92, 0.95, 0.99))
+	_next_btn.add_theme_color_override("font_color", UiDesign.INK_100)
 	add_child(_next_btn)
 
 func _layout_buttons() -> void:
@@ -416,7 +416,7 @@ func _draw() -> void:
 	# 底部提示
 	var fnt := get_theme_default_font()
 	if fnt != null:
-		draw_string(fnt, Vector2(size.x * 0.5 - 240.0, size.y - 12.0), _info, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.6, 0.64, 0.7))
+		draw_string(fnt, Vector2(size.x * 0.5 - 240.0, size.y - 12.0), _info, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, UiDesign.INK_400)
 
 func _draw_unit(u: StoryUnit) -> void:
 	var fnt := get_theme_default_font()
@@ -439,7 +439,7 @@ func _draw_unit(u: StoryUnit) -> void:
 		var fs := clampi(int(rad * 0.8), 9, 20)
 		var w := fnt.get_string_size(u.name, HORIZONTAL_ALIGNMENT_CENTER, -1, fs).x
 		draw_string(fnt, Vector2(c.x - w / 2.0, c.y + fs * 0.36), u.name,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1, 1, 1), -1.0)
+			HORIZONTAL_ALIGNMENT_LEFT, -1, fs, UiDesign.BAR_NUM, -1.0)
 	# 血条（小）
 	var bw := rad * 1.7
 	var bx := c.x - bw / 2.0
@@ -452,7 +452,7 @@ func _draw_top_bar() -> void:
 	var fnt := get_theme_default_font()
 	var ib := Rect2(Vector2(170, 14), Vector2(size.x - 500.0, 40))
 	draw_rect(ib, PANEL)
-	draw_rect(ib, Color(0.941, 0.780, 0.369), false, 1.0)
+	draw_rect(ib, UiDesign.GOLD_500, false, 1.0)
 	if fnt != null:
 		var title := "白灵殿 · 骑士线"
 		if _free_mode:
@@ -461,7 +461,7 @@ func _draw_top_bar() -> void:
 			var cur := _current_unit()
 			if cur != null:
 				title += "　行动：%s（速%d）" % [cur.name, cur.speed]
-		draw_string(fnt, Vector2(184, 42), title, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(1, 0.97, 0.9))
+		draw_string(fnt, Vector2(184, 42), title, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, UiDesign.GOLD_200)
 
 func _draw_order_panel() -> void:
 	var fnt := get_theme_default_font()
@@ -473,8 +473,8 @@ func _draw_order_panel() -> void:
 	var py := 64.0
 	var rect := Rect2(px, py, pw, ph)
 	draw_rect(rect, PANEL)
-	draw_rect(rect, Color(0.941, 0.780, 0.369), false, 1.0)
-	draw_string(fnt, Vector2(px + 12.0, py + 22.0), "行动顺序（速度↓）", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1, 0.97, 0.9))
+	draw_rect(rect, UiDesign.GOLD_500, false, 1.0)
+	draw_string(fnt, Vector2(px + 12.0, py + 22.0), "行动顺序（速度↓）", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, UiDesign.GOLD_200)
 	for i in range(_order.size()):
 		var u: StoryUnit = _order[i]
 		var y := py + 44.0 + float(i) * 22.0
@@ -496,11 +496,11 @@ func _draw_selected_panel() -> void:
 	draw_rect(rect, PANEL)
 	draw_rect(rect, TEAM_COL.get(u.team, Color.WHITE), false, 1.0)
 	var y := py + 22.0
-	draw_string(fnt, Vector2(px + 12.0, y), "%s　〔%s〕" % [u.name, u.element], HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(1, 0.97, 0.9)); y += 22.0
+	draw_string(fnt, Vector2(px + 12.0, y), "%s　〔%s〕" % [u.name, u.element], HORIZONTAL_ALIGNMENT_LEFT, -1, 16, UiDesign.GOLD_200); y += 22.0
 	draw_string(fnt, Vector2(px + 12.0, y), "生命 %d/%d　能量 %d/%d" % [u.hp, u.max_hp, u.energy, u.max_energy],
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.85, 0.88, 0.94)); y += 20.0
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 13, UiDesign.INK_200); y += 20.0
 	draw_string(fnt, Vector2(px + 12.0, y), "护甲 %d　速度 %d　移动 %d 格" % [u.armor, u.speed, u.move_range],
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.85, 0.88, 0.94)); y += 20.0
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 13, UiDesign.INK_200); y += 20.0
 	var pn := str(u.passive.get("name", ""))
 	if pn != "":
 		draw_string(fnt, Vector2(px + 12.0, y), "被动·%s" % pn, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.9, 0.85, 0.6)); y += 18.0
@@ -528,7 +528,7 @@ func _draw_legend() -> void:
 		var yy := ly_top + 22.0 + float(i) * 18.0
 		draw_rect(Rect2(lx + 10.0, yy - 1.0, 12, 12), _hex_color(str(td.get("color", "#888"))))
 		draw_string(fnt, Vector2(lx + 30.0, yy + 11.0), "%d %s" % [int(k), str(td.get("name", ""))],
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.85, 0.88, 0.94))
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 13, UiDesign.INK_200)
 		i += 1
 
 func _hex_color(h: String) -> Color:

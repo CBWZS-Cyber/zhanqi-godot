@@ -34,24 +34,54 @@ Godot/
 tools/map_exe_app/dist/
 tools/map_exe_app/build/
 
-# 媒体文件（受仓库体积限制，不纳入版本库）：视频 / 音频 / 图片
-*.png
-*.jpg
-*.jpeg
-*.gif
-*.webp
-*.bmp
-*.tga
-*.tiff
-*.ogv
-*.webm
+# ══════════════════════════════════════════════════════════
+# 2026-10-07 补：Gitee 源码仓只放源码 —— 挡掉媒体素材与其它非源码产物
+# 依据：实测「若此刻 add -A 会入库 711 文件 / 174.4 MB」，其中 99% 是媒体。
+# 远端仓库当前仅 1.9 MB，本规则让入库量回到同一量级（约 3~5 MB）。
+# ══════════════════════════════════════════════════════════
+
+# ── 媒体：视频 / 音频 ──
 *.mp4
-*.mov
+*.ogv
+*.ogv.uid
+*.webm
 *.avi
+*.mov
 *.mkv
+*.flv
 *.wav
-*.mp3
 *.ogg
-*.flac
-*.m4a
-*.aac
+
+# ── 媒体：大图与素材 ──
+#   assets/db/*_tex.png = 拆解贴图；art/设定稿 = 设定素材（均非运行时必需）
+*_tex.png
+*.psd
+*.blend
+story/video/
+assets/video/
+assets/heroes/videos/
+assets/fonts/
+art/设定稿/
+#   英雄立绘 / 头像（纯图片；工程数据 json 与 skel 仍保留）
+assets/heroes/*.jpg
+assets/heroes/*.png
+
+# ── 本地备份目录（会随 add -A 混进仓库）──
+_backup_*/
+
+# ── 日志与调试产物 ──
+*.log
+Godot/app_userdata/
+
+# ── 构建产物 / 安装包 ──
+tools/dist/*.exe
+tools/dist/*.zip
+installer/*.exe
+*.exe
+
+# ── 密钥类（绝不入库）──
+ai_key.bin
+*.keybin
+.env
+.env.*
+

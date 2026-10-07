@@ -18,16 +18,80 @@ if hasattr(sys.stdout, "reconfigure"):
 from flask import Flask, request, jsonify, send_file
 
 # 地图库定位：不写死本机路径（公开仓库安全），自动找 Godot 工程 maps 目录
-def _resolve_maps_dir():
-    # EXE 通常放在工程 tools/ 下（frozen）；开发时脚本位于 tools/map_exe_app/
+def _base_dir():
+    """程序所在目录（frozen 时是 exe 所在目录）。"""
     if getattr(sys, "frozen", False):
-        base = os.path.dirname(os.path.abspath(sys.executable))       # tools/
-        cand = os.path.abspath(os.path.join(base, "..", "maps"))      # 工程 maps
-        if os.path.isdir(os.path.dirname(cand)):
-            return cand
-        return os.path.join(base, "maps")
-    here = os.path.dirname(os.path.abspath(__file__))                 # tools/map_exe_app/
-    return os.path.abspath(os.path.join(here, "..", "..", "maps"))    # godot-chess-tactics/maps
+        return os.path.dirname(os.path.abspath(sys.executable))
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def _search_project_maps(base):
+    """从 base 逐级往上找战棋工程，认 project.godot 或已存在的 maps 目录。
+
+    为什么需要：安装包要发给别人，包里那份 maps_dir.txt 写的是作者电脑上的路径，
+    在对方机器上不存在。这时候得让程序自己去认他的工程。
+    """
+    cur = os.path.abspath(base)
+    for _ in range(5):
+        parent = os.path.dirname(cur)
+        if not parent or parent == cur:
+            break
+        cur = parent
+        if os.path.isfile(os.path.join(cur, "project.godot")):
+            return os.path.join(cur, "maps")
+        # 光有个叫 maps 的目录不算数 —— 太容易撞名（测试时就被 Temp\maps 骗过一次）。
+        # 里面得真有地图 json 才认。
+        m = os.path.join(cur, "maps")
+        try:
+            if any(f.lower().endswith(".json") for f in os.listdir(m)):
+                return m
+        except Exception:
+            pass
+    return None
+
+
+def _resolve_maps_dir():
+    """地图库定位。
+
+    安装版如果还按「exe 上一级」找 maps，地图会存进 Program Files，
+    Godot 工程根本读不到。所以多一层配置文件：安装包在 exe 同目录放一个
+    maps_dir.txt，写着战棋工程 maps 的真实路径。
+
+    优先级：
+      1. 环境变量 ZQ_MAPS_DIR
+      2. exe（或脚本）同目录的 maps_dir.txt —— 且上级目录必须真实存在，
+         否则说明这份配置是「作者电脑上带过来的」，不能用
+      3. 往上自动搜工程（project.godot / 已有 maps）—— 发给别人时靠这条
+      4. 绿色版：exe 放在工程 tools/ 下 -> ../maps
+      5. exe 同目录/maps（兜底，保证程序还能起来）
+    """
+    env = os.environ.get("ZQ_MAPS_DIR")
+    if env and env.strip():
+        return os.path.abspath(env.strip())
+
+    base = _base_dir()
+
+    cfg = os.path.join(base, "maps_dir.txt")
+    if os.path.isfile(cfg):
+        try:
+            with open(cfg, encoding="utf-8-sig") as f:
+                p = f.read().strip()
+            # 关键：只认「上级目录真实存在」的路径。
+            # 别人安装时，包里这份 txt 写的是作者的工程路径；
+            # 如果盲信，后面 makedirs 会在他 C 盘凭空造出一整棵目录树。
+            if p and os.path.isdir(os.path.dirname(os.path.abspath(p))):
+                return os.path.abspath(p)
+        except Exception:
+            pass
+
+    found = _search_project_maps(base)
+    if found:
+        return found
+
+    cand = os.path.abspath(os.path.join(base, "..", "maps"))          # 绿色版：工程 maps
+    if os.path.isdir(os.path.dirname(cand)):
+        return cand
+    return os.path.join(base, "maps")
 
 MAPS_DIR = _resolve_maps_dir()
 PORT = 8765
@@ -100,6 +164,37 @@ def api_maps():
                 except Exception:
                     continue
     return jsonify(ok=True, maps=items, dir=MAPS_DIR)
+
+
+@app.route("/api/set_maps_dir", methods=["POST"])
+def api_set_maps_dir():
+    """改地图库位置。
+
+    发给别人的安装包里写的是作者电脑上的路径，对方第一次跑很可能指错。
+    在界面里改成他自己的 godot-chess-tactics\\maps 就行，会记进 maps_dir.txt，
+    下次启动直接生效。
+    """
+    global MAPS_DIR
+    data = request.get_json(silent=True) or {}
+    p = str(data.get("dir") or "").strip().strip('"').strip("'")
+    if not p:
+        return jsonify(ok=False, error="路径为空"), 400
+    p = os.path.abspath(p)
+    parent = os.path.dirname(p)
+    if not os.path.isdir(parent):
+        return jsonify(ok=False, error="上级目录不存在：%s" % parent), 400
+    try:
+        os.makedirs(p, exist_ok=True)
+    except Exception as e:
+        return jsonify(ok=False, error="无法创建目录：%s" % e), 500
+    MAPS_DIR = p
+    try:
+        with open(os.path.join(_base_dir(), "maps_dir.txt"), "w",
+                  encoding="utf-8") as f:
+            f.write(p + "\n")
+    except Exception:
+        pass          # 写不了也无所谓，本次运行照样生效
+    return jsonify(ok=True, dir=MAPS_DIR)
 
 
 @app.route("/api/delete", methods=["POST"])

@@ -57,6 +57,56 @@ var passive: Skill = null
 var actives: Array[Skill] = []     # 长度 = 4（按 hero_defs 的 actives 顺序）
 var _passive_cd_round: int = 0     # 被动触发节流（可选，战斗层用）
 
+# ---- 伤害加成栈（按技能槽 1..4 / 0=全技能）----
+## 用法：剑舞剑意“每次使用技能1后 技能1伤害+1（上限4）” → add_slot_damage(1, 1, 4)
+var _dmg_slot := {}          # slot(int) -> 加成值
+var _dmg_bonus_ele := {}     # 元素 -> +%（对“该主属性目标”造成伤害加成，敌我适用）
+var dmg_mult := 1.0          # 伤害倍率（狂怒×2 / 天机1.5 等）
+
+# ---- 免伤 / 闪避 / 反伤 / 无敌 ----
+var _evasion_pct_default := 0
+var evasion_pct := 0         # 闪避率%（灵虚数影90%；攻击必中技除外）
+var _reflect_pct := 0        # 反伤%（阳状态50%）：把所受实际伤害按%弹回攻击者
+var _mitig := {}             # 免伤栈：属性id或"all" -> pct（防守态/血狱等全局）
+var _mitig_att := {}         # 针对攻击者的免伤：攻击者instance_id -> {pct, who}（孤狼锻体按“人”）
+var _invuln := false         # 无敌（rapper 锁血）
+
+# ---- 理智（辛克莱等 in def sanity_cap）----
+var sanity: float = 0.0      # 理智（辛克莱 上限25 初始0，可为负）
+var has_sanity := false      # 理智系英雄（def 声明 sanity_cap）：UI 据此把能量栏换成理智栏
+var sanity_cap: float = 45.0 # 理智上限（辛克莱 def sanity_cap=25）
+
+# ---- 死亡复活（仙尊等）----
+var _revive_rounds := 0      # 死亡复活回合数（>0 启用死亡复活；仙尊3）
+var _revive_hp_pct: float = 0.0
+var _revive_uses := 1
+var _corpse := false         # 死亡待复活中
+
+# ---- 掠夺 / 禁用技能 ----
+var _lost_skills := {}       # 被掠夺/禁用的技能 id -> true（无法使用；限时锁到期自动解除）
+var stolen_skill_id := ""    # 已夺得的技能 id（空=当前无掠夺技）
+var _stolen_pending := ""    # 掠夺所得、待“下回合开始”生效的技能 id
+var _stolen_slot := 0        # 掠夺技替换掉的技能槽（1..4）
+var _stolen_backup: Skill = null  # 掠夺技时效内被换下的原技能（到期归还）
+var STOLEN_ROUNDS := 2       # 掠夺技可用时长（自身回合数）
+
+# ---- 生命阈值 / 受击回调 ----
+var _hp_flags := []          # def["hp_threshold_flags"]：生命跨阈值自动置/清 flag
+var hit_events: Array = []   # 受击回调：[Callable(attacker, element)]（锻体/防守计数等注册用）
+## 致命守护日志（大长老·泉涌）：lose_hp 抵消致命伤时写入，由战斗层每步读取并清空后写进战报
+var guard_note: String = ""
+## >0 表示当前正在 take_damage 内部结算（此时 lose_hp 不单独通知，避免重复飘字）
+var _in_damage := 0
+
+# ---- 持续回合计时器（状态/增益“持续 N 回合”统一用） ----
+## _timers: id -> {left:int, cb:Callable?}；cb 在到期时调用，可返回 String 并入日志
+var _timers := {}
+
+# ---- 联机确定性随机源 ----
+## 战斗层创建单位时注入（同种子→双方随机结果一致）。
+## null = 单机旧路径，回退全局 randi()/randf()（行为与旧版一致）
+var rng: RandomNumberGenerator = null
+
 func _init(def: Dictionary) -> void:
 	def_id = str(def.get("id", ""))
 	element = str(def.get("element", ""))
@@ -195,44 +245,13 @@ func set_speed_mod(n: int) -> void:
 func set_speed_buff(n: int) -> void:
 	speed_buff = n
 
-## ---------- 伤害加成栈（按技能槽 1..4 / 0=全技能） ----------
-## 用法：剑舞剑意“每次使用技能1后 技能1伤害+1（上限4）” → add_slot_damage(1, 1, 4)
-var _dmg_slot := {}          # slot(int) -> 加成值
-var _dmg_bonus_ele := {}     # 元素 -> +%（对“该主属性目标”造成伤害加成，敌我适用）
-var dmg_mult := 1.0          # 伤害倍率（狂怒×2 / 天机1.5 等）
-var _evasion_pct_default := 0
-var evasion_pct := 0         # 闪避率%（灵虚数影90%；攻击必中技除外）
-var _reflect_pct := 0        # 反伤%（阳状态50%）：把所受实际伤害按%弹回攻击者
-var _mitig := {}             # 免伤栈：属性id或"all" -> pct（防守态/血狱等全局）
-var _mitig_att := {}         # 针对攻击者的免伤：攻击者instance_id -> {pct, who}（孤狼锻体按“人”）
-var _invuln := false         # 无敌（rapper 锁血）
-var sanity: float = 0.0
-var has_sanity := false     # 理智系英雄（def 声明 sanity_cap）：UI 据此把能量栏换成理智栏              # 理智（辛克莱 上限25 初始0，可为负）
-var sanity_cap: float = 45.0         # 理智上限（辛克莱 def sanity_cap=25）
-var _revive_rounds := 0      # 死亡复活回合数（>0 启用死亡复活；仙尊3）
-var _revive_hp_pct: float = 0.0
-var _revive_uses := 1
-var _corpse := false         # 死亡待复活中
-var _lost_skills := {}       # 被掠夺/禁用的技能 id -> true（无法使用；限时锁到期自动解除）
-var stolen_skill_id := ""    # 已夺得的技能 id（空=当前无掠夺技）
-
-## 联机确定性随机源：战斗层创建单位时注入（同种子→双方随机结果一致）。
-## null = 单机旧路径，回退全局 randi()/randf()（行为与旧版一致）
-var rng: RandomNumberGenerator = null
-
+## 联机确定性随机源的两个同步取随机入口（`rng` 变量见文件头部的变量区）。
+## 2026-09-30：原先一批 var 声明夹在函数之间（补丁式堆叠），已全部集中到头部变量区。
 func _randi_sync() -> int:
 	return rng.randi() if rng != null else randi()
 
 func _randf_sync() -> float:
 	return rng.randf() if rng != null else randf()
-var _stolen_pending := ""    # 掠夺所得、待“下回合开始”生效的技能 id
-var _stolen_slot := 0        # 掠夺技替换掉的技能槽（1..4）
-var _stolen_backup: Skill = null  # 掠夺技时效内被换下的原技能（到期归还）
-var STOLEN_ROUNDS := 2       # 掠夺技可用时长（自身回合数）
-var _hp_flags := []          # def["hp_threshold_flags"]：生命跨阈值自动置/清 flag
-var hit_events: Array = []   # 受击回调：[Callable(attacker, element)]（锻体/防守计数等注册用）
-## 致命守护日志（大长老·泉涌）：lose_hp 抵消致命伤时写入，由战斗层每步读取并清空后写进战报
-var guard_note: String = ""
 
 func add_slot_damage(slot: int, amount: float, cap: float = -1.0) -> float:
 	if amount <= 0:
@@ -256,10 +275,7 @@ func slot_damage(slot: int, base: float) -> float:
 	var sp := int(_dmg_slot.get(slot, 0))
 	return base + all + sp
 
-## ---------- 持续回合计时器（状态/增益“持续 N 回合”统一用） ----------
-## _timers: id -> {left:int, cb:Callable?}；cb 在到期时调用，可返回 String 并入日志
-var _timers := {}
-
+## ---------- 持续回合计时器（状态/增益“持续 N 回合”统一用；`_timers` 见头部变量区） ----------
 func add_timer(id: String, rounds: int, on_expire: Callable = Callable()) -> void:
 	_timers[id] = {"left": maxi(1, rounds), "cb": on_expire}
 
@@ -424,9 +440,6 @@ func _update_hp_flags() -> void:
 ## hp_drained：绕过 take_damage 的直接掉血（真伤/自损/回合末地形扣血），只带实际掉了多少。
 signal damaged(unit: BattleUnit, result: Dictionary)
 signal hp_drained(unit: BattleUnit, amount: float)
-
-## >0 表示当前正在 take_damage 内部结算（此时 lose_hp 不单独通知，避免重复飘字）
-var _in_damage := 0
 
 ## 受击总入口：护盾先吸收 → 剩余按护甲减免 → 扣生命。
 ## 返回 { "absorbed", "reduced", "hp_lost", "killed", "missed", "reflected", "invuln" }

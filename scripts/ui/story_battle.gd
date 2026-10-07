@@ -12,11 +12,11 @@ const _BAT := preload("res://scripts/combat/battle_story.gd")
 const _BD := preload("res://scripts/ui/story_battle_board.gd")
 # Terrain 已由 scripts/combat/terrain.gd 的 class_name 全局注册，直接用即可
 
-const COL_BG := Color(0.20, 0.18, 0.16)
-const COL_PANEL := Color(0.10, 0.12, 0.19, 0.94)
-const COL_GOLD := Color(0.941, 0.780, 0.369)
-const COL_RED := Color(0.78, 0.25, 0.18)
-const COL_BLUE := Color(0.24, 0.42, 0.75)
+const COL_BG := UiDesign.BOARD_BG
+const COL_PANEL := UiDesign.SURFACE_PANEL
+const COL_GOLD := UiDesign.GOLD_500
+const COL_RED := UiDesign.ALLY
+const COL_BLUE := UiDesign.ENEMY
 const SIDE_W := 330.0
 
 var _phase := "play"          # play / over
@@ -51,6 +51,7 @@ var _skip_btn: Button
 
 # ============================================================ 生命周期
 func _ready() -> void:
+	UiTheme.attach(self)   # 全局墨金主题（幂等）
 	var bg := Panel.new()
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.add_theme_stylebox_override("panel", _panel_style(COL_BG, 0))
@@ -87,7 +88,7 @@ func _build_main() -> VBoxContainer:
 	_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_title.add_theme_font_size_override("font_size", 17)
-	_title.add_theme_color_override("font_color", Color(0.95, 0.97, 1.0))
+	_title.add_theme_color_override("font_color", UiDesign.INK_050)
 	top.add_child(_title)
 	_goal_lab = Label.new()
 	_goal_lab.add_theme_font_size_override("font_size", 15)
@@ -151,7 +152,7 @@ func _build_right_card() -> Panel:
 	right.add_child(_action_lab)
 	_name_lab = Label.new()
 	_name_lab.add_theme_font_size_override("font_size", 22)
-	_name_lab.add_theme_color_override("font_color", Color(0.95, 0.97, 1.0))
+	_name_lab.add_theme_color_override("font_color", UiDesign.INK_050)
 	right.add_child(_name_lab)
 	_hp_bar = _make_bar("生命", COL_RED, 1, 1, true)
 	right.add_child(_hp_bar)
@@ -160,14 +161,14 @@ func _build_right_card() -> Panel:
 	_sub_lab = Label.new()
 	_sub_lab.add_theme_font_size_override("font_size", 12)
 	_sub_lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_sub_lab.add_theme_color_override("font_color", Color(0.75, 0.80, 0.88))
+	_sub_lab.add_theme_color_override("font_color", UiDesign.INK_250)
 	right.add_child(_sub_lab)
 	_state_lab = RichTextLabel.new()
 	_state_lab.bbcode_enabled = true
 	_state_lab.fit_content = true
 	_state_lab.scroll_active = false
 	_state_lab.add_theme_font_size_override("normal_font_size", 13)
-	_state_lab.add_theme_color_override("default_color", Color(0.75, 0.80, 0.88))
+	_state_lab.add_theme_color_override("default_color", UiDesign.INK_250)
 	right.add_child(_state_lab)
 
 	var lab_skill := Label.new()
@@ -183,7 +184,7 @@ func _build_right_card() -> Panel:
 	_skill_desc.text = ""
 	_skill_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_skill_desc.custom_minimum_size = Vector2(0, 40)
-	_skill_desc.add_theme_color_override("font_color", Color(0.72, 0.77, 0.85))
+	_skill_desc.add_theme_color_override("font_color", UiDesign.INK_250)
 	right.add_child(_skill_desc)
 
 	var log_title := Label.new()
@@ -217,75 +218,13 @@ func _build_right_card() -> Panel:
 
 # ============================================================ 小控件
 func _style_btn(b: Button) -> void:
-	var n := StyleBoxFlat.new()
-	n.bg_color = Color(0.10, 0.12, 0.19, 0.9)
-	n.border_color = Color(0.45, 0.42, 0.30)
-	n.set_border_width_all(1)
-	n.set_corner_radius_all(8)
-	var h := n.duplicate(); h.bg_color = Color(0.20, 0.23, 0.36)
-	var pr := n.duplicate(); pr.bg_color = Color(0.08, 0.09, 0.15)
-	b.add_theme_stylebox_override("normal", n)
-	b.add_theme_stylebox_override("hover", h)
-	b.add_theme_stylebox_override("pressed", pr)
-	b.add_theme_color_override("font_color", Color(0.92, 0.95, 0.99))
-	b.add_theme_color_override("font_hover_color", Color(1.0, 0.95, 0.8))
+	UiKit.style_button(b)
 
 func _panel_style(col: Color, radius: int) -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = col
-	sb.border_color = Color(0.35, 0.32, 0.26)
-	if radius > 0:
-		sb.set_corner_radius_all(radius)
-	sb.set_border_width_all(1)
-	return sb
+	return UiKit.panel_style(col, radius)
 
 func _make_bar(tag: String, col: Color, value: int, max_value: int, tiled := false) -> HBoxContainer:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
-	var tag_l := Label.new()
-	tag_l.text = tag
-	tag_l.custom_minimum_size = Vector2(42, 0)
-	tag_l.add_theme_font_size_override("font_size", 14)
-	tag_l.add_theme_color_override("font_color", Color(0.84, 0.87, 0.92))
-	row.add_child(tag_l)
-	var bar: Control
-	if tiled:
-		# 生命条改用 HpShieldBar：能在同一条里分段显示 hp + 护盾（2026-09-13）
-		var hsb := HpShieldBar.new()
-		hsb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		hsb.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		hsb.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		hsb.custom_minimum_size = Vector2(0, 22)
-		bar = hsb
-	else:
-		var pb := ProgressBar.new()
-		pb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		pb.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		pb.show_percentage = false
-		pb.min_value = 0
-		pb.max_value = max_value if max_value > 0 else 1
-		pb.value = clampi(value, 0, pb.max_value)
-		pb.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		pb.custom_minimum_size = Vector2(0, 22)
-		var fill := StyleBoxFlat.new()
-		fill.bg_color = col
-		fill.set_corner_radius_all(5)
-		var bgst := StyleBoxFlat.new()
-		bgst.bg_color = Color(0.04, 0.05, 0.09, 0.9)
-		bgst.set_corner_radius_all(5)
-		pb.add_theme_stylebox_override("fill", fill)
-		pb.add_theme_stylebox_override("background", bgst)
-		bar = pb
-	var num := Label.new()
-	num.text = "%.2f / %.2f" % [float(value), float(max_value)]
-	num.set_anchors_preset(Control.PRESET_FULL_RECT)
-	num.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	num.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	num.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	num.add_theme_color_override("font_color", Color(1, 1, 1))
-	bar.add_child(num)
-	row.add_child(bar)
-	return row
+	return UiKit.make_bar(tag, col, value, max_value, tiled, true)
 
 func _update_bar(bar: HBoxContainer, value: float, max_value: float, num_text := "", tag_text := "", smooth := false, shield := 0.0) -> void:
 	# 统一走 DamageFx.update_bar（兼容 HpShieldBar / ProgressBar，并保证数字标签一定被写）
@@ -666,15 +605,15 @@ func _refresh_ui() -> void:
 		nb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		nb.custom_minimum_size = Vector2(0, 40)
 		nb.add_theme_font_size_override("font_size", 13)
-		nb.add_theme_color_override("font_color", Color(0.92, 0.95, 0.99))
-		nb.add_theme_color_override("font_hover_color", Color(1.0, 0.95, 0.8))
+		nb.add_theme_color_override("font_color", UiDesign.INK_100)
+		nb.add_theme_color_override("font_hover_color", UiDesign.GOLD_300)
 		var bn := StyleBoxFlat.new()
-		bn.bg_color = Color(0.16, 0.19, 0.29)
-		bn.border_color = Color(0.40, 0.36, 0.26)
+		bn.bg_color = UiDesign.INK_700
+		bn.border_color = UiDesign.BORDER_WARM
 		bn.set_border_width_all(1)
 		bn.set_corner_radius_all(7)
-		var bh := bn.duplicate(); bh.bg_color = Color(0.23, 0.27, 0.42)
-		var bp := bn.duplicate(); bp.bg_color = Color(0.12, 0.15, 0.24)
+		var bh := bn.duplicate(); bh.bg_color = UiDesign.INK_600
+		var bp := bn.duplicate(); bp.bg_color = UiDesign.INK_750
 		nb.add_theme_stylebox_override("normal", bn)
 		nb.add_theme_stylebox_override("hover", bh)
 		nb.add_theme_stylebox_override("pressed", bp)
@@ -754,7 +693,7 @@ func _refresh_roster() -> void:
 		b.add_theme_stylebox_override("normal", sb)
 		b.add_theme_stylebox_override("hover", sb)
 		b.add_theme_stylebox_override("pressed", sb)
-		b.add_theme_color_override("font_color", Color(1, 1, 1))
+		b.add_theme_color_override("font_color", UiDesign.BAR_NUM)
 		var cell: Vector2i = bu.cell
 		b.pressed.connect(func():
 			_board.center_on(cell)
@@ -827,7 +766,7 @@ func _open_log_popup() -> void:
 		if is_instance_valid(cl):
 			cl.queue_free())
 	var bg := ColorRect.new()
-	bg.color = Color(0.04, 0.05, 0.09, 1.0)
+	bg.color = UiDesign.INK_950
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	layer.add_child(bg)
 	var panel := Panel.new()
@@ -836,7 +775,7 @@ func _open_log_popup() -> void:
 	panel.offset_top = 55.0
 	panel.offset_right = -70.0
 	panel.offset_bottom = -60.0
-	var ps := _panel_style(Color(0.09, 0.11, 0.17, 0.99), 14)
+	var ps := _panel_style(UiDesign.INK_800, 14)
 	ps.border_color = Color(0.55, 0.50, 0.36)
 	panel.add_theme_stylebox_override("panel", ps)
 	layer.add_child(panel)
@@ -899,7 +838,7 @@ func _show_over(win: bool) -> void:
 	layer.mouse_filter = Control.MOUSE_FILTER_STOP
 	cl.add_child(layer)
 	var bg := ColorRect.new()
-	bg.color = Color(0.03, 0.04, 0.07, 0.92)
+	bg.color = UiDesign.BAR_TRACK
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	layer.add_child(bg)
 	var box := VBoxContainer.new()
@@ -912,7 +851,7 @@ func _show_over(win: bool) -> void:
 	t.text = "胜 利 · 昊 成 功 脱 身" if win else "失 败 · 白 灵 核 心 失 守"
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	t.add_theme_font_size_override("font_size", 40)
-	t.add_theme_color_override("font_color", COL_GOLD if win else Color(0.95, 0.45, 0.38))
+	t.add_theme_color_override("font_color", COL_GOLD if win else UiDesign.ALLY_SOFT)
 	box.add_child(t)
 
 	var sub := Label.new()
@@ -920,7 +859,7 @@ func _show_over(win: bool) -> void:
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	sub.add_theme_font_size_override("font_size", 16)
-	sub.add_theme_color_override("font_color", Color(0.86, 0.89, 0.94))
+	sub.add_theme_color_override("font_color", UiDesign.INK_200)
 	box.add_child(sub)
 
 	var row := HBoxContainer.new()

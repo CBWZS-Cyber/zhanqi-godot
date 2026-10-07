@@ -13,10 +13,10 @@ class_name HpShieldBar
 ##
 ## 数字标签由外部（各 UI 的 _make_bar）作为本节点子节点加入，用锚点铺满 → 自动居中。
 
-const COL_BG := Color(0.04, 0.05, 0.09, 0.9)
-const COL_HP := Color(0.42, 0.78, 0.36)
-const COL_SHIELD := Color(0.33, 0.68, 0.95)
-const COL_GHOST := Color(0.97, 0.96, 0.92, 0.85)
+const COL_BG := UiDesign.BAR_TRACK
+const COL_HP := UiDesign.HP
+const COL_SHIELD := UiDesign.SHIELD
+const COL_GHOST := UiDesign.GHOST
 
 const DROP_SPEED := 1.6      # hp 段滑落速度（每秒多少倍 max_hp）
 const GHOST_HOLD := 0.20     # 白条残影停留（秒）
@@ -109,3 +109,8 @@ func _draw() -> void:
 	var ghost_w := w * clampf(_ghost / denom, 0.0, 1.0)
 	if ghost_w > hp_w + 0.5:
 		draw_style_box(_sb_gh, Rect2(hp_w, 0.0, ghost_w - hp_w, h))
+	# ★ 生命/护盾分隔线（2026-10-04）。必须画在残影**之后**，否则会被残影盖掉。
+	#   原先两段只靠颜色分（绿+蓝），在 22px 的细条上容易被看成"一整条"，
+	#   加了深色竖线后一眼能看出「血到哪、盾多少」（用户实报要区分）。
+	if hp_w > 0.5 and sh_w > 0.5:
+		draw_rect(Rect2(hp_w - 1.0, 0.0, 2.0, h), UiDesign.BAR_EDGE)

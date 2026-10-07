@@ -72,6 +72,25 @@ const END_TURN_ENERGY_LOSS := {
 ## 冰面：进入后滑行
 const SLIDING := [ICE]
 
+## 地形配色（渲染用）—— **全工程共用这一份，别在各个界面各抄一遍**。
+## 2026-09-28 新增：新手教程棋盘用它给地形格上色。
+## ✅ 2026-09-30 收敛完成：`scripts/ui/team_board.gd` 原先那份副本已改为
+##    `const TERRAIN_COL := Terrain.COLORS` 转发，全工程只此一份。
+const COLORS := {
+	OBST_BREAKABLE: Color(0.26, 0.26, 0.30),
+	OBST_SOLID: Color(0.20, 0.20, 0.24),
+	FOREST: Color(0.30, 0.55, 0.32),
+	SWAMP: Color(0.44, 0.45, 0.24),
+	WATER: Color(0.26, 0.48, 0.72),
+	SNOW: Color(0.86, 0.88, 0.90),
+	SAND: Color(0.85, 0.74, 0.46),
+	MOUNTAIN: Color(0.56, 0.49, 0.42),
+	ICE: Color(0.72, 0.86, 0.92),
+}
+
+static func color_of(id: int) -> Color:
+	return COLORS.get(id, Color(0.93, 0.87, 0.74))
+
 ## ---------------------------------------------------------------------------
 ## 剧情关（骑士线第一关·白灵殿）实际启用的地形
 ## 2026-09-12 用户要求「加入地形效果」，并明确只生效这三类：

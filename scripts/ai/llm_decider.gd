@@ -6,7 +6,8 @@ extends RefCounted
 ##   2) 局面 + 候选清单发给豆包，请它做“选择题”并给出全队战术：{focus, posture, protect, choices};
 ##   3) 解析后返回：units下标 -> {"move":..., "has_move":..., "skill":{...}, "has_skill":...}（执行层 _exec_llm_plan 兼容）；
 ##      并把 {focus, posture, protect} 写入 battle.llm_tactics（规则 AI 第 2 步据此调权重）。
-## 任何失败（无 key/网络/解析异常）返回 {} → 调用方回退本地 AI。
+## 任何失败（云端不可达 / 被限流 / 模型没给出合法 JSON）返回 {} → 调用方回退本地 AI。
+## 2026-10-04：**Key 已从客户端移除**，改由自有云服务代调（见 AICfg 头注释）。
 
 const TIMEOUT_MS := 30000   # 2026-09-05 实测：关思考后真实卷子 ~4s，留 30s 兜底网络波动
 const POSTURES := ["aggressive", "balanced", "defensive", "kite"]
@@ -26,21 +27,12 @@ static func plan_round(battle, decide_list: Array) -> Dictionary:
 			candidates[str(idx)] = _candidates_for(battle, u)
 	# 2) 组装卷子
 	var prompt := _build_prompt(battle, candidates)
-	var body := {
-		"model": AICfg.DEFAULT_MODEL,
-		## 2026-09-05 实测：doubao-seed-evolving 默认深度思考 20s+，超时必挂；
-		## 必须 thinking:disabled 关闭思考（真实卷子 4.3s 返回正确 JSON）
-		"thinking": {"type": "disabled"},
-		"input": [{"role": "user", "content": [{"type": "input_text", "text": prompt}]}],
-	}
-	var headers := [
-		"Authorization: Bearer " + AICfg.api_key(),
-		"Content-Type: application/json",
-	]
-	var resp: Variant = _post_json(AICfg.DEFAULT_BASE_URL, headers, JSON.stringify(body))
-	if typeof(resp) != TYPE_DICTIONARY:
+	# 3) 交给**云端**代调（2026-10-04 起 Key 不在客户端了，见 AICfg 头注释）
+	var text := _ask_cloud(prompt)
+	if text == "":
 		return {}
-	return _parse_response(battle, resp, candidates)
+	# 4) 答题卡解析
+	return _parse_text(battle, text, candidates)
 
 ## ============ 候选生成（v1：A 进攻 / B 稳守 / C 保命，全部为合法动作） ============
 ## 候选字段：{key,label,desc, move:Vector2i|null, slot:int(0=不放技), target:int(-1=无/自身)}
@@ -234,21 +226,101 @@ static func _build_prompt(battle, candidates: Dictionary) -> String:
 	l.append("要求：choices 必须覆盖上面列出的每个待决策单位；其余字段必须合法；不确定时 posture 用 balanced。")
 	return "\n".join(l)
 
-## —— 同步 POST（第 4 步将换为异步 HTTPRequest） ——
+## ============ 云端代调（2026-10-04）============
+## 把卷子交给自有云服务器上的 zhanqi-cloud，由它带着服务器端的 Key 去问豆包。
+## 返回模型输出的**原始文本**；任何失败返回 ""（调用方回退本地 AI）。
+##
+## ⚠️ 客户端这边**没有任何 Key** —— 原先是 XOR+base64 打包在 ai_key.bin 里，
+##    那种混淆挡不住提取。现在 Key 只在服务器上。
+##
+## —— 最近一次云端调用的"为什么失败"（给战斗日志 / 界面看）——
+## `plan_round()` 只表达"成没成"，但玩家需要知道**为什么**没请到模型，
+## 尤其是"今日免费次数用完了，登录后每天 10 次"这种他自己就能解决的。
+static var last_http_code := 0
+static var last_http_body := ""
+static var last_error := ""          # 服务端给的中文原因（可空）
+static var last_need_login := false  # 服务端说"登录可解锁更多次数"
+static var last_quota := {}          # 服务端回执的额度 {tier, used, limit, left}
+
+static func _ask_cloud(prompt: String) -> String:
+	last_error = ""
+	last_need_login = false
+	last_quota = {}
+	last_http_code = 0
+	last_http_body = ""
+	if prompt.length() > AICfg.MAX_PROMPT:
+		push_warning("[LLM] 卷子超长（%d 字符），跳过" % prompt.length())
+		return ""
+	# device_id：服务端算"这台机器今天用了几次"；token：已登录则把额度提到 10 次/天。
+	# 两者服务端都会**自己校验** —— device_id 可伪造，token 不可（HMAC）；
+	# 而"今天是几号"始终由服务端时钟决定，客户端改系统时间没有任何用。
+	var body := JSON.stringify({"prompt": prompt, "device_id": DeviceId.get_id()})
+	var headers := ["Content-Type: application/json"]
+	if AICfg.auth_token != "":
+		headers.append("Authorization: Bearer " + AICfg.auth_token)
+	var resp: Variant = _post_json(AICfg.endpoint, headers, body)
+	if typeof(resp) != TYPE_DICTIONARY:
+		_capture_reject()          # 非 200（多半是 429 额度用完）→ 把原因捞出来
+		return ""
+	var d: Dictionary = resp
+	if not bool(d.get("ok", false)):
+		# 云端返回的 error 已经是给人看的中文（限流/额度/上游异常）
+		last_error = str(d.get("error", ""))
+		print("[LLM] 云端拒绝：", last_error)
+		return ""
+	return str(d.get("text", ""))
+
+
+## 从**非 200 响应体**里捞出"被拒原因"。
+## ⚠️ `_post_json` 在非 200 时返回 null（只有成功响应才是 JSON），所以只能靠
+##    上面那两个 static 变量传出来 —— 这就是它们存在的理由。
+static func _capture_reject() -> void:
+	if last_http_code == 0 or last_http_body == "":
+		return
+	var j: Variant = JSON.parse_string(last_http_body)
+	if typeof(j) != TYPE_DICTIONARY:
+		return
+	var dd: Dictionary = j
+	last_error = str(dd.get("error", ""))
+	last_need_login = bool(dd.get("need_login", false))
+	var q: Variant = dd.get("quota", {})
+	if typeof(q) == TYPE_DICTIONARY:
+		last_quota = q
+	if last_error != "":
+		print("[LLM] 云端拒绝（HTTP %d）：%s" % [last_http_code, last_error])
+
+
+## —— 同步 POST ——
+## ⚠️ 这是**阻塞主线程**的（一次约 4~5 秒）。保留是有意的：
+##    调用点会先写一条「== 敌方请来战术模型思考… ==」的日志，玩家知道在等；
+##    NetRoomCode / CloudApi 那些界面用的才必须走异步 HTTPRequest。
 static func _post_json(url: String, headers: Array, body: String) -> Variant:
 	var http := HTTPClient.new()
 	var host := url.replace("https://", "").replace("http://", "")
+	var port := -1
 	var path := "/"
 	var slash := host.find("/")
 	if slash >= 0:
 		path = host.substr(slash)
 		host = host.substr(0, slash)
-	var tls := TLSOptions.client()
-	if not _connect(http, host, tls):
+	# 🔴 **端口必须从 host 里拆出来单独传**。
+	#    Godot 的 HTTPClient 不会解析 "39.105.223.8:8789" 里嵌的端口 ——
+	#    它会把整串当主机名去做 DNS，结果是 STATUS_CANT_RESOLVE（实测状态停在 2），
+	#    而且**没有任何报错**，只是静默失败（探针里表现为 plan_round 耗时 0.0s 返回空）。
+	#    原代码是给 `https://ark.cn-beijing.volces.com/...` 写的，那个 URL 不带端口，
+	#    所以一直没暴露这个问题；改成自家 http://ip:8789 之后立刻就踩上了。
+	var colon := host.rfind(":")
+	if colon > 0 and host.substr(colon + 1).is_valid_int():
+		port = host.substr(colon + 1).to_int()
+		host = host.substr(0, colon)
+	# 🔴 明文 HTTP **不能**传 TLSOptions —— 传了会先做 TLS 握手，对着明文端口必然失败。
+	#    按 URL 的 scheme 决定要不要 TLS。
+	var want_tls := url.begins_with("https://")
+	if not _connect(http, host, port, _tls_for(want_tls, false)):
 		http.close()
 		http = HTTPClient.new()
-		tls = TLSOptions.client_unsafe()
-		if not _connect(http, host, tls):
+		# 只有 https 才需要"证书不受信也继续"的降级重试
+		if not want_tls or not _connect(http, host, port, _tls_for(true, true)):
 			http.close()
 			return null
 	var t0 := Time.get_ticks_msec()
@@ -276,15 +348,28 @@ static func _post_json(url: String, headers: Array, body: String) -> Variant:
 			break
 		OS.delay_msec(2)
 	var code := http.get_response_code()
+	# 非 200 的响应体也要留下 —— 429（额度用完）的中文原因与 need_login 就在里面，
+	# `_capture_reject()` 靠这两个 static 变量把它捞出来给玩家看。
+	last_http_code = code
+	last_http_body = chunks.get_string_from_utf8()
 	http.close()
 	if code != 200:
-		print("[LLM] HTTP ", code, " body: ", chunks.get_string_from_utf8().substr(0, 300))
+		print("[LLM] HTTP ", code, " body: ", last_http_body.substr(0, 300))
 		return null
 	var parsed: Variant = JSON.parse_string(chunks.get_string_from_utf8())
 	return parsed
 
-static func _connect(http: HTTPClient, host: String, tls: TLSOptions) -> bool:
-	var err := http.connect_to_host(host, -1, tls)
+## TLS 选项：明文 HTTP 必须返回 null（= 不做 TLS），见 _post_json 的说明
+static func _tls_for(use_tls: bool, unsafe: bool) -> TLSOptions:
+	if not use_tls:
+		return null
+	return TLSOptions.client_unsafe() if unsafe else TLSOptions.client()
+
+
+## port 单独传（-1 = 用 scheme 默认端口）。**不要把端口拼进 host** ——
+## 那样 HTTPClient 会把它当主机名去做 DNS，静默失败（见 _post_json 的说明）。
+static func _connect(http: HTTPClient, host: String, port: int, tls: TLSOptions) -> bool:
+	var err := http.connect_to_host(host, port, tls)
 	if err != OK:
 		return false
 	var t0 := Time.get_ticks_msec()
@@ -296,17 +381,8 @@ static func _connect(http: HTTPClient, host: String, tls: TLSOptions) -> bool:
 	return http.get_status() == HTTPClient.STATUS_CONNECTED
 
 ## ============ 答题卡解析 ============
-static func _parse_response(battle, resp: Dictionary, candidates: Dictionary) -> Dictionary:
-	var text := ""
-	var out: Variant = resp.get("output", [])
-	if out is Array:
-		for item in out:
-			if item is Dictionary and item.get("type", "") == "message":
-				var content: Variant = item.get("content", [])
-				if content is Array:
-					for c in content:
-						if c is Dictionary and (c.get("type", "") == "output_text" or c.has("text")):
-							text += str(c.get("text", ""))
+## 入参是**模型输出的原始文本**（云端已经把火山方舟的 Responses 外壳剥掉了）
+static func _parse_text(battle, text: String, candidates: Dictionary) -> Dictionary:
 	if text.strip_edges() == "":
 		return {}
 	var obj: Variant = JSON.parse_string(text)

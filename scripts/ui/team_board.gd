@@ -20,33 +20,25 @@ const X_MIN := 0
 const X_MAX := 9
 const Y_MIN := 1
 const Y_MAX := 8
-const COL_LIGHT := Color(0.93, 0.87, 0.74)
-const COL_DARK := Color(0.55, 0.40, 0.28)
-const COL_WING := Color(0.40, 0.56, 0.74)
+const COL_LIGHT := UiDesign.BOARD_LIGHT
+const COL_DARK := UiDesign.BOARD_DARK
+const COL_WING := UiDesign.SPAWN
 
-## 地形底色（2026-09-10）：格子按 board 的地形层上色（无地形则用棋盘原色）
-const TERRAIN_COL := {
-	1: Color(0.26, 0.26, 0.30),   # 障碍（可破坏）
-	2: Color(0.20, 0.20, 0.24),   # 障碍（不可破坏）
-	3: Color(0.30, 0.55, 0.32),   # 森林
-	4: Color(0.44, 0.45, 0.24),   # 沼泽
-	5: Color(0.26, 0.48, 0.72),   # 水域
-	6: Color(0.86, 0.88, 0.90),   # 雪地
-	7: Color(0.85, 0.74, 0.46),   # 沙漠
-	8: Color(0.56, 0.49, 0.42),   # 山地
-	9: Color(0.72, 0.86, 0.92),   # 冰面
-}
+## 地形底色（2026-09-10）：格子按 board 的地形层上色（无地形则用棋盘原色）。
+## 2026-09-30 收敛：原先本文件自存一份副本（值与 Terrain.COLORS 逐项一致），
+## 现直接转发到 Terrain.COLORS —— 以后改地形配色只需动 terrain.gd 一处。
+const TERRAIN_COL := Terrain.COLORS
 var board: GridBoard = null     # 地形数据源（由上层注入；null = 无地形）
 
 ## 地形悬浮提示用（可选）
 func terrain_of(c: Vector2i) -> int:
 	return board.terrain_at(c) if board != null else 0
-const COL_EDGE := Color(0.15, 0.12, 0.10)
-const COL_WING_EDGE := Color(0.16, 0.28, 0.44)
-const COL_MOVE := Color(0.45, 0.85, 0.45)
-const COL_LAND := Color(0.95, 0.80, 0.30)
+const COL_EDGE := UiDesign.BOARD_FRAME
+const COL_WING_EDGE := UiDesign.SPAWN_EDGE
+const COL_MOVE := UiDesign.CELL_HL_MOVE
+const COL_LAND := UiDesign.CELL_HL_CAST
 const COL_TARGET := Color(0.98, 0.55, 0.30)
-const COL_RED := Color(0.80, 0.27, 0.20)
+const COL_RED := UiDesign.ALLY
 const COL_BLUE := Color(0.26, 0.45, 0.80)
 const COL_GOLD := Color(1.0, 0.9, 0.5)
 
@@ -166,33 +158,9 @@ func _draw() -> void:
 			Color(0.55, 0.4, 0.05) if is_big else Color(0.75, 0.6, 0.15), maxf(1.0, cs * 0.02), true)
 	# 单位棋子由 Node 层渲染（_sync_tokens → unit_token），此处不再自绘
 
-## 状态徽章配色（按状态 id）
+## 状态徽章配色（2026-09-30 收敛：统一走 SkillEffects.status_color，全工程只此一份）
 func _status_color(sid: String) -> Color:
-	match sid:
-		"bleed":
-			return Color(0.75, 0.10, 0.12)      # 流血 深红
-		"burn":
-			return Color(0.92, 0.45, 0.08)      # 烧伤 橙
-		"wound":
-			return Color(0.60, 0.20, 0.55)      # 创伤 紫
-		"heavy_wound":
-			return Color(0.45, 0.12, 0.40)      # 重伤 深紫
-		"freeze":
-			return Color(0.30, 0.65, 0.90)      # 冰冻 冰蓝
-		"blind":
-			return Color(0.35, 0.35, 0.40)      # 失明 灰
-		"stun":
-			return Color(0.95, 0.80, 0.20)
-		"full_burn":
-			return Color(1.00, 0.35, 0.10)
-		"fear":
-			return Color(0.55, 0.30, 0.70)      # 恐惧 紫（此处原先重复了一个 fear 分支，已删）
-		"sword_field":
-			return Color(0.85, 0.75, 0.45)      # 剑域 金
-		"poison", "poison_layer":
-			return Color(0.30, 0.60, 0.20)      # 毒 绿
-		_:
-			return Color(0.42, 0.44, 0.52)      # 其它 石灰
+	return SkillEffects.status_color(sid)
 
 # ================= 棋子 Node 层（建模/圆 token） =================
 ## 上层每步刷新调用：喂全部存活 BattleUnit + 聚焦/当前行动单位

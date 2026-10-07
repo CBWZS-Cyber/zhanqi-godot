@@ -4,7 +4,7 @@ extends Node
 
 var battle_mode := "1v1"    # "1v1" | "4v4"（剧情等其它模式后续扩展）
 var offline_type := "pve"   # "pve"（人机）| "hotseat"（开房间·双人同机）
-var difficulty := "easy"   # 离线 PVE 难度：easy / normal / hard（由主菜单写入）
+var difficulty := "easy"   # 单机 PVE 难度：easy / normal / hard（由主菜单写入）
 var ai_backend := "llm"    # 困难难度后端："llm"（豆包战术模型）| "local"（本地进阶 AI）
 
 # ---------- 联机（Net autoload 配合使用）----------
@@ -14,31 +14,48 @@ var net_port := 3457
 var net_seed := 0           # host 生成的确定性随机种子（开局包下发）
 var net_red_hero := ""      # 开局包同步的红方英雄 id
 var net_blue_hero := ""     # 开局包同步的蓝方英雄 id
-var net_transport := "enet" # "enet"=局域网UDP直连 | "ws"=公网穿透（WebSocket/TCP + cpolar 隧道）
+var net_transport := "ws"   # "ws"=公网（走自研反向隧道，**输房间号即连，不分网络环境**）
+                            # "enet"=局域网 UDP 直连（同一 WiFi 下更快，作为可选的进阶用法）
+## 房间号目录服务地址（2026-09-30 新增；2026-10-03 上云）。
+## 已部署到自有阿里云 ECS（/opt/room-service，systemd 单元 `room-service`，端口 8787）——
+## 玩家不再需要在自己电脑上跑服务，房间号全局可用。
+## 换部署点只改这一处；留空则回落到 NetRoomCode.DEFAULT_SERVICE。
+## ⚠️ 本地自测想用本机实例时，临时改成 "http://127.0.0.1:8787"。
+## 参见 tools/room-service/server.js
+var net_room_service := "http://39.105.223.8:8787"
 
-func rules_text() -> String:
-	return """[color=#ffd95a]回合结构[/color]
-· 每个棋子每回合 = 1 次移动权 + 1 次技能权
-· 先移动、后释放技能；两者都可放弃
-· 行动顺序按当前速度实时决定，速度变化立即影响后续顺序
+## 反向隧道中继地址（2026-10-03 新增）—— 与房间服务同一台机器，但走 TCP 长连接。
+## 房主建房时主动连它（NAT 无关），换回一个公网端口，再把「公网地址」拿去换房间号。
+## 这样**任何网络环境下，对方只要有房间号就能加入**，房主不用装 cpolar 之类的东西。
+## 参见 tools/relay-service/relay-service.js
+var net_relay_host := "39.105.223.8"
+var net_relay_port := 19001
 
-[color=#ffd95a]伤害口径[/color]
-· 普通伤害：护盾先吸收 → 护甲减免 → 扣生命
-· 真伤：只有明确标注「真伤」的伤害才无视盾甲
-· 百分比伤害未标真伤的一律按普伤结算
+# ---------- 云端服务（2026-10-04 新增）----------
+## 自有云服务器上的 zhanqi-cloud：**版本清单 + 账号 + 进度**三合一。
+## 部署在 /opt/zhanqi-cloud（systemd 单元 `zhanqi-cloud`，端口 8789）。
+## 换部署点只改这一处。参见 tools/cloud-service/server.js
+##
+## ⚠️ 明文 HTTP（没有域名就签不了证书）。密码在链路上是明文，
+##    内测/朋友之间可接受，公开运营前必须上 HTTPS。
+var cloud_service := "http://39.105.223.8:8789"
+## 本局是否处于"已登录云端"状态。false = **离线游玩**（进度只在这台电脑，见 `ProgressStore`）。
+var cloud_online := false
 
-[color=#ffd95a]状态规则[/color]
-· 烧伤：速度-10，每回合末受 1 真伤，持续 2 回合，重复施加刷新时长
-· 重伤：被攻击时额外受 0.5×层数 真伤，每回合末层数-1
-· 流血：被攻击时额外受真伤（1级20%／2级30%）；1级持续2回合，2级持续3回合且每回合末受1真伤
-· 眩晕：跳过行动；沉默：无法用技能；魅惑：无法造成伤害
-
-[color=#ffd95a]位移规则[/color]
-· 冲刺类（辛克莱审判系）：朝方向逐格冲，遇阻挡停止
-· 瞬移类（追猎/诛心/自我毁灭等）：直接跳到距离内任意空格
-· 落点必须为空格（无障碍/无棋子）
-· 棋子可向周围 8 个方向移动（含斜向）
-
-[color=#ffd95a]胜负[/color]
-· 一方棋子全部阵亡即告负
-· 特殊：龙王单挑 6 层污染直接斩杀获胜等英雄专属规则"""
+# ---------- 账号与进度（2026-09-28 建，2026-10-05 重构）----------
+## ⚠️ **「账号」在本工程只剩一个概念：云端账号。**
+## 2026-10-05 按客户要求删掉了「本地账号」整套（原 `AccountStore` / `accounts.json` /
+## 登录页的「选择已有账号」）—— 本机不再有账号、也不再有账号列表。
+## 离线玩 = 玩一份**匿名本机进度**（无名字/无 id/不可切换，见 `ProgressStore`）。
+##
+## 已登录时的**云端账号**信息（服务端返回的字典：name / uid / progress…）；离线时为空字典。
+var cloud_account: Dictionary = {}
+## 当前这一局的**进度**（`tier` / `tutorial_done` / `tutorial_hero`）。
+## 真源分两种：登录中 → **云端**（权威）；离线玩 → `ProgressStore`（本机匿名进度）。
+## 只用于显示与记录进度，**不参与任何战斗计算**。
+var player_progress: Dictionary = {}
+## 本次教程选用的英雄 id（主菜单选角色时写入，Tutorial 场景读取）
+var tutorial_hero := ""
+## 本次教程的档位（new=完整篇 / played=精简篇；veteran 不进教程）。
+## 精简篇会直接跳到「看懂左边三条」，不再教基本操作。
+var tutorial_tier := "new"

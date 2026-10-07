@@ -7,16 +7,24 @@
 
 > 本说明文件随主程序压缩包分发。任何会话/人拿到压缩包，先读本文件即可了解全局。
 > **历史变更**（每版新增/修复/改动）见 [CHANGELOG.md](CHANGELOG.md)。
-> ⚠️ **本文件夹 = `9.13整合版` + 「9.14 / 9.17 / 9.18 本地补丁」**（三个补丁已于 2026-09-18 随 `9.18整合版_v1_流血烧伤修复` 打包并**首次提交 Gitee**（孤儿分支 + main 同步）；网盘主程序目录已留整合版 zip，
-> 见 [CHANGELOG.md](CHANGELOG.md) 顶部三段）。其中**桌面上的 `9.13整合版_v3.zip` 里没有**这三项：
+> ⚠️ **本文件夹 = 最新对外版本 `10.4.1`（2026-10-04 已发包）+ 之后的本地改动。**
+> 未发包的本地改动逐条见 [CHANGELOG.md](CHANGELOG.md) 顶部各段（每段都标了发包状态）。
+> ⚠️ **10.4.1 的两条硬约束**：① 房间号 **11 位 → 4 位**，**11 位的旧客户端无法加入房间**，
+> 已发出去的安装包 / APK 需同步更新；② 安装目录由 `C:\Program Files\战棋` 改为
+> `%LOCALAPPDATA%\Programs\战棋`（为自动更新让路 —— Program Files 下普通用户没有写权限）。
+> ⚠️ **别只看 CHANGELOG 的「未发包」标记就断定某改动没对外**：Godot 的更新包是**全量替换**
+> （整包 130~170 MB），一个全量包会**一次性带走当时所有已完成的改动** —— 标记只反映"这段代码
+> 写完时的状态"，不代表之后没有被打包带走。要确认就查时间戳，或直接搜包体内容
+> （用注意点 33 的 `tools/inspect_pck.py`）。
+>
+> 📜 **历史口径（2026-09-30 之前，仅存档参考）**：本文件夹曾经是「`9.13整合版` + 9.14 / 9.17 /
+> 9.18 / 9.28 / 9.30 五个本地补丁」，那时桌面 `9.13整合版_v3.zip` 里没有这五项：
 > ① 侧栏条统一走 `DamageFx.update_bar()`；② 剧情关棋盘支持双指捏合缩放；
-> ③ **流血 / 烧伤「等级与剩余回合」彻底解耦**，界面显示「余 N 回合」（2026-09-18）。
-> —— **不要把那个 zip 反向覆盖到本文件夹**（会丢掉上面三项）。
-> **本文件夹代码 = 9.13整合版 + 上述三个本地补丁**，2026-09-18 对外打包为 `9.18整合版_v1_流血烧伤修复.zip`（桌面）。
-> **9.13整合版口径**：= v1 + v2 + v3_昊祁移中 + v4 全量合并，基线 = `9.12代码_v1_白灵殿难度调整`。
-> 9.13 当天 4 个包**不是一条迭代线**：`9.13代码_v2`（特效+盾条，基线 9.13_v1）与
-> `9.13代码_v4`（同号但基线 9.12_v1）、`9.13代码_v3_昊祁移中`（基线 9.12_v2）互为平行包，
-> v4 整体丢失了 9.12_v2 的地形门禁 / 龙水域豁免 / 拆障系统，并回退了昊祁出生点。
+> ③ 流血 / 烧伤「等级与剩余回合」解耦（2026-09-18）；④ 新手教程 + 本地账号（2026-09-28）；
+> ⑤ 房间号联机（2026-09-30）。—— **不要把那个 zip 反向覆盖到本文件夹**。
+> `9.13整合版` 口径 = v1 + v2 + v3_昊祁移中 + v4 全量合并，基线 = `9.12代码_v1_白灵殿难度调整`；
+> 9.13 当天 4 个包不是一条迭代线（v2 / v4 / v3 互为平行包，v4 整体丢失了 9.12_v2 的地形门禁 /
+> 龙水域豁免 / 拆障系统，并回退了昊祁出生点）。
 > 本版把 4 个包的全部更新内容合并：**掉血特效与护盾血条 + 地形可破坏与龙水域豁免 + 昊祁移中（难度根因解法）**。
 > **完整变更条目与合并过程**见 [CHANGELOG.md](CHANGELOG.md) 的 `[9.13整合版]` 段。
 > **改代码前必读本文件末尾的「附录 A：设计约束与防坑」**（设计铁律 / 防坑清单 / 遗留问题 / 调参方法）。
@@ -163,43 +171,80 @@ zhanqi-godot/
 ├─ scenes/                 # 场景：MainUI(总菜单) / Duel(1V1 对局) / TeamDuel(4V4 可玩对局)
 │                          #        Board(棋盘展示) / StartMenu / StoryMap(旧沙盒，已非主入口)
 │                          #        ★ StoryBattle(骑士线第一关·白灵殿 可玩关卡) / StoryVideoKnight(开场动画)
+│                          #        ★ Tutorial(新手引导关，2026-09-28 新增)
 ├─ scripts/
 │  ├─ global.gd            # autoload 全局状态（battle_mode: 1v1|4v4、offline_type: pve|hotseat）
+│  │                       #   2026-09-28 起新增 current_account / tutorial_hero / tutorial_tier
 │  ├─ board.gd             # Node2D 棋盘绘制
+│  ├─ save/                # ★ 存档（2026-09-28 建；2026-10-05 删「本地账号」后重构）
+│  │   ├─ progress_store.gd #   ProgressStore：**匿名本机进度**（user://progress.json）
+│  │   │                    #   ⚠️ 它**不是账号** —— 没有名字/没有 id/不能切换；「离线玩」用的就是它
+│  │   └─ cloud_session.gd  # ★ CloudSession：云端登录态缓存 —— **只存 token + 账号信息，不存密码**
 │  ├─ net/                 # ★ 联机系统（2026-09-05 v4 新增，Net 为 autoload）
 │  │   ├─ net_session.gd   #   会话管理（autoload 入口 ENet/WebSocket 双模式）
 │  │   ├─ net_protocol.gd  #   指令协议（指令重放式同步 + 同步种子确定性 RNG）
-│  │   └─ net_tunnel.gd    #   cpolar 公网穿透隧道（一键建房/房间号/防泄漏回收）
-│  ├─ ai/                  # ai_cfg.gd(配置) / llm_decider.gd(豆包战术模型) / ai_key.bin(混淆密钥)
+│  │   ├─ net_tunnel.gd    #   cpolar 公网穿透（已由 net_relay_host 取代，保留可回退）
+│  │   ├─ net_roomcode.gd  # ★ 房间号客户端：4 位数字号 ↔ 地址（2026-09-30）
+│  │   ├─ net_relay_host.gd# ★ 反向隧道房主侧桥接器（纯 GDScript，房主零安装，2026-10-03）
+│  │   ├─ cloud_api.gd     # ★ CloudApi：云端账号 / 进度客户端（2026-10-04）
+│  │   ├─ update_check.gd  # ★ UpdateCheck：自动更新检测（2026-10-04）
+│  │   └─ auto_update.gd   # ★ AutoUpdate：自动下载 + 解压 + 写更新脚本（2026-10-04）
+│  ├─ ai/                  # ai_cfg.gd(战术模型配置：**只放云端端点，不含任何 Key**)
+│  │                       # llm_decider.gd(「选择题」战术决策；调云端 /llm，失败回退本地)
+│  │                       # ⚠️ ai_key.bin 已于 2026-10-04 删除 —— Key 只在服务器上
 │  ├─ ui/                  # duel.gd(1V1) / team_duel.gd(4V4) / main_ui.gd(菜单导航)
 │  │                       # battle_hud.gd / unit_token.gd / start_menu.gd / team_board.gd
+│  │                       # ★ ui_kit.gd(UiKit：按钮/面板/数值条工厂，四个界面共用，2026-09-30 抽出)
+│  │                       # ★ battle_screen.gd(BattleScreen：1V1/4V4 对局界面公共基类，2026-09-30 抽出)
+│  │                       # ★ rules_text.gd(RulesText：规则介绍文案，2026-09-30 从 Global 移出)
+│  │                       # ★ ui_design.gd(UiDesign：「墨金」设计令牌，全工程唯一视觉真源，2026-10-04)
+│  │                       # ★ ui_theme.gd(UiTheme：令牌→全局 Theme + 组件库；补上原缺失的焦点环，2026-10-04)
+│  │                       # ★ tutorial.gd(新手引导关：步骤机 + 金色描边高亮，2026-09-28 新增)
 │  │                       # settings_layer.gd(局内设置+Bug上报) / story_map.gd(旧沙盒)
 │  │                       # ★ story_battle.gd(剧情关卡对局界面) / story_battle_board.gd(自由拼格棋盘)
 │  │                       # ★ damage_fx.gd(DamageFx：血条换算+缓动共用工具) / hp_shield_bar.gd(护盾血条控件)
 │  └─ combat/              # 战斗层（纯逻辑，无节点）
-│     ├─ battle_base.gd    # 战斗引擎公共基类（1V1/4V4 共享的单位查询/距离/射程/移动/技能校验/状态结算）
+│     ├─ battle_base.gd    # 战斗引擎公共基类（共享的单位查询/距离/射程/移动/技能校验/状态结算/max_targets_of）
+│     │                    #   英雄专属规则只留转发壳，实现见 hero_rules.gd（2026-09-30）
 │     ├─ battle.gd         # 1V1 战斗管理器（2 棋 / 5×3 格，继承 battle_base）
 │     ├─ battle_team.gd    # 4V4 战斗管理器（8 棋 / 10×8 标准棋盘，星星得分制，继承 battle_base）
 │     ├─ battle_unit.gd    # 棋子运行时（hp/energy/盾甲/速度/状态/资源池/掠夺限时锁/联机 rng）
 │     ├─ hero_defs.gd      # 英雄登记表（龙王/剑舞/邪神/光雨/药师/追猎/孤狼/rapper/仙尊/灵虚/辛克莱）
 │     ├─ skill.gd          # 技能运行时（冷却/耗能/per_game 整局限次/效果调用）
-│     ├─ skill_effects.gd  # 技能元信息 DATA + 效果函数 EFFECTS（药师保底伤害、掠夺限时、联机同步随机）
+│     ├─ skill_data.gd     # ★ 技能元信息数据表（原 skill_effects 的 const DATA，667 行纯数据，2026-09-30 拆出）
+│     ├─ skill_effects.gd  # 技能效果函数 EFFECTS（DATA 转发到 skill_data.gd；药师保底伤害、掠夺限时、联机同步随机）
+│     ├─ hero_rules.gd     # ★ 英雄专属规则（虞美人恐惧/治疗光环/子体行动与生成，2026-09-30 从 battle_base 摘出）
 │     ├─ ai.gd             # BattleAI（1V1/4V4 共用：plan_move / plan_skill，含大招追击射程）
 │     ├─ battle_story.gd   # ★ 骑士线第一关战斗管理器（BattleStory extends BattleBase，7V10 双人护送关）
 │     │                    #   ESCAPE_CELLS=最右4格 / 属性表2.0 / escort_qi 双目标 / QI_AUTO_EVERY=3
 │     ├─ story_defs.gd     # ★ 剧情兵种登记表（昊/祁/大长老/战士/法师/宵/龙/熊，与 HeroDefs 隔离）
+│     ├─ battle_tutorial.gd# ★ 新手教程战斗层（BattleTutorial extends Battle，只覆写 _make/_turn_ai）
+│     ├─ tutorial_defs.gd  # ★ 教程兵种表（训练木桩 + 4 个教程角色，与 HeroDefs 隔离）
 │     └─ grid_board.gd     # 通用格图 BFS/可达模块（4V4 / 剧情关均已接入）
 ├─ tests/                  # 回归测试（headless -s 运行）
-│  ├─ combat_regression.gd    # 1V1 战斗层回归（97 断言，含药师/掠夺限时断言）
+│  ├─ combat_regression.gd    # 1V1 战斗层回归（113 断言，含药师/掠夺限时断言）
 │  ├─ team4v4_regression.gd   # 4V4 战斗层回归（58 断言）
 │  ├─ terrain_regression.gd   # 地形效果回归（7 项，含棋盘→terrain_id 同步链路）
 │  ├─ story_battle_smoke.gd   # 剧情关（白灵殿）冒烟（28 断言，2026-09-13 新增）
 │  ├─ damage_fx_smoke.gd      # 掉血特效 + 护盾血条回归（54 断言，2026-09-17 由 47 扩充）
 │  ├─ board_zoom_smoke.gd     # 剧情关棋盘缩放回归（18 断言，2026-09-14 新增）
+│  ├─ tutorial_smoke.gd       # 新手教程回归（156 断言，2026-09-28 新增；含端到端"走完动态步骤表"）
+│  ├─ room_code_smoke.gd      # 房间号链路回归（14 断言，2026-09-30 新增；真拉起 Node 服务；无 Node 则 SKIP）
+│  ├─ mainui_fit_smoke.gd     # 主菜单布局回归（27 断言，2026-10-04 新增；钉"点输入框卡死"这个 bug 类 + "新手教程归位/工具条尺寸"）
+│  ├─ ui_design_smoke.gd      # 设计系统回归（128 断言，2026-10-04 新增 / 2026-10-05 加层级段；令牌锚点/WCAG 对比度/色阶单调/弹窗不透明/迁移完整性/主题/组件库/资源条四色/字体三档/bbcode 调色板/**弹层层级 z_index**）
+│  ├─ duel_select_smoke.gd    # 1V1 选人界面布局（14 断言，2026-10-05 新增；「开始对战」完整可见 + 英雄区可滚动 + 内容撑高按钮不动）
+│  ├─ cloud_auth_smoke.gd     # 云端登录态回归（77 断言，2026-10-04 建、2026-10-05 随「删本地账号」重写 + 加 F 段；`CloudSession` 语义 / 账号行两形态 + **界面禁用词扫描** / 启动分流 / **离线玩走本机匿名档** / **两份进度互不污染** / **忘记密码（契约+界面，F 段 32 条）**；会快照并还原存档）
 │  ├─ ai_tier_bench.gd / hero_team_rank.gd   # AI 强度基准 / 英雄梯度排行
 │  └─ *_tmp.gd               # 临时验证脚本（确定性/热座导航/联机重放等，可清理）
 ├─ maps/                   # 地图数据（白灵殿.json）
 ├─ tools/                  # map-editor.html(地图编辑器) / map_exe_app(打包版) / update_installer.sh
+│  └─ room-service/        # ★ 房间号目录服务（2026-09-30）
+│     ├─ server.js         #   Node 零依赖：POST /room 建房取号 · GET /room?code= 查地址
+│     └─ selftest.js       #   服务端自检（22 断言，自己拉起服务再跑）
+├─ docs/                   # ★ 设计文档（2026-10-04 建，从根目录挪入 —— 见注意点 33）
+│                          #   UI设计系统.md(规范) / UI设计系统_视觉稿.html(视觉稿)
+│                          #   ★ 忘记密码_接口契约.md（2026-10-05：**两端都已实现并生产验证**，
+│                          #     含服务端实现记录 / 残留风险 / 限流计数待修项）
 ├─ installer/战棋.iss      # Inno Setup 打包脚本
 └─ _backup_doc_20260918/   # 2026-09-18 文档收敛前的旧的 README/CHANGELOG + 8 份单版说明（已带 .gdignore）
 ```
@@ -211,7 +256,7 @@ zhanqi-godot/
 
 ## 二、进度与计划
 
-- **已完成**：主菜单导航；1V1 可玩对局；4V4 星星得分制与可玩 UI；局内设置 + Bug 上报引导；4V4 蛇形选人页；AI 难度分层（简单/普通/困难）；**联机系统 MVP（ENet 局域网 + WebSocket 公网穿透，1V1/4V4 均可）**；药师三技能修复；AI 大招释放修复；掠夺改限时锁技；追猎流炎飞弹整局限次。
+- **已完成**：主菜单导航；1V1 可玩对局；4V4 星星得分制与可玩 UI；局内设置 + Bug 上报引导；4V4 蛇形选人页；AI 难度分层（简单/普通/困难）；**联机（输 4 位数字房间号即连，走自研反向隧道，双方无需任何配置，1V1/4V4 均可）**；**新手教程 + 交互式引导关**；**账号上云 + 自动更新**；**「墨金」UI 设计系统（色彩令牌化 + 三档字体）**；药师三技能修复；AI 大招释放修复；掠夺改限时锁技；追猎流炎飞弹整局限次；**「忘记密码」邮箱自助找回（2026-10-05 服务端两条接口上线，端到端可用）**；**主菜单「离线模式」改名「单机模式」**（消除与登录页「离线玩」的撞名）；**战术模型每日额度（未登录 3 次/设备·天 + IP 池 9 次兜底；登录后 10 次/账号·天）**。
 - **进行中**：
   1. ✅ 战斗层 BattleTeam + 4V4 回归测试；
   2. ✅ 4V4 可玩交互 UI（TeamDuel + 棋盘控件 + 菜单解锁 PVE/热座）；
@@ -230,10 +275,213 @@ zhanqi-godot/
   - **AI 回合特效回放队列**（解决「同帧结算」，属设计决策待拍板，见附录 A.3.7）；
   - 4V4 数值平衡（护甲 vs 单体伤 1~3 的僵局问题，含暗影刺打甲1+英雄=0 伤）；
   - 地形障碍接入 grid_board；李太白属性/虞美人母体子体完整规则等设计者确认后微调。
-- **2026-09-17 修复（本地补丁，已随 9.18整合版_v1 发包）**：侧栏生命条数字**永远显示 `1.00 / 1.00`**（用户实报）。
+- **2026-10-05 两处 UI 修复：局内弹层被棋子盖住 + 1V1 选人界面按钮被裁（已随 10.5.0 发包，纯 UI）**：
+  ① **「人物显示在设置弹窗上面」** —— 根因是 Godot 同层**先比 `z_index`、再比树顺序**，
+     棋子自带 z_index（名字 120 / 特效 110 / 骨骼部件由数据给）而弹层默认 0。
+     令牌层新增 `Z_UNIT_FX / Z_UNIT_LABEL / Z_OVERLAY`，**12 处**改走令牌（含三处共用的局内设置）。
+  ② **「1v1 选人界面开始对战按钮没显示全」** —— 选人层原是全屏直排 VBox，11 英雄 6 行
+     约 650px，基准 720 只剩 40px 余量，窗口稍矮就挤出视口。按用户建议
+     **英雄卡缩一档 + 英雄区套 `ScrollContainer`（纵向可滚）**，按钮钉在底部不再被挤。
+     ⚠️ 对照：**4V4 蛇形选人早就有 ScrollContainer**，只有 1V1 漏了 —— 是漏做，不是取舍。
+  验证：新增 `tests/duel_select_smoke.gd`（14 断言，含"内容撑高 600px 按钮位置不变"）；
+  `ui_design_smoke` 110 → **128**；五场景各 0 真实错误。
+- **2026-10-05 删除「本地账号」（未发包，数据层重构）**：客户要求「**不要有本地账号这个东西！
+  离线玩相当于玩 0 进度原始账号**」。整套删掉：`scripts/save/account_store.gd`（202 行）+
+  `user://accounts.json` + 登录页的「选择已有账号」按钮与弹窗 + 本机建号回调。
+  新增 `scripts/save/progress_store.gd`（`ProgressStore`）—— 一份**匿名本机进度**
+  （`user://progress.json`：只有 `tier`/`tutorial_done`/`tutorial_hero`，**没有名字、没有 id**）。
+  **账号只剩云端账号一种**；`Global.current_account` 拆成 `cloud_account` 与 `player_progress`。
+  **两份进度互不污染**：登录中读写云端（断网靠 `cloud_session.json` 里的 `account.progress` 兜底），
+  离线玩读写本机 —— 于是「登录后进度跟着账号走」与「离线玩是 0 进度」同时成立。
+  账号行只剩两种形态：`云端账号：…`+「退出登录」／`离线游玩（进度只在这台电脑）`+「登录云端」；
+  **界面永不出现「本机账号 / 未登录」**（已写成禁用词扫描断言）。
+  启动分流改由 `_initial_panel()` 决定（有登录态或有离线进度 → 主菜单；否则登录页），
+  且**必须在 `_setup_cloud()` 之后**跑（原来顺序反了，正是"已登录却显示未登录"的根源）。
+  回归：`cloud_auth_smoke` 重写 **45 断言**（含"界面禁用词扫描"与"两份进度隔离"），
+  `tutorial_smoke` **156 断言**。详见 CHANGELOG `[10.5 删除「本地账号」]` 段。
+- **2026-10-05 主菜单账号区调整（未发包，纯 UI）**：① 「新手教程」从主按钮列并入下方「图鉴 / 介绍」
+  **工具条**（该条整体收小到 158×44、字号 16，5 个一行共 838px），主按钮列只剩「开始游戏 / 退出」——
+  教程是**引导入口**不是主流程，和查资料同属次级，不该跟主 CTA 争权重；
+  ② 「选择已有账号」由**内联列表**改为**按钮 + 弹窗**（账号按钮原来直接铺在登录页上，
+  账号一多就把页面撑长、还跟「登录」抢注意力；现在登录页永远是「昵称 → 密码 → 登录」一条直线，
+  数量写在按钮上如「选择已有账号（5）」）。弹层用**不透明**底、当前账号带「（当前）」、
+  **三种关闭**（ESC / 点遮罩 / 「取消」），且切面板时自动收起。
+  回归：`mainui_fit_smoke` **27 断言**（新增工具条归位段）、`cloud_auth_smoke` **45 断言**
+  （新增弹窗段）。**并纠正了一处会造成误解的命名与文案**：主菜单账号行不再写「未登录」
+  （账号与云端登录是**两层** —— 退出登录 / 选「离线玩」只影响"连不连云端"，
+  本机账号、水平、教程进度都在），前缀改成 **`本机账号：` / `云端账号：`**；
+  登录页那颗「离线模式（不登录）」**改名「离线玩（不登录云端）」** ——
+  它原先与主菜单的**玩法**「离线模式」同名，玩家会以为"点了就不要账号了"。
+  ⚠️ 两个「离线」是**不同维度**：主菜单那个是玩法（vs 联机 / 剧情），登录页那个是账号。
+- **2026-10-04 设计系统「墨金」令牌化（已随 10.4.1 发包，纯视觉层，无机制改动）**：把 UI 层 **373 处硬编码颜色
+  / 188 种不同值**收敛成一套设计系统。新增 `scripts/ui/ui_design.gd`（令牌）+ `ui_theme.gd`（全局 Theme
+  + 组件库），**226 处字面量令牌化、覆盖 21 个界面脚本**。
+  · 迁移动线：令牌值**全部锚定迁移前的历史值** —— 155 处**逐像素不变**，71 处为单通道 ≤3% 的归并
+    （ΔE &lt; 1，低于 JND）。**视频素材 12 个一字未动**（含 `menu_bg.ogv`、英雄视频、剧情开场）。
+  · 顺带修掉两处真问题：`_make_edit` **零样式**且聚焦看不出差别（现补墨底描边 + **金环焦点态**）；
+    `_apply_node_sizes` 只处理 `Label`/`Button` → **LineEdit 的 `fz` 从未生效**（已补）。
+  · 补上工程原先**完全缺失**的焦点环（WCAG 2.4.7）与 Tooltip / PopupMenu / 滚动条 / 进度条皮肤。
+  · 新增 `tests/ui_design_smoke.gd`（**110 断言**）+ `docs/UI设计系统.md` + `docs/UI设计系统_视觉稿.html`。
+  · **同日第二轮**：棋子头顶迷你条重做为「生命/护盾/能量**三条各自独立**、一色一义」
+    （原先生命与盾挤在一条里只靠颜色分，而能量借用的还是**敌方阵营蓝**）。
+  · **同日第三轮（全产品统一深色 + 字体三档）**：作废「图鉴/关卡/故事/详情」那套**浅色羊皮纸子主题**
+    （米白底 + 奶油按钮 + 深墨字，在视频背景菜单上像另一个产品），全转深色玻璃；
+    **隐藏最深的坑**是那些面板正文的 **bbcode 硬编码深色**（`#2e6b3c` 等 48 处）会变「深底深字」，
+    已换成 `UiDesign.MD_*` 调色板并加了扫描式断言。字体升三档：
+    **毛笔主视觉**（≥60px）/ **思源宋体小标题**（≥22px）/ **思源黑体正文**（可变字重，按钮 Medium）。
+    字体共 34MB 随包（`assets/fonts/`，OFL，**必须随包附 LICENSE**）。
+  回归全绿（combat 113 / team4v4 58 / terrain 7 / story 28 / damage_fx 54 / board_zoom 18 /
+  tutorial 177 / room_code 14 / mainui_fit 17 / **ui_design 96**）+ **十场景冒烟 0 错误**。
+  备份在 `C:\Users\Caobo\WorkBuddy\2026-09-18-11-32-18\_backup_ui1004tokens\`（**故意放在工程树之外**，
+  见注意点 32）。规矩见注意点 31。
+- **2026-10-04 账号上云 + 自动更新（已随 10.4.1 全量包发包）**：账号从「只存本机」升级为**云端账号**，
+  并接上**自动更新检测**；新增「**离线模式**」，不登录照样玩。
+  · 云服务 `tools/cloud-service/`（零依赖 Node，只用内置模块）部署在自有云服务器：
+    **端口 8789**，systemd 单元 `zhanqi-cloud`。一个服务三件事 ——
+    更新清单 `GET /version.json` / 账号 `POST /register` `/login` `GET /me` / 进度 `POST /progress`。
+  · **账号存服务器本地**（用户 2026-10-04 定）：一人一个 JSON，按 uid 前 2 位分片
+    （`accounts/7f/7fbf….json`）。实测单账号紧凑 JSON 仅 **316 字节**。
+    昵称唯一性靠 `writeFileSync(..., {flag:'wx'})` 的**原子创建**（POSIX `O_CREAT|O_EXCL`），
+    **不是"先查再写"** —— 后者有 TOCTOU 竞态，两个请求会互相覆盖。
+    密码 `scrypt` 加盐哈希；token 是**无状态 HMAC**（服务端不存 token 表，重启不影响）；
+    响应**永不返回 salt/hash**；不存在的账号与错密码同样 401（不泄漏存在性）。
+  · 客户端新增：`scripts/net/update_check.gd`（只拉约 1 KB 清单比对版本号；
+    🔴 **检查失败一律放行**，绝不挡玩家进游戏）· `scripts/net/auto_update.gd`
+    （2026-10-04 晚追加：**自动下载 → 解压 → 写更新脚本**；玩家点「重启更新」后由
+    `_update/apply_update.bat` 在主程序退出后替换 exe 再重启 —— 照搬乱世五方的做法）·
+    `scripts/net/cloud_api.gd` · `scripts/save/cloud_session.gd`（**只存 token，不存密码**）。
+    `project.godot` 新增 `config/version` 作为**版本号唯一来源**。
+  · 「谁在玩」面板：昵称 + 密码 + 「登录」「注册新账号」「**离线模式**」。
+    **离线模式 = 不登录不联网，功能一点不缩水**，只是进度只留在这台电脑。
+  · 发版链 `tools/release_desktop.js`：导出 → Inno 打包 → 传 OSS → 生成 version.json
+    （并自动把版本号同步进 `installer/战棋.iss`，杜绝"包里 9.20、文件名 10.4"的漂移）。
+  · **自动更新包另有一条链**（2026-10-04 晚）：`tools/cloud-service/push_update_pkg.js <build/战棋.exe> <版本> --clean-old`
+    → Node **手写 zip 容器**（零依赖，本机/服务器都能跑）压 `build/战棋.exe`（211 MB → 约 130 MB）
+    → OSS `game/zhanqi-update-v{ver}.zip` → 直链填进 `version.json` 的 **`update.win64`**。
+    ⚠️ **`downloads.win64`（安装包 .exe）与 `update.win64`（更新包 .zip）是两个东西**：
+    前者给玩家手动下载安装，后者给客户端自动替换 —— 填混了客户端会拿安装包当 zip 解，必报"压缩包打不开"。
+  · **账号冷备到 OSS**：`backup_accounts.js` / `restore_accounts.js` +
+    systemd timer `zhanqi-backup.timer`（**每天 04:30**，保留最近 7 份，
+    `Persistent=true` 错过会补跑）。恢复**不覆盖**原目录（先改名 `accounts.bak-*` 留住）。
+    已实测：造 3 个账号 → 备份 → 删库 → 恢复 → 3 个账号原样回来。
+  · **战术模型也改由云端代调**（2026-10-04）：`scripts/ai/ai_key.bin` **已删除** ——
+    原先 Key 只是 XOR+base64 混淆后随客户端分发，拿到客户端就能提取出来。
+    现在客户端只发战局卷子；Key 只存服务器 `/opt/llm-gateway/providers.json`（600，**唯一持有者**），
+    `zhanqi-cloud` 只做**转发**（`127.0.0.1:8790`，本机回环、iptables 只放 lo）。
+    接口不要求登录（离线模式也要能玩困难模式），且**战棋用途不按 IP 限流**（只计数）；
+    兜底是**整机日熔断 2 万次/天**（对全部用途生效；正常用量约 160 次/天，不会误伤）；
+    老师工具（语文/数学资料整理系统）**每 IP 每天 20 次**（它们没有账号体系）。
+    **任何失败都回退本地 AI**，绝不阻断开局。
+    ⚠️ 不限流的代价：8789 的战棋入口是不限额的公开模型入口（拿不到 Key，但会烧额度）。
+    **缓解手段 = 服务端角色约束**（借《乱世五方》的做法）：网关给 `doubao` 配了一行
+    `systemPrompt`，作为第一条 system 消息注入 —— 该入口**只能问战局决策**，
+    非战局请求一律回 `{"error":"not_a_battle"}`。于是白嫖者**拿不到文章/代码/问答**，
+    **账号被封的风险基本消除**；合法卷子的输出格式**实测没变**。
+    （仍管不住"调多少次"，那要靠账号或全局熔断。）
+  · 验证：云服务自检 **31/0**（含★并发同名注册恰好一个成功；★4 条配额回归：老师工具
+    20/天·5/分、战棋连打 40 次不被限流、伪造 XFF 无法扩充配额 —— 自检把转发目标指向死端口，
+    **不烧额度**）· 网关自检 **26/0**（含★服务端约束不影响合法卷子的 JSON 输出、
+    ★非战局请求被回绝、★老师工具/乱世没被误加约束、
+    ★整机熔断对"不按 IP 限流"的战棋用途同样生效）· 公网链路 **11/0** ·
+    客户端探针 **25/0**（含★另一客户端读到同样进度 = 云端持久化生效）·
+    战术模型探针 **9/0**（★真实战局走通云端→豆包，3.1s，客户端无 Key）·
+    **配额实测**（2026-10-04 晚）：战棋并发 **40/40 全放行**、伪造 XFF 无法绕过
+    老师工具 20/天（第 6 次 429）· 既有回归全绿。
+  · 验证：云服务自检 **27/0**（含★并发同名注册恰好一个成功）· 公网链路 **11/0** ·
+    客户端探针 **25/0**（含★另一客户端读到同样进度 = 云端持久化生效）·
+    战术模型探针 **9/0**（★真实战局走通云端→豆包，3.1s，客户端无 Key）· 既有回归全绿。
+  ⚠️ **明文 HTTP，无 TLS** —— 密码在链路上是明文，内测可接受，**公开运营前必须上 HTTPS**
+    （签证书需要**域名**，裸 IP 签不了；有了域名用 Let's Encrypt 免费签，代码几乎不用改）。
+  ⚠️ **磁盘按 4 KB 块分配**：316 字节的账号文件实占 4 KB（**放大 13 倍**）→
+  100 万账号 ≈ **3.8 GB**，1000 万 ≈ 38 GB。当前剩 34 GB，约撑到 800 万，到那规模要换 SQLite。
+  详见 CHANGELOG `[10.4 账号上云 + 自动更新]` 段。
+- **2026-10-03 联机上云·阶段1（已随 10.4.x 发包）**：房间号目录服务部署到**自有阿里云 ECS**
+  （`39.105.223.8:8787`，`/opt/room-service`，systemd 单元 `room-service.service`，安全组已放行 8787）——
+  **玩家不再需要在自己电脑上跑服务**。`server.js` 一行未改；`Global.net_room_service` 与
+  `NetRoomCode.DEFAULT_SERVICE` 的默认值改指云端（本地自测可临时改回 `127.0.0.1:8787`）。
+  新增 `tests/_probes/net_cloud_probe.gd`（对云端跑真实链路，5 断言）。
+  验证：`selftest.js` 22/0 + 云端核心链路 18/0 + Godot→云端 5/0 + 既有回归全绿。
+  **阶段2（替代 cpolar）选型已定并实测**：推荐**「反向隧道 + 房主侧 GDScript 桥接器」** ——
+  战棋本来就是 1V1 单连接，交接文档担心的"多客户端"难点不成立；4 进程实验已跑通
+  「房主 NAT 后主动连出 → 中继配对 → 纯 GDScript 桥接 → Godot server 认到 peer（520 字节双向转发）」。
+  **阶段2（替代 cpolar）的实现见下一条。** 详见 CHANGELOG `[10.03 联机上云]` 段。
+- **2026-10-04 房间号 11 位 → 4 位（已随 10.4.1 发包）**：`NetRoomCode.CODE_LEN` 与服务端 `CODE_LEN` 同步改 **4**，
+  玩家报号不用再分段。自测：`selftest.js` **22/22** + `room_code_smoke.gd` **14/14** 全绿。
+  ✅ **云端 `/opt/room-service` 已于 2026-10-04 重新部署完成**（旧版是 11 位）；**11 位的旧客户端无法加入房间**
+  （本地长度校验会先挡下），已发出去的安装包 / APK 需同步更新。
+  房间号空间降到 1 万（TTL 600s 内活跃房间数百以内无碰撞风险，服务端仍 200 次重试兜底）。
+- **2026-10-04 自动更新上线（已随 10.4.1 发包）**：从"只提示"升级为**自动下载并替换** ——
+  新增 `scripts/net/auto_update.gd`（下载 → 解压 → 写 `.bat` → 重启生效）与发版脚本
+  `tools/cloud-service/push_update_pkg.js`（Node 手写 zip，零依赖）；`main_ui` 更新页加进度条 +
+  「重启更新」。⚠️ **安装目录随之变更**：`installer/战棋.iss` 从 `{autopf}\战棋`（Program Files）
+  改为 **`{localappdata}\Programs\战棋`** —— 否则普通进程对自己的目录没有写权限，自动替换必然失败；
+  `PrivilegesRequired=admin` **不变**（免杀软加固的证书要写 HKLM 根证书库）。
+  验证：`tests/update_smoke.gd` **19/19**。
+- **2026-10-03 联机上云·阶段2 完成（已随 10.4.x 发包）**：公网建房**不再依赖 cpolar** ——
+  新增自研反向隧道：服务端 `tools/relay-service/relay-service.js`（房主入口 19001，
+  公网端口池 20000-20099 **按需分配**）+ 房主侧 `scripts/net/net_relay_host.gd`
+  （**纯 GDScript** 的 `StreamPeerTCP` 桥接器，房主**什么都不用装**）。
+  `Global.net_transport` 默认改为 `"ws"`，于是**建房拿号、对方输号即连，不区分网络环境**。
+  云端实跑验证：房主 `★ RELAY ADDR = 39.105.223.8:20000` → `★ ROOM CODE = 85358467640`
+  → 玩家输号 → 查到地址 → 连上 → 房主 `★ PEER_CONNECTED`。
+  加入者与房主的**对局/同步逻辑零改动**（server 以为只是被一个本地客户端连上了）。
+  服务器上 `lswf`(3000) / `room-service`(8787) / `relay-service`(19001) 三者共存。
+  ⚠️ 仍差**两台不同网络的真机**实连验证（本机单机做不到）。
+- **2026-09-30 结构收敛·第二批（已随 10.4.x 发包，无机制改动）**：
+  ① `skill_effects.gd` 里 667 行纯数据表拆到 `scripts/combat/skill_data.gd`（`SkillData`），
+  原文件 2560 → 1895 行，**`SkillEffects.DATA` 的调用点一处未改**；
+  ② 新增 `scripts/ui/battle_screen.gd`（`BattleScreen`）：`duel.gd` / `team_duel.gd` 逐字重复的
+  `_my_team` / `_can_input` / `_op_move` / `_op_done` 与近乎相同的 `_op_cast` 上提到基类，
+  两个界面各只留一个 `_cast_via()` 覆写点（三个模式的 `human_cast` 签名本就不同）；
+  ③ 过程中撞出并修掉一个**真实编译 bug**：`team_duel.gd` 的 `var mx := _battle.max_targets_of(...)`
+  在 `_battle` 类型由 `BattleTeam` 收紧为 `BattleBase` 后报 `Cannot infer the type of "mx"` ——
+  根因是 `max_targets_of()` 只写在 `BattleTeam` / `BattleStory`（两份逐字相同）而基类没有，
+  已上提到 `BattleBase` 并删掉那两份重复。
+  ⚠️ **这个错只有场景冒烟抓得到**：`--check-only` 对引用 autoload 的 UI 脚本会误报（见注意点 29）。
+  ④ `Global.rules_text()`（26 行展示文案）移到 `scripts/ui/rules_text.gd`（`RulesText.text()`），
+  `global.gd` 56 → 29 行；
+  ⑤ 两处**配色表**收敛（`team_board.gd` 的 `TERRAIN_COL` → 转发 `Terrain.COLORS`；
+  `unit_token.gd` / `team_board.gd` 的两份 `_status_color` → `SkillEffects.status_color()`，
+  差异只在已废弃的 `burn2` 上，**零视觉变化**）+ `battle_unit.gd` 的 28 个成员变量
+  从"夹在函数之间"集中到头部变量区（纯文本搬移，零语义变化）。
+  回归全绿（combat 113 / team4v4 58 / terrain 7 / story 18 / damage_fx 54 / board_zoom 18 / tutorial 177 / room_code 14）
+  + 五场景冒烟 0 错误。备份在 `_backup_0930skilldata/`。
+  ⚠️ **同批评估后决定不动的**：三个界面的 `_state_bbcode` / `_refresh_log` 是**有意分叉**的
+  （4V4 状态栏简化 + 日志配色两档），强行合并会改变视觉行为；`BattleUnit` 拆组件、`main_ui` 拆面板、
+  棋盘三套统一属需人目视的 UI 级重构，均留待有真机验证条件时再做（详见 CHANGELOG 该段"五"）。
+- **2026-09-30 结构收敛（已随 10.4.x 发包，无机制改动）**：把 UI 工具函数 `_style_btn` / `_panel_style` / `_make_bar`
+  从 4 个界面文件的 **15 份重复实现**收敛为 `scripts/ui/ui_kit.gd` 唯一实现
+  （各文件留一行转发壳，**调用点零改动**，UI 布局无变化）；
+  把虞美人专属规则（恐惧发作 / 治疗光环 / 子体暗影刺 / 子体生成 / 母子换位）
+  从所有模式共享的 `BattleBase` 摘到 `scripts/combat/hero_rules.gd`（**20+ 处调用点不变**）；
+  `_hd` / `_se` 三处重复 `load` 改为基类 `preload` 常量；顺带删掉 `human_move()` 里重复的 `_check_fear` 调用；
+  `tests/` 的 13 个临时探针移入 `tests/_probes/`，清掉 3 个孤儿 `.uid`。
+  回归全绿（combat 113 / team4v4 58 / terrain 7 / story 18 / damage_fx 54 / board_zoom 18 / tutorial 177 / room_code 14）
+  + 五场景冒烟 0 错误。**新增脚本必须跑一次 `--import`** 注册进 `.godot/global_script_class_cache.cfg`，
+  否则报 `Identifier "UiKit" not declared in the current scope`（详见注意点 29）。备份在 `_backup_0930struct/`。
+- **2026-09-30 新增（房间号联机）**：联机不再让玩家输 IP/端口 ——
+  建房拿 **4 位数字房间号**，对方**输号即连**（输入框回车直接连）。
+  新增零依赖 Node 目录服务 `tools/room-service/server.js`（只做 `码 → 地址` 翻译，
+  **不碰游戏状态、不裁决、不转发对局流量**）+ Godot 客户端 `scripts/net/net_roomcode.gd`（异步 HTTPRequest）。
+  **局域网与公网两种模式都覆盖**（局域网上报内网地址；公网等 cpolar 隧道就绪后上报公网地址），
+  并**保留"直接填地址"作为兜底**。回归：`selftest.js`（22 断言）+ `tests/room_code_smoke.gd`（14 断言）。
+  ⚠️ 房间号是**口令语义不是密码语义**；`Global.net_room_service` 需按部署点改；
+  联机这一块**还没拿两台真机跑过**（只在单机验证了链路）。详见 CHANGELOG `[9.30]` 段。
+- **2026-09-28 ~ 09-30 新增（新手教程 + 本地账号）**：主菜单开始界面新增「新手教程」入口；
+  新增**本地账号系统**（`AccountStore`，`user://accounts.json`，首个本地存档，损坏自动降级）；
+  首次启动无账号 → 自动走「谁在玩 → 你的水平怎么样（新手 / 玩过战棋 / 老手）」→ 选教程角色 → 进**交互式引导关**。
+  引导关继承 1V1 的 `Battle`（**只覆写 `_make` / `_turn_ai`，战斗规则零改动**）；
+  步骤表**按所选英雄的实际技能数据动态组装**（基础 4 步 + 机制步 + 收尾 3 步）：
+  元晶龙王 10 步 / 光雨 10 步 / 剑舞 11 步 / 追猎 12 步（机制步随英雄变化，见 CHANGELOG 的 `[9.28–9.29]` 段表格）。
+  高亮用**遮罩挖洞**（棋盘区压暗、只亮当前该点的控件），步骤标题的圈码运行时生成。
+  教程棋盘铺了**森林 / 水域**地形（受击 ×0.8、移出耗能、水域禁位移），且**实测生效**（不是只摆了几格颜色）。
+  完成页有「去实战一局 →」直接进 1V1 简单 PVE（学完就能上手）。
+  新增 `tests/tutorial_smoke.gd`（156 断言，含端到端"真建场景走完动态步骤表" + 地形实测）。
+  ⚠️ 两条设计铁律与"未做项"见 CHANGELOG 的 `[9.28–9.29]` 段。
+- **2026-09-17 修复（已随 9.18整合版 发包）**：侧栏生命条数字**永远显示 `1.00 / 1.00`**（用户实报）。
   根因：9.13_v2 换 `HpShieldBar` 时三处界面各写一份 `_update_bar`，只改了其中一部分分支，
   漏掉写数字标签那段。修法：抽成 `DamageFx.update_bar()` 单一实现，三处转调（详见注意点 24）。
-- **2026-09-14 新增（本地补丁，已随 9.18整合版_v1 发包）**：剧情关棋盘**双指捏合缩放**（`story_battle_board.gd`）
+- **2026-09-14 新增（已随 9.18整合版 发包）**：剧情关棋盘**双指捏合缩放**（`story_battle_board.gd`）
   + `tests/board_zoom_smoke.gd`（18 断言）。
 - **2026-09-08 修复**：「流炎飞弹」显示名统一（原代码写作「流星飞弹」，已改名）；1V1 对局血条/能量条浮点截断修复（duel.gd _update_bar 由 int/clampi 改为 float/clampf，与 4V4 对齐）。
 - **2026-09-07 更新**：新增李太白、虞美人（含蔓延子体/恐惧/暗影刺/互助反击/母体阵亡清子体），14 英雄全实装。
@@ -253,13 +501,20 @@ godot --headless --path . --import
 # 冒烟：不报 ERROR 即通过
 godot --headless --path . --quit-after 2
 
-# 六条回归（退出码 0=全过，1=有失败）
-godot --headless --path . -s res://tests/combat_regression.gd      # 1V1   97 断言
+# 十一道回归（退出码 0=全过，1=有失败）
+godot --headless --path . -s res://tests/combat_regression.gd      # 1V1   113 断言
 godot --headless --path . -s res://tests/team4v4_regression.gd     # 4V4   58 断言
 godot --headless --path . -s res://tests/terrain_regression.gd     # 地形  7 项
 godot --headless --path . -s res://tests/story_battle_smoke.gd     # 剧情关 28 断言
 godot --headless --path . -s res://tests/damage_fx_smoke.gd        # 特效+盾条 54 断言
 godot --headless --path . -s res://tests/board_zoom_smoke.gd       # 棋盘缩放 18 断言
+godot --headless --path . -s res://tests/tutorial_smoke.gd         # 新手教程 156 断言
+godot --headless --path . -s res://tests/room_code_smoke.gd        # 房间号链路 14 断言（需 node）
+godot --headless --path . -s res://tests/mainui_fit_smoke.gd       # 主菜单布局 27 断言（_fit 幂等 + 工具条归位）
+godot --headless --path . -s res://tests/ui_design_smoke.gd        # 设计系统 128 断言（改颜色/字号/字体/bbcode 色/**弹层层级**都要跑）
+godot --headless --path . -s res://tests/duel_select_smoke.gd      # 1V1 选人界面 14 断言（改选人层布局/英雄数量都要跑）
+godot --headless --path . -s res://tests/cloud_auth_smoke.gd       # 云端登录态 77 断言（改登录/退出/会话缓存/账号行/离线进度/**忘记密码**都要跑）
+godot --headless --path . -s res://tests/update_smoke.gd           # 自动更新器 19 断言（改 update_check/auto_update/main_ui 更新页要跑）
 
 # 剧情关场景级加载（查 UI 脚本编译错误，这类问题 -s 脚本测不出来）
 godot --headless --path . res://scenes/StoryBattle.tscn --quit-after 40
@@ -315,7 +570,7 @@ godot --headless --path . --check-only -s res://scripts/ui/xxx.gd
     已于 2026-09-18 全部删除并合并。**一个版本 = CHANGELOG 里的一段。**规则见文末「文档纪律」段。
     📦 **包内容清单（2026-09-18 立 —— 照本清单打，不要再靠"对比上一版 zip"反推）**：
     - **收**：根目录 5 份 —— `README.md` / `CHANGELOG.md` / `.gitignore` / `project.godot` / `export_presets.cfg`；
-      目录 —— `art/ assets/ data/ installer/ maps/ scenes/ scripts/ story/ tests/ tools/`；
+      目录 —— `art/ assets/ data/ docs/ installer/ maps/ scenes/ scripts/ story/ tests/ tools/`；
       **带上 `.import`**（Godot 靠它识别资源，`.gitignore` 虽忽略但**包内必须有**）；
       顶层统一套一个 `godot-chess-tactics/` 文件夹。
     - **不收**：`.godot/` `build/` `Godot/` `.git/` `.workbuddy/`、**所有 `_backup*` 备份目录**（含 `_backup_doc_20260918/`，它是旧文档存档，只留在工程里，不进包）。
@@ -369,6 +624,277 @@ godot --headless --path . --check-only -s res://scripts/ui/xxx.gd
     导致 1 级只撑 1 回合、2 级只撑 2 回合，且「创伤满 3」再来一次会被叠成 2 级。
     **动这套状态前先对一眼设计表 `战棋5.xlsx` 里追猎那一行**（Z4 状态定义 + M4/Y4 技能说明）。
     ⚠️ 剑舞【贯穿】的 `heavy_wound +5` 与设计表 U9 不符，但**是用户有意设计，不要"修正"回去**。
+26. **新手教程不许改战斗规则（2026-09-28）**：`BattleTutorial extends Battle`，**只允许覆写
+    `_make()`（让木桩走教程表）与 `_turn_ai()`（木桩行为）**，其余全部继承。
+    木桩参数在 `scripts/combat/tutorial_defs.gd`，⚠️ **木桩护甲必须是 0** ——
+    伤害里 `armor` 是平摊减伤（`minf(armor, rest)`），而剑舞「瞬击」、追猎「狙击」都只有 **1 点**伤害，
+    木桩带 1 甲这两个英雄就恒为 **0 伤害、教程第 7 步永远过不去**（追猎「流炎飞弹」还 `per_game=1`）。
+    「护甲减伤」改用**玩家自己的甲**演示。`tests/tutorial_smoke.gd` 的 B3/B4 就是钉这条的。
+    教程过关看**步骤机的 gate**，不依赖 `_check_win`（木桩血厚打不空是故意的）。
+    ⚠️ **1V1 里「放完技能 = 本回合结束」**（`Battle.human_cast()` 末尾无条件 `_finish_human()`），
+    教程收尾统一走 `Tutorial._after_player_action()`，**不要写成"等玩家点结束回合"**（会永远卡住）。
+    ⚠️ **步骤表是按英雄数据动态组装的**（`MECH_STEPS` 模板 + `_build_steps()`，判定全读 `SkillEffects.DATA`）：
+    完整篇 = 基础 4 步 + 机制步 + 收尾 3 步；精简篇 = 机制步 + 收尾 3 步。
+    要加机制步：`MECH_STEPS` 加模板 + `_mech_steps_for()` 加触发条件；
+    **步骤标题里不要写死 ①②③** —— 圈码由 `_circled()` 运行时生成，硬编码插一步就全乱。
+    机制步的 gate **必须带 `"manual_ok": true`**：有些技能有前置条件放不出来
+    （剑舞「诛心」是斩杀技，只能打生命 ≤30% 的目标，对满血木桩放不了），硬卡会让教程死在那儿。
+    改完机制步要同步 `tests/tutorial_smoke.gd` 的 `EXPECT_MECH`（它会变红，这是设计如此）。
+    ⚠️ **教程棋盘铺了地形**（`TutorialDefs.TERRAIN` + `BattleTutorial._build_terrain()`）：
+    森林(3) 受击 ×0.8 / 移出多花 1 能，水域(5) 回合末 −1 能 / 禁位移。
+    **地形必须在摆位之前建好**（`_put()` 会 `_sync_terrain()` 读地形），否则 id 残留为 0。
+    配色走 `Terrain.COLORS` / `Terrain.color_of()`（**不要再各写一份配色表**）；
+    ✅ 2026-09-30 已收敛：`team_board.gd` 那份 `TERRAIN_COL` 改为转发 `Terrain.COLORS`，
+    状态徽章配色也统一到 `SkillEffects.status_color()`（原先 `unit_token.gd` / `team_board.gd` 各一份）。
+    ⚠️ **遮罩挖洞只盖棋盘区、不盖底部步骤框**（否则说明文字被压暗看不清），
+    且 `mouse_filter = IGNORE`（**只压暗、不拦点击**）；要换聚光目标去改 `_focus_control_for_step()`。
+    ⚠️ **两个"回合"标记别混用**（2026-09-29 踩过）：
+    `turn_ended` = "回合已经交出去了"（**放完技能自动结束时也会置位**）；
+    `end_turn_pressed` = "玩家亲手按了结束回合按钮"。
+    要求玩家动手的步骤 **必须用后者** —— 用 `turn_ended` 当 gate 会让那一步白给
+    （玩家没按过按钮就自动过了）。回归在 `tutorial_smoke.gd` 的 G 段。
+    完成页的「去实战一局」照 `MainUI._on_enter_board` + `_on_diff` 配 `Global`
+    （`battle_mode`/`offline_type`/`difficulty`/`ai_backend`/**`net_mode`**）——
+    **少设一个就会带着上一局的残留进对局**。
+    ⚠️ **教程覆写了 `_check_win()` 为空**（`BattleTutorial`）：教程的结束**只由步骤机决定**。
+    原因：「位移」步要把木桩压到残血（`TutorialDefs.DUMMY_LOW_HP = 2`，好让斩杀类位移技真能生效），
+    玩家完全可能顺手把木桩**打死** —— 沿用基类就会立刻判"蓝方全灭" → `run_step()` 返回 over →
+    教程在半途被强行结束。**改这条时两件事必须配套**：残血窗口 + 胜负接管 + 离步 `restore_dummy()`（被斩杀就复活）。
+    步骤之间的状态切换**只写在 `Tutorial._set_idx()` 一处**（`_goto_step` / `_advance_if_gate` 都走它），
+    别散到各处。
+    ⚠️ 顺带纠正一个容易记错的判断：**「诛心」这类斩杀技对满血目标并非"放不出来"** ——
+    效果函数只是不执行斩杀（返回"无法斩杀"文字），而 `human_cast()` 里的位移段落在该判断**之前**就执行完了。
+27. **账号与存档（2026-09-28 立；2026-10-04 账号上云；2026-10-05 删本地账号后大改）**：
+    ⚠️ **「账号」在本工程只剩一个概念：云端账号。**
+    客户 2026-10-05 明确要求「不要有本地账号这个东西！离线玩相当于玩 0 进度原始账号」——
+    于是原 `AccountStore` / `user://accounts.json` / 登录页的「选择已有账号」**整套删除**。
+    现在本机只有**两份文件**：
+    · **`user://progress.json`**（`ProgressStore`）—— **匿名本机进度**：没有名字、没有 id、
+      没有列表、不能切换。「离线玩」用的就是它；本机首次玩即「0 进度原始账号」。
+      写入只认 `tier` / `tutorial_done` / `tutorial_hero` 三个字段，
+      **脏数据（name / id）会被丢掉 —— 它永远不会退化成账号**。
+    · **`user://cloud_session.json`**（`CloudSession`）—— 云端登录态：token + 账号信息
+      （含 `account.progress`，**断网时进度就靠它兜底**）。**只存 token，绝不存密码**。
+    **两份进度互不污染**：登录中读写云端、离线玩读写本机 —— 所以"进度跟账号走"与
+    "离线玩是 0 进度"能同时成立。进度写入**统一走 `MainUI._save_progress()`**，别在各处手写
+    （原先 `tutorial.gd` 就漏过一条）。这两份都不参与任何战斗计算、不进联机同步。
+    **存档损坏必须降级为「没有进度」而不是报错**（最多重问一次水平，不能让玩家进不去游戏）。
+    跑测试若要动存档（`tutorial_smoke` / `cloud_auth_smoke`），**先快照再还原**。
+    ⚠️ `-s 脚本` 测试里取 autoload 必须 `var g: Variant = root.get_node_or_null("Global")`
+    —— 写 `var g := ...` 会因"从 Variant 推断"警告被当错误拒绝编译（2026-10-05 踩到）。
+    ⚠️ 在 `-s 脚本` 模式的测试里**不能直接写 `Global.xxx`**（autoload 名解析不了会编译失败、
+    整个测试跑不起来）；要用 `root.get_node_or_null("Global")` 取。
+    ⚠️ **更要紧的一条（2026-09-30 实测踩到）**：不只是"测试里"，
+    **被测试依赖的脚本里也不能引用 autoload** —— 只要出现在依赖链上，
+    那个测试会 `Compile Error: Identifier not found: Global` →
+    `Failed to compile depended scripts` → **进程只吐一个 SIGTERM、一个字都不输出**（极难查）。
+    所以**纯逻辑/工具类脚本（如 `net_roomcode.gd`）不许引用 `Global`**，配置一律由界面注入。
+
+28. **房间号联机（2026-09-30）**：玩家不再输 IP/端口 —— 建房拿 4 位数字号，对方输号即连。
+    链路：房主 `NetSession.host_game()` +（ws 模式）`NetTunnel` 拿公网地址 →
+    向 `tools/room-service/server.js` 上报 → 换回号码；加入者输号 → 查到地址 → `NetSession.join_game()` 直连。
+    **目录服务只存 `码 → 地址` 一个键值对**，不碰游戏状态、不裁决、不转发对局流量 ——
+    对局数据仍然走原来的 ENet / cpolar 隧道（**那条线一行没动**）。
+    ⚠️ 房间号是**口令语义，不是密码语义**（知道号码就能连）；服务进程重启号码全丢；无 TLS。
+    ✅ **2026-10-03 已上云**：服务部署在自有阿里云 ECS —— `http://39.105.223.8:8787`
+    （`/opt/room-service`，systemd 单元 `room-service.service`，安全组已放行 8787）。
+    `Global.net_room_service` 与 `NetRoomCode.DEFAULT_SERVICE` 的默认值都已指向它，
+    **玩家不再需要在自己电脑上跑服务**；本地自测想用本机实例时把前者临时改回 `127.0.0.1:8787`。
+    ✅ **同期解决了「房主在 NAT 后别人连不上」**：公网建房走**自研反向隧道**
+    （`tools/relay-service/relay-service.js` + 房主侧 `scripts/net/net_relay_host.gd`）——
+    房主主动连出、**不用装 cpolar**，中继只转发字节。`Global.net_transport` 默认 `"ws"` 即走这条路，
+    **任何网络环境下对方输号即连**；选 `"enet"` 则是局域网直连（同一 WiFi 更快，属可选的进阶用法）。
+    ⚠️ 中继/房间服务的地址分别在 `Global.net_relay_host`+`net_relay_port` 与 `net_room_service`，
+    换部署点只改这几处。
+    ⚠️ `net_roomcode.gd` **不许引用 `Global`**（理由见注意点 27 的依赖链那条），服务地址由 main_ui 注入。
+    改服务端后跑 `node tools/room-service/selftest.js`；改客户端后跑 `tests/room_code_smoke.gd`
+    （**没装 Node 会 SKIP 而不是 FAIL**，这是有意设计）。
+
+29. **新增带 `class_name` 的脚本后，必须跑一次 `--import` 再验证（2026-09-30 实测踩到）**：
+    新建脚本文件后直接跑 `--check-only` 或回归，会报
+    `Parse Error: Identifier "UiKit" not declared in the current scope`。
+    这**不是代码错**，而是新类还没进 `.godot/global_script_class_cache.cfg`
+    （Godot 只在扫描/导入项目时注册全局类）。
+    解法：`Godot_v4.7.2-stable_win64_console.exe --headless --path <工程> --import`，
+    然后确认 `grep UiKit .godot/global_script_class_cache.cfg` 能命中。
+    ⚠️ **别急着把新类改成 `preload` 绕过去** —— 工程里 `class_name` 是主流用法
+    （`BattleUnit` / `SkillEffects` / `DamageFx` / `HpShieldBar` / `Terrain` / `UiKit` / `HeroRules`…），统一走 `--import` 即可。
+    ⚠️ 另外 `--check-only -s <脚本>` 对 autoload（`Global` / `Net` / `Sfx`）会误报 `Identifier not found`
+    （见「三、运行与测试」的告示与注意点 27），**UI 脚本的编译错误要靠场景冒烟抓**：
+    `--quit-after 150 res://scenes/Xxx.tscn`，抓 `SCRIPT ERROR` 计数。
+
+30. **`main_ui._fit()` 必须保持幂等（2026-10-04，用户实报"账号界面点输入框就卡"）**：
+    它每帧被 `_process` 调用，**只能"值变了才写控件"**。
+    原因：`add_theme_constant_override` / `add_theme_font_size_override` **写入相同值也会发
+    `NOTIFICATION_THEME_CHANGED`**，`Control.position` setter 会发 transform 通知；
+    整棵树每帧被判"变了"，而面板里若有**获得焦点的 `LineEdit`**，祖先的 transform 通知会让它
+    每帧更新**输入法候选窗位置** → 中文输入法下直接卡死。
+    ⚠️ 往 `_fit` / `_apply_node_sizes` 里加新写入点时，**必须带"变了才写"判断**；
+    主题常量走 `_set_theme_int()`、字号缓存走控件 meta `_fz_applied`。
+    回归：`tests/mainui_fit_smoke.gd` —— 它断言 `fit_writes`（诊断计数）在静止后**不再增长**。
+    ⚠️ 卡死症状 headless 复现不出来（无窗口/无 IME），所以回归钉的是"零写入"这个可测特征，别删。
+    ⚠️ **测试不得依赖 `user://` 里有没有账号（2026-10-04 踩到）**：`_ready` 第 98 行按
+    `_initial_panel()` 决定默认显示 `start` 还是 `tut_login`，而"切过去时会产生几次
+    冷启动写入"取决于**之前显示的是哪个面板** —— 于是谁建了账号，谁就把这个测试跑红
+    （从 PASS 17/0 变成 FAIL 2）。现状：切面板后先等 4 帧再计数，且**不数**"切面板必须写入"
+    （那条断言本身就是错的）。另注：跑 `MainUI` 场景的测试都会经 `_setup_cloud()` 碰 `user://`，
+    `tutorial_smoke` 的快照只保 `progress.json`、**不覆盖 `cloud_session.json`**。
+    ⚠️ **写 start 面板的控件断言别"见到横排就收集"**：该面板里有**两个** `HBoxContainer`
+    —— 标题下的**账号行**（只含 1 个按钮）和末尾的**工具条**（含 5 个）。要取**按钮最多的那个**
+    才是工具条，否则断言会把「登录云端」当成工具条第一个按钮（2026-10-05 加第 ⑦ 段时踩到）。
+
+31. **UI 颜色一律从 `UiDesign` 取、样式一律走 `UiTheme` 组件库（2026-10-04 立）**：
+    界面文件里**不许再写 `Color(...)` 字面量**。审计过：改造前 UI 层有 **373 处**硬编码颜色、
+    188 种不同值 —— 其中「同一个金写了 19 遍 / 9 个文件」「同一个面板色 5 遍且 alpha 各不相同
+    （0.94 / 0.90 / 0.97）」「7 种彼此差不到 3% 的灰蓝小字」。这类问题的特征是**改不干净**：
+    改一处不影响另一处。
+    · 要新颜色 → 先在 `scripts/ui/ui_design.gd` 加令牌。令牌值**锚定历史值**（保证迁移像素不变）。
+    · 要新组件样式 → 加到 `scripts/ui/ui_theme.gd` 的组件库区（`style_button` / `style_input` /
+      `style_card` / `style_modal`），**不要在界面文件里手写 `add_theme_*_override`**。
+    · 新场景根要在 `_ready()` 首行挂 `UiTheme.attach(self)`（幂等）。样式优先级是
+      **控件 override > Theme**，所以挂主题不会破坏既有观感，只补缺失部分（Tooltip / PopupMenu /
+      滚动条 / **焦点环**）。
+    · **改令牌值 = 全工程改色**，属显式设计决定；改完必须跑 `tests/ui_design_smoke.gd`
+      （A 段会红，提醒你同步更新锚点值）。
+    · ⚠️ **不要** `preload("...ui_design.gd")` 之后拿它调**静态函数** —— preload 得到的是
+      GDScript 资源，**只有常量能从它上面取**，静态函数会报
+      `Nonexistent function 'contrast' in base 'GDScript'`。直接用全局类名 `UiDesign.contrast()`。
+    · ⚠️ 令牌编号**必须与亮度同序**（墨阶 950→050、金阶 700→100，数字越小越亮）——
+      编号错乱会让层级关系被读反，测试 C 段已抓出过一次真实倒挂。
+    · 两条无障碍硬边界（实测）：**阵营色不得当正文用**（ALLY 3.28 / ENEMY 3.18 < 4.5，只做条/圆/描边）；
+      **`INK_500` 只许用于禁用态**（4.16 < 4.5，看着"够亮"但做正文不达标）。
+    · **弹窗底色恒不透明**（`SURFACE_MODAL` alpha=1.0）；半透的只有 `SURFACE_PANEL`
+      ——那是棋盘上的对局侧栏，**不是弹窗**。
+    规范全文见 `docs/UI设计系统.md`，视觉稿见 `docs/UI设计系统_视觉稿.html`。
+    回归：`tests/ui_design_smoke.gd`（128 断言，含"界面文件里不许有核心语义色字面量"的扫描）。
+    · **资源条四色四义**：生命绿 `HP` / 护盾蓝 `SHIELD` / 能量琥珀 `ENERGY` / 理智紫 `SANITY`。
+      ⚠️ **不要拿 `ENEMY`（敌方阵营蓝）当能量色** —— 侧栏曾这么写过；也不要把生命与护盾
+      画进同一根条里（并排只靠颜色分，在细条上看不出谁是谁）。测试 H 段会断言四色两两通道差 ≥0.25。
+      ⚠️ 棋子头顶迷你条**不再使用** `DamageFx.hp_shield_layout`（那条换算式是侧栏 `HpShieldBar`
+      的语义，且有 7 条断言钉着，**别动**）；迷你条是三条各自独立的简单比例。
+    · **字体三档**（硬字号阈值，不是偏好）：`UiTheme.title_font(size)` 自动选 ——
+      **≥60px 毛笔楷书**（带字距）／**≥22px 思源宋体 Bold**／**<22px 思源黑体**。
+      标题一律走 `UiTheme.style_title(label, size)`，别在界面里自己 `add_theme_font_override`。
+      ⚠️ 毛笔小字会糊、宋体小字不如黑体清楚，所以阈值不能"顺手调低"。
+      ⚠️ `display_font()` / `serif_font()` 在字体文件缺失时**降级到正文字体，绝不返回 null**
+      （否则整屏标题消失）；测试 I 段会断言三档字体**真的加载到了**（降级是静默的，没人会发现）。
+      字体在 `assets/fonts/`（**OFL，必须随包附各自 `LICENSE-*.txt`**，共 34 MB）。
+      正文用**可变字重**（`body_font(UiTheme.W_MEDIUM)` 给按钮、`W_BOLD` 给强调）——
+      别把字重写死成 400，否则界面会显得"平"。
+    · **RichTextLabel 的内联色必须用 `UiDesign.MD_*` 调色板**，不许写裸 hex。
+      ⚠️ 这是踩过坑的：图鉴/故事正文原来硬编码了一批**纸面深色**（`#2e6b3c` `#7a5a10` `#55504a`…），
+      面板底转深色后就成了「**深底深字，一个字都看不见**」——而**渲染之前完全无法察觉**。
+      J 段会扫描全部界面脚本的 `color=#`，断言每一处对卡片底对比度 ≥3.0。改面板底色前先跑它。
+    · **不要**再引入"浅色子主题"（米白面板 / 奶油按钮那一套）。
+      全产品已统一为深色 + 金；"书卷气"由**宋体标题 + 金描边**表达，不靠浅色底。
+
+32. **备份目录不要放在 Godot 工程树内（2026-10-04 踩到，代价是一次假"挂起"）**：
+    Godot 会扫描**整个工程目录**给每个 `class_name` 注册全局类。把 `scripts/ui/` 的副本
+    （23 个同名脚本）备份到工程里之后，类缓存被**指向了备份路径**：
+
+    ```
+    "class": &"HpShieldBar", "path": "res://_backup_xxx/scripts/ui/hp_shield_bar.gd"   ← 被劫持
+    ```
+
+    两个后果，第二个更凶险：
+    · `load("res://scripts/ui/xxx.gd")` 报 `Class "X" hides a global script class` → **返回 null**。
+      若发生在 `-s` 测试的 `_initialize` 协程里，协程静默死掉、`quit()` 再不执行 →
+      **进程永不退出，表现为"挂起"**（低 CPU、零输出），极难往"备份目录"这个方向想。
+    · 这些类**在别处按类名引用时会静默解析到备份里的旧代码** —— 改了却"没生效"。
+    ⚠️ **工程里现存 14 个 `_backup_*` 目录，是同一颗雷。**
+    本工程已有的正确做法是：**每个备份目录里放一个 `.gdignore`**（Godot 官方机制，见到就跳过该目录）。
+    **先后漏过两个，而且都是补漏时又漏的**：
+    ① `_backup_roomcode1004/`（2026-10-04 首次发现）—— `NetRoomCode` 被劫持到
+    `res://_backup_roomcode1004/scripts/net/net_roomcode.gd`。这个具体事故很凶险：
+    备份版是 `CODE_LEN := 11`、现用版是 `CODE_LEN := 4`，而 `main_ui.gd:298` 会用
+    `NetRoomCode.CODE_LEN` 生成加入面板的占位提示、并按它校验位数 ——
+    **等于联机的 4 位房间号功能整体失效**（会要求输 11 位）。已补 `.gdignore` 修复。
+    ② `_backup_autoupdate1004/`（同日二次发现）—— 它**没**劫持类缓存（里面只有 `main_ui.gd`，无 `class_name`），
+    但被当成正常资源**打进了程序包**（导出规则见注意点 33）。已补 `.gdignore` + 给导出加排除规则。
+
+    **检查命令**（改完脚本/动过备份后都值得跑一次）：
+    ```bash
+    grep -c "_backup" .godot/global_script_class_cache.cfg     # 必须是 0
+    grep -A 8 '"class": &"NetRoomCode"' .godot/global_script_class_cache.cfg | grep '"path"'
+    ```
+    若不为 0：给对应备份目录补 `.gdignore` → 删 `.godot/global_script_class_cache.cfg` → `--import` 重扫。
+    新增备份目录时**第一件事就是放 `.gdignore`**（或直接放工程树之外，如工作区目录）。
+    📌 补漏时**别只补刚发现的那一个** —— 把全部 `_backup_*/` 扫一遍再收工
+    （2026-10-04 就是"补了一个、漏了另一个"）。
+
+33. **程序包 ≠ 源码包（2026-10-04 立，起因是一次误解）**：
+    两套规则**互不相干**，别互相套用。
+    - **程序包**（Godot 导出的 exe/pck）：由 `export_presets.cfg` 决定。本工程是
+      `export_filter="all_resources"` = 导出**工程里所有资源**（`.gd/.tscn/.tres/.png/.ttf/.wav`…），
+      **不管有没有被引用**。而 `.md` / `.html` **不是 Godot 资源**（引擎不认识该类型、也没有脚本 `load()`），
+      所以**天然不进包** → **「放进工程目录」≠「进程序包」**。
+    - **源码包**（zip，规则见注意点 21）：`.md` 是要收的，根目录固定 5 份。
+    - ⚠️ `all_resources` 的副作用 —— 这些会**真的进包**，现已用 `exclude_filter` 挡掉：
+      `tests/`（76 条，其中 `_probes/` 里**硬编码服务器地址** `39.105.223.8:8787/8789`）、
+      漏了 `.gdignore` 的 `_backup_*/`、根目录那个 611MB 的 `Godot/`（`editor_settings-4.7.tres` 是资源）。
+    - 当前设置：`exclude_filter="tests/*, _backup_*/*, Godot/*, *.md, *.html"`。
+    - **改完导出设置必须实测**（filter 写错会把脚本一起排除、包直接废，而"导出成功"**不会报错**）：
+      `godot --headless --path . --export-pack "Windows Desktop" /tmp/t.pck`
+      → `python tools/inspect_pck.py /tmp/t.pck`
+      （一键判断：该排除的为 0、`.gdc`/`scripts/`/`assets/` 仍在。改前那版能准确报出 `tests/ 76 条`。）
+    - 设计文档已从根目录挪进 `docs/`（根目录保持「5 份」不变，见注意点 21）。
+
+34. **全屏弹层必须设 `z_index = UiDesign.Z_OVERLAY`（2026-10-05 立，起因是「人物盖住弹窗」又犯了一次）**：
+    Godot **同层节点先比 `z_index`、再比树顺序** —— 所以「最后 `add_child` 就画在最上面」
+    **只在没有高 z_index 子节点时成立**。而棋子自带 z_index（名字标签 **120**、击破特效 **110**、
+    DragonBones 骨骼部件由数据给），弹层默认 0 → 棋子就画在弹窗之上。
+    ⚠️ 这个坑**踩过两次**：`unit_info_popup` 早就写死 4096 并留了注释（「否则棋子骨骼部件会盖住弹窗」），
+    但 `SettingsLayer`（局内设置）和教程的挖洞遮罩**没跟上**。教训：**「有先例」不等于「有规矩」**。
+    现在层级进了令牌：`Z_UNIT_FX` / `Z_UNIT_LABEL` / `Z_OVERLAY`，**弹层侧与棋子侧都从令牌取**；
+    `ui_design_smoke` 的 K 段会扫描 6 个界面的源码 + 断言大小关系 —— 谁再写死数字就直接变红。
+    ⚠️ `Z_OVERLAY = 4096` 已是 Godot `z_index` 的**上限**；**弹层内部子控件不要再设 z_index**
+    （`z_as_relative` 默认开启，父子相加会溢出被钳制）。
+
+35. **「忘记密码」走服务端自有邮箱通道（2026-10-05 立，服务端已上线）**：
+    两条接口（`/send-code` 带 `purpose:"reset"`、以及 `/reset-password`）已上线并做了**生产真链路**验证；
+    契约与实现记录见 `docs/忘记密码_接口契约.md`。四条要点：
+    - **收件地址只从账号里取**（`acct.email`），**绝不信**请求体里的任何地址；而账号里存的 email
+      又只可能来自**验证过**的注册（注册时 `email: saved ? email : ''`）⇒ 谁也拿不到别人账号的重置码。
+      **这两条必须同时在**，少一条就漏。
+    - `handleSendCode` **只在带 `purpose:"reset"` 时分流**；不传时行为与改前**逐字节一致** ——
+      已发布的客户端仍用 `{email}` 发注册码，**改签名会打断线上注册**。
+    - ✅ **顺带发现的既有问题已修（2026-10-05，用户批准后改并上线）**：
+      原 `codeTake()` 会把验证码记录**整条删掉**，而 **60 秒重发冷却**与 **同邮箱 5 封/天**的
+      计数正寄存在同一条记录上 ⇒ **每成功注册/改密一次，该邮箱的冷却与日配额都被清零**。
+      证据：注册码 `17:48:07` 发出、重置码 `17:48:36` 就发出去了（相隔 29 秒 ≪ 60 秒），
+      紧接着第三次请求被正常 429 ⇒ 冷却本身有效，是"记录被删"造成的清零。
+      现在改成 `codeDrop()`：只清 `code`/`exp`/`tries`，**保留** `lastSent`/`day`/`dayN`；
+      另加 `codeGc()` 回收老记录（不再整条删，Map 会一直长）。
+      ⚠️ **最易漏的地方**：这种"删记录"的写法散在多个 handler 里（当时 `handleResetPassword`
+      里还藏着一处 `codes.delete(email)`）—— 改这类语义要**全库搜 `codes.delete`**，
+      只改 `codeTake` 远远不够（本地测试台就是这么抓出那处漏改的）。
+    - 已知残留（**有意接受**）：该接口对"存在且已绑邮箱"的昵称会回掩码 ⇒ 可用来**枚举昵称是否存在**；
+      限流（同 IP 10 封/时 + 30 封/天）让它又慢又吵 —— 每次命中都往对方信箱投一封真邮件。
+      将来公开运营时改成统一文案即可，**客户端无需动**。
+
+36. **战术模型的每日额度由服务端算，客户端改时间无效（2026-10-05 立）**：
+    未登录 = **设备 3 次/天 + 来源 IP 9 次/天（两道都要过）**；登录后 = 按 uid **10 次/天**。
+    起因：客户端被分享出去后**任何人都能无限烧豆包额度**。四条**别踩**：
+    - 日期一律用 `_todayBJ()`（北京时间）。**别用 `toISOString()`** —— 那是 UTC，
+      "每天"会变成北京时间**早上 8 点**重置，玩家会以为"莫名其妙又多了一次"。
+    - 身份只认两样：**token**（HMAC，伪造不了）与 `req.socket.remoteAddress`（真实 TCP 源地址）。
+      ⚠️ **不要改成读 `X-Forwarded-For`** —— 那个客户端随便编，一改整个防作弊就归零
+      （现在 8789 直连公网、前面没有反向代理，才敢这么写）。
+    - 计数**必须落盘**（`llm_quota.json`）：只放内存的话，服务一重启就等于白送次数。
+    - 客户端 `user://device_id.txt` **不是安全凭据**（删了就换一个）—— 它只是"区分机器"的标签；
+      防线在"设备池与 IP 池取更严"这个**组合**上，别把它单独当令牌用。
+    改这块之后必跑两套：服务端 Node 额度测试台（含"换源 IP 打账号额度"这条）
+    + `tests/_probes/quota_probe.gd`（客户端 429 解析，用本地假服务器造 429，不烧真额度）。
+
+37. **发版产物放哪（2026-10-05 立的规矩）**：
+    - 桌面：**固定名** `战棋安装包_最新.exe`，每次发版**覆盖**（桌面永远只有一份最新的）；
+    - `installer/`：**只留本次这一份**，旧的自动删；
+    - `cbw\战棋\战棋版本存档\`：**只放源码包**，不塞安装包。
+    三条都已内建进 `tools/release_desktop.js`（第 7/8/9 步），**别再手工搬**。
+    起因：`installer/` 曾堆到 **11 个安装包 / 1.2 GB**；用户明确"只要源码存档、不要安装包存档"。
+    ⚠️ 桌面属**个人目录**，清旧必须走回收站（见「安全删除」skill），不要 `rm` ——
+    这也是脚本选择"固定名覆盖"而不是"改个名字再删旧的"的原因之一。
+    ⚠️ 固定名意味着**版本号不在文件名里**：查版本看文件属性「详细信息」（Inno 写的 `VersionInfo`）。
 
 ---
 
@@ -602,7 +1128,10 @@ ERROR: Failed to load script "res://scripts/ui/main_ui.gd"       ← 主菜单�
 **约定**：备份目录一律放一个**空文件** `.gdignore`
 （Godot 官方机制：含该文件的目录对资源系统完全不可见）。**不删除任何文件**。
 
-已加 `.gdignore` 的目录：`_backup_908merge/`、`_backup_912merge/`、`_backup_913fix/`、`.workbuddy/`。
+已加 `.gdignore` 的目录：`_backup_0928tutorial/`、`_backup_0930struct/`、`_backup_908merge/`、
+`_backup_912merge/`、`_backup_913fix/`、`_backup_913v4merge/`、`_backup_918bleed_dur/`、
+`_backup_918bleedfix/`、`_backup_doc_20260918/`、`.workbuddy/`。
+⚠️ **新建备份目录必须同步补上 `.gdignore`**（2026-09-30 实测：漏建时先建后测，容易埋进"假绿"）。
 
 ### A.5 白灵殿关卡的关键坐标（改地图/调难度前先对照）
 

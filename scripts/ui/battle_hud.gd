@@ -39,7 +39,7 @@ func _build() -> void:
 
 	_card = PanelContainer.new()
 	_panel_style = StyleBoxFlat.new()
-	_panel_style.bg_color = Color(0.10, 0.12, 0.19, 0.94)
+	_panel_style.bg_color = UiDesign.SURFACE_PANEL
 	_panel_style.set_corner_radius_all(16)
 	_card.add_theme_stylebox_override("panel", _panel_style)
 	add_child(_card)
@@ -51,7 +51,7 @@ func _build() -> void:
 	vb.add_child(_arena)
 
 	# 战斗日志
-	var log_title := _label("战斗日志", 16, Color(0.941, 0.780, 0.369))
+	var log_title := _label("战斗日志", 16, UiDesign.GOLD_500)
 	log_title.set_meta("fz", 16)
 	log_title.add_theme_constant_override("margin_top", 8)
 	vb.add_child(_sep())
@@ -71,16 +71,16 @@ func _build() -> void:
 	_tip = PanelContainer.new()
 	_tip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var tip_style := StyleBoxFlat.new()
-	tip_style.bg_color = Color(0.06, 0.08, 0.14, 0.97)
+	tip_style.bg_color = UiDesign.BTN_BG_PRESSED
 	tip_style.border_color = Color(0.941, 0.780, 0.369, 0.55)
 	tip_style.set_border_width_all(1)
 	tip_style.set_corner_radius_all(8)
 	_tip.add_theme_stylebox_override("panel", tip_style)
 	var tip_vb := _box(VBoxContainer.new(), 4, 12, 12, 7, 9)
 	_tip.add_child(tip_vb)
-	_tip_name = _label("", 15, Color(0.941, 0.780, 0.369))
+	_tip_name = _label("", 15, UiDesign.GOLD_500)
 	tip_vb.add_child(_tip_name)
-	_tip_desc = _label("", 13, Color(0.86, 0.90, 0.96))
+	_tip_desc = _label("", 13, UiDesign.INK_200)
 	_tip_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	tip_vb.add_child(_tip_desc)
 	_tip.visible = false
@@ -115,7 +115,7 @@ func _build_arena(cfgs: Array) -> void:
 func _make_side(cfg: Dictionary) -> VBoxContainer:
 	var vb := _box(VBoxContainer.new(), 8, 0, 0, 0, 0)
 	var side := str(cfg.get("side", "行动"))
-	var color: Color = cfg.get("color", Color(0.941, 0.780, 0.369))
+	var color: Color = cfg.get("color", UiDesign.GOLD_500)
 	var active: bool = bool(cfg.get("active", false))
 
 	var role := _label(side, 15, color)
@@ -123,7 +123,7 @@ func _make_side(cfg: Dictionary) -> VBoxContainer:
 	role.text += ("  ◀ 行动" if active else "")
 	vb.add_child(role)
 
-	var nm := _label(str(cfg.get("name", "—")), 27, Color(0.93, 0.96, 0.99))
+	var nm := _label(str(cfg.get("name", "—")), 27, UiDesign.INK_100)
 	nm.set_meta("fz", 27)
 	vb.add_child(nm)
 
@@ -149,7 +149,7 @@ func _bar_box(tag: String, fill_col: Color, value: int, max_value: int) -> HBoxC
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	row.set_meta("min_y", 48.0)
-	row.add_child(_label_min(tag, 18, 42, Color(0.84, 0.87, 0.92)))
+	row.add_child(_label_min(tag, 18, 42, UiDesign.INK_200))
 
 	var bar := ProgressBar.new()
 	bar.set_meta("min_y", 32.0)
@@ -164,13 +164,13 @@ func _bar_box(tag: String, fill_col: Color, value: int, max_value: int) -> HBoxC
 	row.add_child(bar)
 	_style_bar(bar)
 
-	var num := _label("%.2f / %.2f" % [value, max_value], 16, Color(1, 1, 1))
+	var num := _label("%.2f / %.2f" % [value, max_value], 16, UiDesign.BAR_NUM)
 	num.set_meta("fz", 16.0)
 	num.set_anchors_preset(Control.PRESET_FULL_RECT)
 	num.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	num.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	num.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	num.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.85))
+	num.add_theme_color_override("font_shadow_color", UiDesign.BAR_NUM_SHADOW)
 	num.add_theme_constant_override("shadow_offset_x", 2)
 	num.add_theme_constant_override("shadow_offset_y", 2)
 	bar.add_child(num)
@@ -181,14 +181,14 @@ func _style_bar(bar: ProgressBar) -> void:
 	fill.bg_color = bar.get_meta("fill_col")
 	fill.set_corner_radius_all(5)
 	var bgst := StyleBoxFlat.new()
-	bgst.bg_color = Color(0.04, 0.05, 0.09, 0.9)
+	bgst.bg_color = UiDesign.BAR_TRACK
 	bgst.set_corner_radius_all(5)
 	bar.add_theme_stylebox_override("fill", fill)
 	bar.add_theme_stylebox_override("background", bgst)
 
 ## ================= 战斗日志 =================
 func add_log(text: String) -> void:
-	var l := _label(text, 13, Color(0.72, 0.77, 0.85))
+	var l := _label(text, 13, UiDesign.INK_250)
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_log_box.add_child(l)
 	# 顶掉过旧的行
@@ -236,17 +236,17 @@ func _make_skill_button(skill) -> Button:
 	b.set_meta("min_y", 40.0)
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	b.add_theme_font_size_override("font_size", 16)
-	b.add_theme_color_override("font_color", Color(0.92, 0.95, 0.99))
-	b.add_theme_color_override("font_hover_color", Color(1.0, 0.95, 0.8))
+	b.add_theme_color_override("font_color", UiDesign.INK_100)
+	b.add_theme_color_override("font_hover_color", UiDesign.GOLD_300)
 	var normal := StyleBoxFlat.new()
-	normal.bg_color = Color(0.16, 0.19, 0.29)
-	normal.border_color = Color(0.40, 0.36, 0.26)
+	normal.bg_color = UiDesign.INK_700
+	normal.border_color = UiDesign.BORDER_WARM
 	normal.set_border_width_all(1)
 	normal.set_corner_radius_all(7)
 	var hover := normal.duplicate()
-	hover.bg_color = Color(0.23, 0.27, 0.42)
+	hover.bg_color = UiDesign.INK_600
 	var pressed := normal.duplicate()
-	pressed.bg_color = Color(0.12, 0.15, 0.24)
+	pressed.bg_color = UiDesign.INK_750
 	b.add_theme_stylebox_override("normal", normal)
 	b.add_theme_stylebox_override("hover", hover)
 	b.add_theme_stylebox_override("pressed", pressed)

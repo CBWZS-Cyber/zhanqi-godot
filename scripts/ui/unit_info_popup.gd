@@ -7,11 +7,11 @@ extends Control
 static func make(u: BattleUnit) -> Control:
 	var layer := Control.new()
 	layer.set_anchors_preset(Control.PRESET_FULL_RECT)
-	layer.z_index = 4096          # 置顶：否则棋子骨骼部件（自带 z_index）会盖住弹窗
+	layer.z_index = UiDesign.Z_OVERLAY          # 置顶：否则棋子骨骼部件（自带 z_index）会盖住弹窗
 	layer.mouse_filter = Control.MOUSE_FILTER_STOP
 	# 暗背景（点击关闭）
 	var bg := ColorRect.new()
-	bg.color = Color(0, 0, 0, 0.45)
+	bg.color = UiDesign.SHADOW_COLOR
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	layer.add_child(bg)
 	# 居中卡片
@@ -23,7 +23,7 @@ static func make(u: BattleUnit) -> Control:
 	card.offset_top = -290.0
 	card.offset_bottom = 290.0
 	var cs := StyleBoxFlat.new()
-	cs.bg_color = Color(0.985, 0.97, 0.93, 0.995)   # 米白（与图鉴主题一致）
+	cs.bg_color = UiDesign.SURFACE_GLASS_DEEP   # 深色玻璃（与图鉴统一）
 	cs.set_corner_radius_all(14)
 	cs.border_color = Color(0.65, 0.55, 0.40)
 	cs.set_border_width_all(1)
@@ -40,7 +40,7 @@ static func make(u: BattleUnit) -> Control:
 	rt.bbcode_enabled = true
 	rt.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	rt.add_theme_font_size_override("normal_font_size", 14)
-	rt.add_theme_color_override("default_color", Color(0.24, 0.19, 0.12))
+	rt.add_theme_color_override("default_color", UiDesign.INK_100)
 	rt.text = bbcode(u)
 	m.add_child(rt)
 	# 右上角 ✕
@@ -66,8 +66,8 @@ static func make(u: BattleUnit) -> Control:
 static func bbcode(u: BattleUnit) -> String:
 	var out := ""
 	var camp := "红方" if u.team == 0 else "蓝方"
-	out += "[color=#7a5a10][b]%s[/b][/color] 〔%s〕· %s\n" % [u.name, u.element, camp]
-	out += "[color=#b3aa98]────────────────────[/color]\n"
+	out += "[color=#FFE08C][b]%s[/b][/color] 〔%s〕· %s\n" % [u.name, u.element, camp]
+	out += "[color=#949EB8]────────────────────[/color]\n"
 	# 属性行（理智系显示理智，无上限显示 ∞）
 	var res_txt := ""
 	if u.has_sanity:
@@ -80,47 +80,47 @@ static func bbcode(u: BattleUnit) -> String:
 		u.hp, u.max_hp, res_txt, u.shield, u.armor, u.effective_speed()]
 	# 被动
 	if u.passive != null:
-		out += "\n[color=#2e5d9e]被动·%s[/color]\n%s\n" % [u.passive.display_name, u.passive.desc]
+		out += "\n[color=#4F8FD6]被动·%s[/color]\n%s\n" % [u.passive.display_name, u.passive.desc]
 	# 技能
-	out += "\n[color=#2e6b3c]技能[/color]\n"
+	out += "\n[color=#5EBF73]技能[/color]\n"
 	for i in range(1, 5):
 		var sk = u.get_skill(i)
 		if sk == null:
 			continue
 		var tag := ""
 		if u.is_skill_lost(sk.id):
-			tag = " [color=#b54a28]（被掠夺/禁用）[/color]"
+			tag = " [color=#EB7866]（被掠夺/禁用）[/color]"
 		elif sk.current_cd > 0:
-			tag = " [color=#8a8578]（冷却 %d）[/color]" % sk.current_cd
+			tag = " [color=#ADB8CC]（冷却 %d）[/color]" % sk.current_cd
 		var kind := "大招" if i == 4 else "技能%d" % i
-		out += "[color=#2e6b3c]%s·%s[/color]%s\n%s\n" % [kind, sk.display_name, tag, sk.desc]
+		out += "[color=#5EBF73]%s·%s[/color]%s\n%s\n" % [kind, sk.display_name, tag, sk.desc]
 	# 印记 / 状态
 	var extra: Array[String] = []
 	for k in u.counters:
 		var v := int(u.counters[k])
 		if v > 0:
-			extra.append("[color=#2e7a46]%s×%d[/color]" % [k, v])
+			extra.append("[color=#5EBF73]%s×%d[/color]" % [k, v])
 	var sts: Array = u.status_icons()
 	for d in sts:
-		extra.append("[color=#b54a28]%s[/color]" % str((d as Dictionary).get("label", "")))
+		extra.append("[color=#EB7866]%s[/color]" % str((d as Dictionary).get("label", "")))
 	if not extra.is_empty():
-		out += "\n[color=#a06a10]印记 / 状态[/color]\n" + "　".join(extra)
+		out += "\n[color=#FFE08C]印记 / 状态[/color]\n" + "　".join(extra)
 	# 装备（武器）
-	out += "\n[color=#a06a10]装备[/color]\n"
+	out += "\n[color=#FFE08C]装备[/color]\n"
 	if u.equipment.is_empty():
-		out += "[color=#8a8578]（未装备武器）[/color]\n"
+		out += "[color=#ADB8CC]（未装备武器）[/color]\n"
 	else:
 		for wid in u.equipment:
 			var wname: String = Weapons.name_of(str(wid))
 			var wdef: Dictionary = Weapons.get_def(str(wid))
-			out += "[color=#2e5d9e]%s[/color]（%s）" % [wname, str(wdef.get("tier", ""))]
+			out += "[color=#4F8FD6]%s[/color]（%s）" % [wname, str(wdef.get("tier", ""))]
 			var aff := str(wdef.get("affinity", ""))
 			if aff != "":
-				out += "　[color=#2e7a46]%s[/color]" % aff
+				out += "　[color=#5EBF73]%s[/color]" % aff
 			out += "\n"
 	# 所在地形
 	var tid: int = u.terrain_id
-	out += "\n[color=#a06a10]所在地形[/color]\n[color=#2e7a46]%s[/color]：%s\n" % [
+	out += "\n[color=#FFE08C]所在地形[/color]\n[color=#5EBF73]%s[/color]：%s\n" % [
 		Terrain.name_of(tid), Terrain.desc_of(tid)]
 	return out
 
@@ -129,7 +129,7 @@ static func bbcode(u: BattleUnit) -> String:
 static func make_star(star: Dictionary) -> Control:
 	var layer := Control.new()
 	layer.set_anchors_preset(Control.PRESET_FULL_RECT)
-	layer.z_index = 4096          # 置顶（同上）
+	layer.z_index = UiDesign.Z_OVERLAY          # 置顶（同上）
 	layer.mouse_filter = Control.MOUSE_FILTER_STOP
 	var bg := ColorRect.new()
 	bg.color = Color(0, 0, 0, 0.35)
@@ -143,7 +143,7 @@ static func make_star(star: Dictionary) -> Control:
 	card.offset_top = -110.0
 	card.offset_bottom = 110.0
 	var cs := StyleBoxFlat.new()
-	cs.bg_color = Color(0.985, 0.97, 0.93, 0.995)
+	cs.bg_color = UiDesign.SURFACE_GLASS_DEEP
 	cs.set_corner_radius_all(14)
 	cs.border_color = Color(0.65, 0.55, 0.40)
 	cs.set_border_width_all(2)
@@ -160,24 +160,24 @@ static func make_star(star: Dictionary) -> Control:
 	rt.bbcode_enabled = true
 	rt.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	rt.add_theme_font_size_override("normal_font_size", 15)
-	rt.add_theme_color_override("default_color", Color(0.24, 0.19, 0.12))
+	rt.add_theme_color_override("default_color", UiDesign.INK_100)
 	var is_big := bool(star.get("big", false))
 	var wid := str(star.get("weapon", ""))
 	var val := 5 if is_big else 3
-	var out := "[color=#7a5a10][b]★ %s星星[/b][/color]（拾取 +%d 分）\n" % ["大" if is_big else "小", val]
-	out += "[color=#b3aa98]────────────────────[/color]\n"
+	var out := "[color=#FFE08C][b]★ %s星星[/b][/color]（拾取 +%d 分）\n" % ["大" if is_big else "小", val]
+	out += "[color=#949EB8]────────────────────[/color]\n"
 	if wid == "":
-		out += "[color=#8a8578]（未登记武器）[/color]\n"
+		out += "[color=#ADB8CC]（未登记武器）[/color]\n"
 	else:
 		var d: Dictionary = Weapons.get_def(wid)
-		out += "[color=#2e5d9e][b]%s[/b][/color]（%s · %s）\n" % [Weapons.name_of(wid), str(d.get("element", "")), str(d.get("tier", ""))]
+		out += "[color=#4F8FD6][b]%s[/b][/color]（%s · %s）\n" % [Weapons.name_of(wid), str(d.get("element", "")), str(d.get("tier", ""))]
 		var aff := str(d.get("affinity", ""))
 		if aff != "":
-			out += "[color=#2e7a46]契合：%s[/color]\n" % aff
+			out += "[color=#5EBF73]契合：%s[/color]\n" % aff
 		var st := Weapons.skills_text(wid)
 		if st != "":
-			out += "\n[color=#2e6b3c]技能[/color]\n" + st
-	out += "\n[color=#8a8578]棋子走上去即可拾取（同时得分与装备）[/color]"
+			out += "\n[color=#5EBF73]技能[/color]\n" + st
+	out += "\n[color=#ADB8CC]棋子走上去即可拾取（同时得分与装备）[/color]"
 	rt.text = out
 	m.add_child(rt)
 	var x := Button.new()

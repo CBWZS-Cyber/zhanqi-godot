@@ -14,7 +14,7 @@ var statuses: Array = []     # [{cn, lv, id, rounds, label, badge_num}] —— �
                              #（2026-09-10 起不再画在头顶，改在右键详情弹窗显示；
                              #  2026-09-18 起 label/badge_num 由 SkillEffects 统一生成，勿自行拼接）
 var equipment: Array = []    # 已装备武器名（显示在棋子下方）
-var _col := Color(0.78, 0.25, 0.18)
+var _col := UiDesign.ALLY
 
 var hp := 0.0
 var max_hp := 1.0
@@ -64,7 +64,7 @@ func setup(u: BattleUnit, sel: bool) -> void:
 	selected = sel
 	statuses = u.status_icons() if u.status_icons() != null else []
 	equipment = u.equipment_names()
-	_col = Color(0.80, 0.27, 0.20) if team == 0 else Color(0.26, 0.45, 0.80)
+	_col = UiDesign.ALLY_PIECE if team == 0 else UiDesign.ENEMY_PIECE
 	hero_key = BONE_HERO.get(hero_name, "")
 	# 虞美人子体 = 白花（不显建模/圆）；母体由上层按叠格决定是否显示红花
 	if u.has_flag("子体"):
@@ -123,19 +123,19 @@ func _on_damaged(_u: BattleUnit, result: Dictionary) -> void:
 	var lost := float(result.get("hp_lost", 0.0))
 	var blocked := float(result.get("absorbed", 0.0)) + float(result.get("reduced", 0.0))
 	if bool(result.get("missed", false)):
-		_spawn_float("闪避", Color(0.72, 0.86, 1.0), false)
+		_spawn_float("闪避", UiDesign.FX_DODGE, false)
 	elif bool(result.get("invuln", false)):
-		_spawn_float("免疫", Color(0.72, 0.95, 1.0), false)
+		_spawn_float("免疫", UiDesign.FX_IMMUNE, false)
 	elif lost > 0.0:
-		_spawn_float("-%s" % _fx_num(lost), Color(1.0, 0.38, 0.32), lost >= 3.0)
+		_spawn_float("-%s" % _fx_num(lost), UiDesign.FX_DAMAGE, lost >= 3.0)
 		_flash = 1.0
 		if FX_SHAKE:
 			_do_shake()
 	elif blocked > 0.0:
-		_spawn_float("挡 %s" % _fx_num(blocked), Color(0.66, 0.78, 0.90), false)
+		_spawn_float("挡 %s" % _fx_num(blocked), UiDesign.FX_BLOCK, false)
 		_flash = maxf(_flash, 0.55)
 	if bool(result.get("killed", false)):
-		_spawn_float("击破", Color(1.0, 0.84, 0.28), true)
+		_spawn_float("击破", UiDesign.FX_BREAK, true)
 		_spawn_break_fx()
 	_start_fx_process()
 
@@ -144,7 +144,7 @@ func _on_drained(_u: BattleUnit, amount: float) -> void:
 	if amount <= 0.0:
 		return
 	_prepare_fx()
-	_spawn_float("-%s" % _fx_num(amount), Color(1.0, 0.52, 0.30), amount >= 3.0)
+	_spawn_float("-%s" % _fx_num(amount), UiDesign.FX_TRUE, amount >= 3.0)
 	_flash = maxf(_flash, 0.8)
 	_start_fx_process()
 
@@ -161,7 +161,7 @@ func _process(delta: float) -> void:
 	var busy := false
 	if _flash > 0.0001:
 		_flash = maxf(0.0, _flash - delta / FX_FLASH_TIME)
-		modulate = Color(1.0, 1.0 - 0.62 * _flash, 1.0 - 0.62 * _flash, 1.0) if _flash > 0.0001 else Color(1, 1, 1, 1)
+		modulate = Color(1.0, 1.0 - 0.62 * _flash, 1.0 - 0.62 * _flash, 1.0) if _flash > 0.0001 else UiDesign.MODULATE_RESET
 		busy = true
 	if _hp_ghost > hp + 0.005:
 		if _ghost_hold > 0.0:
@@ -200,7 +200,7 @@ func _spawn_float(text: String, col: Color, big: bool) -> void:
 	lab.add_theme_color_override("font_outline_color", Color(0.05, 0.02, 0.02, 0.9))
 	lab.add_theme_constant_override("outline_size", 5)
 	lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	lab.z_index = 120
+	lab.z_index = UiDesign.Z_UNIT_LABEL
 	# 固定尺寸 + 居中：不依赖字体度量（add_child 后 size 才可能算出来，直接读 size 会拿到 0）
 	lab.size = Vector2(150.0, 30.0)
 	lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -241,7 +241,7 @@ class BreakFx extends Control:
 
 	func _ready() -> void:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
-		z_index = 110
+		z_index = UiDesign.Z_UNIT_FX
 		set_process(true)
 
 	func _process(delta: float) -> void:
@@ -312,36 +312,47 @@ func _draw_overhead(c: Vector2, r: float) -> void:
 	if f == null:
 		return
 	var bw := size.x * 0.8
-	var bh := maxf(3.0, size.y * 0.035)
+	var bh := maxf(3.0, minf(5.0, size.y * 0.033))
 	var bx := c.x - bw / 2.0
-	var base_y := c.y - r - bh - 2.0
-	# 能量/理智条（最贴近棋子）
-	var ecol := Color(0.85, 0.65, 0.25) if not has_sanity else Color(0.60, 0.45, 0.90)
-	var ev := sanity if has_sanity else energy
-	var evmax := sanity_cap if has_sanity else max_energy
-	draw_rect(Rect2(bx, base_y, bw, bh), Color(0.1, 0.1, 0.12, 0.8))
-	draw_rect(Rect2(bx, base_y, bw * clampf(ev / evmax, 0.0, 1.0), bh), ecol)
-	# 生命条（能量条上方）：2026-09-13 起把「护盾」也画进同一条
-	#   规则：hp+shield ≤ max_hp → 护盾按点数等比占位（条不满，剩余留空）
-	#         hp+shield >  max_hp → 两段按 hp:shield 比例铺满整条（换算式与侧栏共用）
-	#   白条残影只反映 hp 掉了多少，画在最上层；护盾变化不做动态特效
-	var hp_y := base_y - bh - 1.0
-	var lay := DamageFx.hp_shield_layout(hp, shield, max_hp)
-	var denom: float = lay.x
-	var hp_ratio := clampf(hp / denom, 0.0, 1.0)
-	draw_rect(Rect2(bx, hp_y, bw, bh), Color(0.1, 0.1, 0.12, 0.8))
-	draw_rect(Rect2(bx, hp_y, bw * hp_ratio, bh), Color(0.35, 0.85, 0.40))
-	var sh_ratio := clampf(lay.z, 0.0, 1.0)
-	if sh_ratio > 0.002:
-		draw_rect(Rect2(bx + bw * hp_ratio, hp_y, bw * sh_ratio, bh), Color(0.33, 0.68, 0.95))
-	var ghost := clampf(maxf(_hp_ghost, hp) / denom, 0.0, 1.0)
-	if ghost > hp_ratio + 0.002:
-		draw_rect(Rect2(bx + bw * hp_ratio, hp_y, bw * (ghost - hp_ratio), bh), Color(0.97, 0.96, 0.92, 0.9))
-	# 名字（血条上方）
+	var gap := 1.0
+	# ---- 三条**各自独立**的细条（2026-10-04 重做）----
+	# 改之前：生命与护盾挤在同一根条里、只靠颜色分（绿+蓝），而能量又借用了敌方阵营蓝，
+	# 三者混在一起根本分不出谁是谁（用户实报：「生命值、盾、能量值要做区分」）。
+	# 现在：**一色一义、一条一槽、各自带深色描边**，从下往上排。
+	#   能量/理智 = 琥珀 / 紫（紧贴棋子，最常看）
+	#   生命      = 绿（带白条残影，反映这一下掉了多少）
+	#   护盾      = 蓝（**只在有盾时占一行**，不再和生命混在一条）
+	var top := c.y - r - bh - 2.0
+	var ev_cur := sanity if has_sanity else energy
+	var ev_max := sanity_cap if has_sanity else max_energy
+	_mini_bar(bx, top, bw, bh, ev_cur / maxf(1.0, ev_max),
+		UiDesign.SANITY if has_sanity else UiDesign.ENERGY)
+	top -= bh + gap
+	_mini_bar(bx, top, bw, bh, hp / maxf(1.0, max_hp), UiDesign.HP, _hp_ghost / maxf(1.0, max_hp))
+	if shield > 0.0:
+		top -= bh + gap
+		_mini_bar(bx, top, bw, bh, shield / maxf(1.0, max_hp), UiDesign.SHIELD)
+	# 名字（所有条的上方）
 	var fs := clampi(int(size.y * 0.14), 9, 16)
 	var w := f.get_string_size(hero_name, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-	draw_string(f, Vector2(c.x - w / 2.0, hp_y - 2.0), hero_name,
-		HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1, 1, 1), -1.0)
+	draw_string(f, Vector2(c.x - w / 2.0, top - 2.0), hero_name,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, fs, UiDesign.BAR_NUM, -1.0)
+
+
+## 画一条迷你条：底槽 + 填充 +（可选）白条残影 + 深色描边。
+## 描边是必需的 —— 棋盘上有羊皮纸浅格，没有描边的条会"化"进背景里。
+## 颜色**只能**来自 UiDesign 的资源条令牌（生命=HP / 护盾=SHIELD / 能量=ENERGY / 理智=SANITY）。
+func _mini_bar(x: float, y: float, w: float, h: float, ratio: float, col: Color,
+		ghost_ratio := -1.0) -> void:
+	draw_rect(Rect2(x, y, w, h), UiDesign.BAR_TRACK)
+	var r := clampf(ratio, 0.0, 1.0)
+	if r > 0.002:
+		draw_rect(Rect2(x, y, w * r, h), col)
+	if ghost_ratio > 0.0:
+		var g := clampf(ghost_ratio, 0.0, 1.0)
+		if g > r + 0.002:
+			draw_rect(Rect2(x + w * r, y, w * (g - r), h), UiDesign.GHOST)
+	draw_rect(Rect2(x, y, w, h), UiDesign.BAR_EDGE, false, 1.0)
 
 ## 棋子下方：装备武器名（最多显示 3 件，超出显示 +N）
 func _draw_equipment(c: Vector2, r: float) -> void:
@@ -395,33 +406,9 @@ func _draw_status(c: Vector2, r: float) -> void:
 		var lfs := maxi(8, int(br * 1.05))
 		var lw := f.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, lfs).x
 		draw_string(f, Vector2(sx - lw / 2.0, sy + lfs * 0.34), label,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, lfs, Color(1, 1, 1), -1.0)
+			HORIZONTAL_ALIGNMENT_LEFT, -1, lfs, UiDesign.BAR_NUM, -1.0)
 		sx += br * 2.0 + gap
 
-## 状态徽章配色（与 4V4 team_board.gd 保持一致）
+## 状态徽章配色（2026-09-30 收敛：统一走 SkillEffects.status_color，全工程只此一份）
 func _status_color(sid: String) -> Color:
-	match sid:
-		"bleed":
-			return Color(0.75, 0.10, 0.12)
-		"burn", "burn2":
-			return Color(0.92, 0.45, 0.08)
-		"wound":
-			return Color(0.60, 0.20, 0.55)
-		"heavy_wound":
-			return Color(0.45, 0.12, 0.40)
-		"freeze":
-			return Color(0.30, 0.65, 0.90)
-		"blind":
-			return Color(0.35, 0.35, 0.40)
-		"stun":
-			return Color(0.95, 0.80, 0.20)
-		"full_burn":
-			return Color(1.00, 0.35, 0.10)
-		"fear":
-			return Color(0.55, 0.30, 0.70)
-		"sword_field":
-			return Color(0.85, 0.75, 0.45)
-		"poison", "poison_layer":
-			return Color(0.30, 0.60, 0.20)
-		_:
-			return Color(0.42, 0.44, 0.52)
+	return SkillEffects.status_color(sid)

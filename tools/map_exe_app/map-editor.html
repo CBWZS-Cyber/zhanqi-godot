@@ -220,7 +220,8 @@
         <button id="btnQuitApp" title="关闭程序（仅 EXE 版有效）">退出程序</button>
       </div>
       <input type="file" id="fileJson" accept=".json" style="display:none;">
-      <div class="mini" style="margin-top:5px;">地图库路径：<br>…\godot-chess-tactics\maps\</div>
+      <div class="mini" style="margin-top:5px;">地图库路径：<br><span id="libPath">读取中…</span></div>
+      <button id="btnSetLib" style="margin-top:5px;" title="装到别的电脑时，在这里指向自己的 godot-chess-tactics\maps；会记住，下次启动直接生效">更改地图库路径</button>
     </div>
     <div>
       <h2>操作说明</h2>
@@ -1220,6 +1221,8 @@ $id("btnHomeTop").onclick = showHome;
 $id("btnHomeNew").onclick = startNewMap;
 $id("btnHomeBrowse").onclick = () => { openLibrary(); };
 $id("btnLibRefresh").onclick = openLibrary;
+$id("btnSetLib").onclick = setLibPath;
+refreshLibPath();
 Array.from($id("ctxMenu").querySelectorAll(".ctx-item")).forEach(it => {
   it.onclick = () => { const act = it.getAttribute("data-act"); runCtx(act); hideCtx(); };
 });
@@ -1298,6 +1301,38 @@ function startNewMap() {
     openConfirm("当前画布上还有内容（若有未保存的草稿也会被覆盖）。\n确定新建一张空白地图吗？", go, "新建");
   } else { go(); }
 }
+/* 地图库路径：显示 + 更改。
+   发给别人的安装包里带着作者电脑上的路径，对方第一次跑指不到自己的工程，
+   在这里改一下就行（服务端会记进 exe 同目录的 maps_dir.txt，下次启动生效）。 */
+async function refreshLibPath() {
+  const el = $id("libPath");
+  if (!el) return;
+  try {
+    const j = await (await fetch("/api/maps")).json();
+    el.textContent = (j && j.ok) ? j.dir : "（读不到，可能是网页版打开）";
+  } catch (e) {
+    el.textContent = "（读不到，可能是网页版打开）";
+  }
+}
+function setLibPath() {
+  const cur = $id("libPath").textContent || "";
+  const p = prompt("把地图库指到你的战棋工程 maps 目录。\n"
+    + "（就是 godot-chess-tactics 文件夹里的 maps）\n\n当前：" + cur, "");
+  if (!p || !p.trim()) return;
+  fetch("/api/set_maps_dir", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ dir: p.trim() })
+  }).then(r => r.json()).then(j => {
+    if (j && j.ok) {
+      $id("libPath").textContent = j.dir;
+      toast("地图库已改为：" + j.dir);
+    } else {
+      openConfirm("改不了：" + ((j && j.error) || "未知错误"), null, "知道了");
+    }
+  }).catch(() => openConfirm("请求失败 —— 确认是用 EXE 版打开的吗？", null, "知道了"));
+}
+
 /* 地图库浏览：列出 maps\ 所有地图，PNG 缩略图 + 点击打开 */
 async function openLibrary() {
   try {
@@ -1486,7 +1521,7 @@ async function fsDirSet(h) {
 function saveFallback(name, json) {
   downloadText(json, name + ".json", "application/json");
   openConfirm(
-    "这个页面环境不能直接写入工程文件夹，已把「" + name + ".json」下载到浏览器下载目录。\n\n请手动把它移动到工程地图库：\ngodot-chess-tactics\\maps\\\n（完整路径：C:\\Users\\Caobo\\WorkBuddy\\2026-08-27-18-06-41\\godot-chess-tactics\\maps）\n\n提示：在 WorkBuddy 预览页（http://127.0.0.1…）打开编辑器时，此按钮可直接写入并记住目录。",
+    "这个页面环境不能直接写入工程文件夹，已把「" + name + ".json」下载到浏览器下载目录。\n\n请手动把它移动到工程地图库：\ngodot-chess-tactics\\maps\\\n\n提示：在 WorkBuddy 预览页（http://127.0.0.1…）打开编辑器时，此按钮可直接写入并记住目录。",
     null, "知道了");
 }
 async function doSaveToLib() {

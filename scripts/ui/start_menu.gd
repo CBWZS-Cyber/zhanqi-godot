@@ -4,7 +4,7 @@ extends Control
 ## 自适应：每帧按窗口尺寸等比缩放整块 UI 并居中。
 
 const START_SCENE := "res://scenes/Board.tscn"
-const BG_COLOR := Color(0.102, 0.125, 0.208)  # 深蓝灰
+const BG_COLOR := UiDesign.APP_BG  # 深蓝灰
 const BASE := Vector2(1280, 720)               # 设计基准
 
 var _vbox: VBoxContainer
@@ -24,15 +24,15 @@ func _ready() -> void:
 	title.text = "战棋"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 80)
-	title.add_theme_color_override("font_color", Color(0.941, 0.780, 0.369))  # 金色
+	title.add_theme_color_override("font_color", UiDesign.GOLD_500)  # 金色
 	title.add_theme_color_override("font_shadow_color", Color(0.08, 0.06, 0.04, 0.55))
 	title.add_theme_constant_override("shadow_offset_x", 3)
 	title.add_theme_constant_override("shadow_offset_y", 3)
 
 	# 按钮样式
-	var btn_normal := _make_button_style(Color(0.941, 0.780, 0.369))
-	var btn_hover := _make_button_style(Color(1.0, 0.88, 0.55))
-	var btn_pressed := _make_button_style(Color(0.78, 0.62, 0.22))
+	var btn_normal := _make_button_style(UiDesign.GOLD_500)
+	var btn_hover := _make_button_style(UiDesign.GOLD_400)
+	var btn_pressed := _make_button_style(UiDesign.GOLD_600)
 
 	var start_btn := _make_button("开始游戏", btn_normal, btn_hover, btn_pressed)
 	var quit_btn := _make_button("退出", btn_normal, btn_hover, btn_pressed)
@@ -107,9 +107,9 @@ func _make_button(text: String, normal: StyleBoxFlat, hover: StyleBoxFlat, press
 	btn.add_theme_stylebox_override("normal", normal)
 	btn.add_theme_stylebox_override("hover", hover)
 	btn.add_theme_stylebox_override("pressed", pressed)
-	btn.add_theme_color_override("font_color", Color(0.12, 0.09, 0.05))
-	btn.add_theme_color_override("font_hover_color", Color(0.12, 0.09, 0.05))
-	btn.add_theme_color_override("font_pressed_color", Color(0.12, 0.09, 0.05))
+	btn.add_theme_color_override("font_color", UiDesign.BTN_TEXT_ON_GOLD)
+	btn.add_theme_color_override("font_hover_color", UiDesign.BTN_TEXT_ON_GOLD)
+	btn.add_theme_color_override("font_pressed_color", UiDesign.BTN_TEXT_ON_GOLD)
 	btn.add_theme_font_size_override("font_size", 24)
 	return btn
 

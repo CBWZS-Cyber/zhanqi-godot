@@ -18,8 +18,11 @@ var ai_backend := "llm"      # 困难后端："llm"(豆包) | "local"(本地)，
 var _llm_plans := {}          # 最高难度：本回合豆包预案 idx_str -> plan
 var side_levels := {}        # 阵营难度缓存 team(int) -> "easy"/"normal"/"hard"：推演模拟按对手真实难度执行（未设则用当前 ai_level 近似）
 var llm_tactics := {}        # 豆包战术倾向 {focus, posture, protect}（第2步规则 AI 消费）
-var _hd: GDScript
-var _se: GDScript
+## 英雄配置表 / 技能效果表。
+## 2026-09-30 上提到基类：原在 battle / battle_team / battle_story 的 _init 里各写一遍相同的两行 load。
+## 用 preload 常量持有：避免全局类缓存问题，且只解析一次。
+const HeroDefsScript := preload("res://scripts/combat/hero_defs.gd")
+const SkillEffectsScript := preload("res://scripts/combat/skill_effects.gd")
 var _queue: Array = []
 var _wait := false
 var _cur: BattleUnit = null
@@ -53,34 +56,16 @@ func _cell_dist(a: Vector2i, b: Vector2i) -> int:
 	return maxi(absi(a.x - b.x), absi(a.y - b.y))
 
 
+## ---- 英雄专属规则：基类只留转发壳，实现见 hero_rules.gd ----
+## 调用点（battle / battle_team / battle_story / battle_tutorial 合计 20+ 处）保持不变。
+## 新增英雄专属机制请写进 hero_rules.gd，不要再往基类堆实现。
+
 func _check_fear(u: BattleUnit) -> void:
-	var n := u.status_stacks("fear")
-	if n <= 0:
-		return
-	for x in units:
-		if x.alive and x.def_id == "yu_mei_ren" and x != u and _cell_dist(x.cell, u.cell) <= 1:
-			var dmg: float = ceili(float(n) * 0.5)
-			u.set_status("fear", 0)
-			var before: float = u.hp
-			u.lose_hp(dmg)
-			log.push_back("【恐惧】%s 逼近虞美人：恐惧 %d 层发作，受 %.2f 真伤" % [u.name, n, before - u.hp])
-			return
+	HeroRules.check_fear(self, u)
 
 
 func _child_act(child: BattleUnit) -> void:
-	var foes: Array = alive_enemies_of(child)
-	var out := "%s（子体）发动【暗影刺】" % child.name
-	var hit := 0
-	for f in foes:
-		var fu := f as BattleUnit
-		if fu == null or not fu.alive:
-			continue
-		if _cell_dist(fu.cell, child.cell) <= 1:
-			var r: Dictionary = fu.take_damage(1, {"element": "暗", "attacker": child})
-			out += "；%s 受 %.2f 伤" % [fu.name, float(r["hp_lost"]) + float(r["absorbed"])]
-			hit += 1
-	if hit > 0:
-		log.push_back(out)
+	HeroRules.child_act(self, child)
 
 
 func _end_round() -> void:
@@ -159,48 +144,34 @@ func _maybe_llm_plan(u: BattleUnit) -> void:
 	if u == null or not u.alive or _is_human_side(u):
 		return
 	if not AICfg.ready():
-		log.push_back("== 困难：未内置战术模型密钥，回退本地 AI ==")
+		log.push_back("== 困难：战术模型未配置，回退本地 AI ==")
 		return
 	log.push_back("== 敌方请来战术模型思考… ==")
 	_llm_plans = LLMDecider.plan_round(self, [u])
 	if _llm_plans.is_empty():
-		log.push_back("== 战术模型未响应，回退本地 AI ==")
+		# 失败原因**分开说**：文案直接取服务端给的中文，避免两边各写一份迟早漂移。
+		# "次数用完了"是玩家自己能解决的（去登录），和"模型抽风"混成一句他就不知道该干什么。
+		if LLMDecider.last_error != "":
+			log.push_back("== %s ==" % LLMDecider.last_error)
+			if LLMDecider.last_need_login:
+				log.push_back("== 已回退本地 AI；登录后每天可用 10 次 ==")
+			else:
+				log.push_back("== 已回退本地 AI ==")
+		else:
+			log.push_back("== 战术模型未响应，回退本地 AI ==")
 
 
 func _poll_next() -> BattleUnit:
 	if _queue.is_empty():
 		return null
-	var lst: Array = _se.speed_order(_queue)
+	var lst: Array = SkillEffectsScript.speed_order(_queue)
 	var actor: BattleUnit = lst[0]
 	_queue.erase(actor)
 	return actor
 
 
 func _yumeiren_round_end() -> void:
-	var ym: Array = []
-	for x in units:
-		if x.alive and x.def_id == "yu_mei_ren":
-			ym.append(x)
-	# 清旧庇佑
-	for x in units:
-		if x.has_flag("yumeiren_protect"):
-			x.clear_flag("yumeiren_protect")
-	if ym.is_empty():
-		return
-	for x in units:
-		if x.alive and x.team == ym[0].team:
-			var near := false
-			for y in ym:
-				if _cell_dist(x.cell, y.cell) <= 1:
-					near = true
-					break
-			if near:
-				# 治疗光环：3×3 内友方（含虞美人自己）回 20% 最大生命
-				var h := x.heal(x.max_hp * 0.2)
-				if h > 0:
-					log.push_back("【苦楚】%s 回复 %.2f 生命" % [x.name, h])
-				if x.def_id != "yu_mei_ren":
-					x.add_flag("yumeiren_protect")
+	HeroRules.yumeiren_round_end(self)
 
 
 func alive_enemies_of(u: BattleUnit) -> Array:
@@ -314,12 +285,7 @@ func human_move(cell: Vector2i) -> String:
 		return _gate
 	# 虞美人母体：移动到有自己的子体的格子 → 母体与子体互换格子（不叠格）
 	var _old := _cur.cell
-	var _child_at: BattleUnit = null
-	if _cur.def_id == "yu_mei_ren" and not _cur.has_flag("子体"):
-		for _x in units:
-			if _x.has_flag("子体") and _x.team == _cur.team and _x.cell == cell:
-				_child_at = _x
-				break
+	var _child_at: BattleUnit = HeroRules.child_at_cell(self, _cur, cell)
 	# 地形：冰面滑行（按移动方向滑到冰面边缘）
 	var _dir := cell - _old
 	_cur.cell = cell
@@ -329,7 +295,6 @@ func human_move(cell: Vector2i) -> String:
 	_sync_terrain(_cur)
 	_check_fear(_cur)
 	_h_moved = true
-	_check_fear(_cur)
 	log.push_back("%s 移动 → %s" % [_cur.name, _cur.cell])
 	return "%s 移动 → %s" % [_cur.name, _cur.cell]
 
@@ -389,7 +354,7 @@ func simulate() -> String:
 
 
 func skill_data(id: String) -> Dictionary:
-	return _se.DATA.get(id, {}) as Dictionary
+	return SkillEffectsScript.DATA.get(id, {}) as Dictionary
 
 
 func skill_range(u: BattleUnit, slot: int) -> int:
@@ -399,18 +364,18 @@ func skill_range(u: BattleUnit, slot: int) -> int:
 	return int(skill_data(sk.id).get("range", 1))
 
 
+## 该技能一次最多可选几个目标（默认 1；如追猎流炎飞弹 = 2）。
+## 2026-09-30 上提到基类：原先 battle_team / battle_story 各存一份逐字相同的实现，
+## 而 4V4 界面（team_duel）要以 BattleBase 类型调它，重复实现会直接编译失败。
+func max_targets_of(u: BattleUnit, slot: int) -> int:
+	var sk := u.get_skill(slot)
+	if sk == null:
+		return 1
+	return maxi(1, int(skill_data(sk.id).get("max_targets", 1)))
+
+
 func spawn_child(parent: BattleUnit, cell: Vector2i) -> BattleUnit:
-	var child := BattleUnit.new({"name": "虞美人子体", "element": "木", "hp": 5, "energy": 0, "armor": 0, "speed": 0, "skills": {}})
-	child.def_id = "yu_mei_ren"
-	child.team = parent.team
-	child.cell = cell
-	child.hp = 5.0
-	child.max_hp = 5.0
-	child.non_solid = true
-	child.add_flag("子体")
-	child.rng = rng
-	units.append(child)
-	return child
+	return HeroRules.spawn_child(self, parent, cell)
 
 
 func spread_cells_of(u: BattleUnit) -> Array:

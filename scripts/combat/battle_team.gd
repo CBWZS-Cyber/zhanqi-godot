@@ -64,8 +64,6 @@ var stars: Array = []         # 场上星星：[{pos: Vector2i, big: bool}]
 var _dead_tally := {0: 0, 1: 0}  # 累计死亡数（用于击杀计分增量）
 
 func _init(red_ids: Array, blue_ids: Array) -> void:
-	_hd = load("res://scripts/combat/hero_defs.gd")
-	_se = load("res://scripts/combat/skill_effects.gd")
 	rng.randomize()
 	max_rounds = 120
 	child_limit = 5
@@ -91,7 +89,7 @@ func _init(red_ids: Array, blue_ids: Array) -> void:
 
 ## 联机确定性随机：开局包设定同一种子 → 双方引擎随机结果一致
 func _make(hero_id: String, team: int, cell: Vector2i) -> BattleUnit:
-	var def: Dictionary = (_hd.ALL.get(hero_id, _hd.ALL.get("demo_hero", {})) as Dictionary).duplicate(true)
+	var def: Dictionary = (HeroDefsScript.ALL.get(hero_id, HeroDefsScript.ALL.get("demo_hero", {})) as Dictionary).duplicate(true)
 	def["id"] = hero_id
 	var u := BattleUnit.new(def)
 	u.team = team
@@ -455,13 +453,6 @@ func _finish_human() -> void:
 	_cur = null
 
 ## =============== 查询（AI 与 UI 共用） ===============
-## 该技能一次最多可选几个目标（默认 1；如追猎流炎飞弹 = 2）
-func max_targets_of(u: BattleUnit, slot: int) -> int:
-	var sk := u.get_skill(slot)
-	if sk == null:
-		return 1
-	return maxi(1, int(skill_data(sk.id).get("max_targets", 1)))
-
 ## 射程内的存活敌人（AI 决策 / UI 目标高亮用；顺序 = units 顺序）
 ## 移动可达格：8 方向（含斜向）各 1 步，落在棋盘内且无单位占格
 ## 开局第 1 回合每棋可一次走 2 格（加快开局展开），之后恢复 1 格
@@ -915,7 +906,7 @@ func _sim_followups(after: BattleUnit, depth: int) -> void:
 			seq.append(v)
 	if seq.is_empty():
 		return
-	seq = _se.speed_order(seq)
+	seq = SkillEffectsScript.speed_order(seq)
 	var n := 0
 	for v in seq:
 		if n >= depth:

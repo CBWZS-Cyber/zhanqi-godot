@@ -1,4 +1,4 @@
-extends Control
+extends BattleScreen
 ## 战棋 1V1 可玩对局（人类=红方 vs AI=蓝方）
 ## 流程：选英雄 → 对局：点击己方棋子聚焦 → 点绿色移动格 / 点技能(需目标时再点敌人) → AI 自动应战
 
@@ -6,23 +6,20 @@ const CELL := 118.0
 const CELL_SEP := 6.0
 const _HD := preload("res://scripts/combat/hero_defs.gd")
 const _BAT := preload("res://scripts/combat/battle.gd")
-const _NP := preload("res://scripts/net/net_protocol.gd")
-const COL_BG := Color(0.20, 0.18, 0.16)
-const COL_DARK := Color(0.55, 0.40, 0.28)
-const COL_LIGHT := Color(0.93, 0.87, 0.74)
-const COL_WING := Color(0.40, 0.56, 0.74)
-const COL_BORDER := Color(0.15, 0.12, 0.10)
-const COL_WING_EDGE := Color(0.16, 0.28, 0.44)
-const COL_TEXT := Color(0.18, 0.13, 0.09)
-const COL_PANEL := Color(0.10, 0.12, 0.19, 0.94)
-const COL_GOLD := Color(0.941, 0.780, 0.369)
-const COL_MOVE := Color(0.45, 0.85, 0.45)
-const COL_CAST := Color(0.95, 0.80, 0.3)
-const COL_RED := Color(0.78, 0.25, 0.18)
-const COL_BLUE := Color(0.24, 0.42, 0.75)
+const COL_BG := UiDesign.BOARD_BG
+const COL_DARK := UiDesign.BOARD_DARK
+const COL_LIGHT := UiDesign.BOARD_LIGHT
+const COL_WING := UiDesign.SPAWN
+const COL_BORDER := UiDesign.BOARD_FRAME
+const COL_WING_EDGE := UiDesign.SPAWN_EDGE
+const COL_TEXT := UiDesign.BOARD_TEXT
+const COL_PANEL := UiDesign.SURFACE_PANEL
+const COL_GOLD := UiDesign.GOLD_500
+const COL_MOVE := UiDesign.CELL_HL_MOVE
+const COL_CAST := UiDesign.CELL_HL_CAST
+const COL_RED := UiDesign.ALLY
+const COL_BLUE := UiDesign.ENEMY
 
-var _phase := "select"   # select / play / over
-var _battle: Battle = null
 var _pick_lab: Label
 var _red_pick_btns := {}
 var _blue_pick_btns := {}
@@ -31,15 +28,12 @@ var _red_id := "crystal_dragon"
 var _blue_id := "xie_shen"
 var _hero_ids: Array = []
 
-var _focus: BattleUnit = null          # 人类当前聚焦的己方棋子
-var _cast_slot := 0                    # 等待选目标的技能槽
 var _sfx_round: int = -1               # 音效：已提示过回合开始 alarm 的回合数
 var _msg := ""
 var _human_team := 0
 
 # UI 引用
 var _title: Label
-var _hint: Label
 var _log: RichTextLabel
 var _skill_row: GridContainer
 var _skill_buttons: Array = []
@@ -76,6 +70,7 @@ var _net_foe_picked := false   # 对方已选英雄（pick 指令到达）
 var _net_starting := false     # 开局防重入
 
 func _ready() -> void:
+	UiTheme.attach(self)   # 全局墨金主题（幂等）
 	_autonet_detect()   # 无头端到端测试钩子：godot --headless scenes/Duel.tscn ++ autonet=host|join（须在初始化前设置 Global）
 	var bg := Panel.new()
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -112,82 +107,17 @@ func _ready() -> void:
 		_autonet_run()
 
 func _style_btn(b: Button) -> void:
-	var n := StyleBoxFlat.new()
-	n.bg_color = Color(0.10, 0.12, 0.19, 0.9)
-	n.border_color = Color(0.45, 0.42, 0.30)
-	n.set_border_width_all(1)
-	n.set_corner_radius_all(8)
-	var h := n.duplicate(); h.bg_color = Color(0.20, 0.23, 0.36)
-	var pr := n.duplicate(); pr.bg_color = Color(0.08, 0.09, 0.15)
-	b.add_theme_stylebox_override("normal", n)
-	b.add_theme_stylebox_override("hover", h)
-	b.add_theme_stylebox_override("pressed", pr)
-	b.add_theme_color_override("font_color", Color(0.92, 0.95, 0.99))
-	b.add_theme_color_override("font_hover_color", Color(1.0, 0.95, 0.8))
+	UiKit.style_button(b)
 
 func _make_bar(tag: String, col: Color, value: int, max_value: int, tiled := false) -> HBoxContainer:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
-	var tag_l := Label.new()
-	tag_l.text = tag
-	tag_l.custom_minimum_size = Vector2(42, 0)
-	tag_l.add_theme_font_size_override("font_size", 15)
-	tag_l.add_theme_color_override("font_color", Color(0.84, 0.87, 0.92))
-	row.add_child(tag_l)
-	var bar: Control
-	if tiled:
-		# 生命条改用 HpShieldBar：能在同一条里分段显示 hp + 护盾（2026-09-13）
-		var hsb := HpShieldBar.new()
-		hsb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		hsb.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		hsb.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		hsb.custom_minimum_size = Vector2(0, 26)
-		bar = hsb
-	else:
-		var pb := ProgressBar.new()
-		pb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		pb.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		pb.show_percentage = false
-		pb.min_value = 0
-		pb.max_value = max_value if max_value > 0 else 1
-		pb.value = clampi(value, 0, pb.max_value)
-		pb.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		pb.custom_minimum_size = Vector2(0, 26)
-		var fill := StyleBoxFlat.new()
-		fill.bg_color = col
-		fill.set_corner_radius_all(5)
-		var bgst := StyleBoxFlat.new()
-		bgst.bg_color = Color(0.04, 0.05, 0.09, 0.9)
-		bgst.set_corner_radius_all(5)
-		pb.add_theme_stylebox_override("fill", fill)
-		pb.add_theme_stylebox_override("background", bgst)
-		bar = pb
-	var num := Label.new()
-	num.text = "%.2f / %.2f" % [value, max_value]
-	num.set_anchors_preset(Control.PRESET_FULL_RECT)
-	num.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	num.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	num.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	num.add_theme_color_override("font_color", Color(1, 1, 1))
-	num.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.85))
-	num.add_theme_constant_override("shadow_offset_x", 2)
-	num.add_theme_constant_override("shadow_offset_y", 2)
-	bar.add_child(num)
-	row.add_child(bar)
-	return row
+	return UiKit.make_bar(tag, col, value, max_value, tiled)
 
 func _update_bar(bar: HBoxContainer, value: float, max_value: float, num_text: String, tag_text := "", smooth := false, shield := 0.0) -> void:
 	# 统一走 DamageFx.update_bar（兼容 HpShieldBar / ProgressBar，并保证数字标签一定被写）
 	DamageFx.update_bar(bar, value, max_value, num_text, tag_text, smooth, shield)
 
 func _panel_style(col: Color, radius: int) -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = col
-	sb.border_color = Color(0.35, 0.32, 0.26)
-	if radius > 0:
-		sb.set_corner_radius_all(radius)
-	sb.set_border_width_all(1)
-	return sb
+	return UiKit.panel_style(col, radius)
 
 func _build_main() -> VBoxContainer:
 	var v := VBoxContainer.new()
@@ -254,17 +184,18 @@ func _build_main() -> VBoxContainer:
 
 	_hero_lab = Label.new()
 	_hero_lab.add_theme_font_size_override("font_size", 26)
-	_hero_lab.add_theme_color_override("font_color", Color(0.95, 0.97, 1.0))
+	UiTheme.style_title(_hero_lab, 26)   # 英雄名：宋体档（比黑体更有"角色感"）
+	_hero_lab.add_theme_color_override("font_color", UiDesign.INK_050)
 	right.add_child(_hero_lab)
 
 	_hp_bar = _make_bar("生命", COL_RED, 1, 1, true)
 	right.add_child(_hp_bar)
-	_en_bar = _make_bar("能量", COL_BLUE, 1, 1)
+	_en_bar = _make_bar("能量", UiDesign.ENERGY, 1, 1)
 	right.add_child(_en_bar)
 
 	_sub_lab = Label.new()
 	_sub_lab.add_theme_font_size_override("font_size", 13)
-	_sub_lab.add_theme_color_override("font_color", Color(0.75, 0.80, 0.88))
+	_sub_lab.add_theme_color_override("font_color", UiDesign.INK_250)
 	right.add_child(_sub_lab)
 
 	_state_lab = RichTextLabel.new()
@@ -272,7 +203,7 @@ func _build_main() -> VBoxContainer:
 	_state_lab.fit_content = true
 	_state_lab.scroll_active = false
 	_state_lab.add_theme_font_size_override("normal_font_size", 13)
-	_state_lab.add_theme_color_override("default_color", Color(0.75, 0.80, 0.88))
+	_state_lab.add_theme_color_override("default_color", UiDesign.INK_250)
 	right.add_child(_state_lab)
 
 	_foe_lab = Label.new()
@@ -292,7 +223,7 @@ func _build_main() -> VBoxContainer:
 	_skill_desc = Label.new()
 	_skill_desc.text = ""
 	_skill_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_skill_desc.add_theme_color_override("font_color", Color(0.72, 0.77, 0.85))
+	_skill_desc.add_theme_color_override("font_color", UiDesign.INK_250)
 	right.add_child(_skill_desc)
 
 	var log_title := Label.new()
@@ -433,10 +364,11 @@ func _select_screen() -> void:
 	var ov := Panel.new()
 	ov.set_anchors_preset(Control.PRESET_FULL_RECT)
 	var osb := StyleBoxFlat.new()
-	osb.bg_color = Color(0.10, 0.12, 0.19, 0.97)
+	osb.bg_color = UiDesign.SURFACE_PANEL
 	ov.add_theme_stylebox_override("panel", osb)
 	add_child(ov)
 	ov.name = "SelectOverlay"
+	ov.z_index = UiDesign.Z_OVERLAY      # 全屏弹层一律置顶（当前选人阶段还没棋子，属防御性统一）
 	var m := MarginContainer.new()
 	m.set_anchors_preset(Control.PRESET_FULL_RECT)
 	m.add_theme_constant_override("margin_left", 50)
@@ -445,25 +377,36 @@ func _select_screen() -> void:
 	m.add_theme_constant_override("margin_bottom", 26)
 	ov.add_child(m)
 	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 14)
+	v.add_theme_constant_override("separation", 10)
 	m.add_child(v)
 	var ti := Label.new()
 	ti.text = "选择英雄"
 	ti.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ti.add_theme_font_size_override("font_size", 34)
+	ti.add_theme_font_size_override("font_size", 28)
 	ti.add_theme_color_override("font_color", COL_GOLD)
 	v.add_child(ti)
 	var sub := Label.new()
 	sub.text = "联机对战：点击自己一侧头像选择（双方选完自动开始）" if Global.net_mode else "你控制红方 · 与 AI 对战（点击头像选择，再点一次可更换）"
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	sub.add_theme_font_size_override("font_size", 14)
-	sub.add_theme_color_override("font_color", Color(0.66, 0.71, 0.79))
+	sub.add_theme_font_size_override("font_size", 13)
+	sub.add_theme_color_override("font_color", UiDesign.INK_300)
 	v.add_child(sub)
 	# 双方选择卡片
 	var cols := HBoxContainer.new()
 	cols.alignment = BoxContainer.ALIGNMENT_CENTER
-	cols.add_theme_constant_override("separation", 40)
-	v.add_child(cols)
+	cols.add_theme_constant_override("separation", 24)
+	# ★ 英雄卡放进滚动容器（2026-10-05 用户实报「开始对战按钮没显示全」）：
+	#   整层原先是全屏直排 VBox —— 11 个英雄 = 2 列 × 6 行 ≈ 440px，加标题/提示/按钮/间距
+	#   约 650px，基准 720 下只剩 40px 余量，窗口稍矮（Debug 窗口常不是满高）就把
+	#   「开 始 对 战」挤出视口底部。现在滚动区吃掉「剩余空间」，按钮固定在最下，
+	#   窗口再矮也点得到；英雄多了也只是多滚一下。
+	var hero_scroll := ScrollContainer.new()
+	hero_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	hero_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED  # 宽度放得下，不要横向滚动条
+	hero_scroll.follow_focus = true
+	v.add_child(hero_scroll)
+	hero_scroll.add_child(cols)
+	cols.size_flags_horizontal = Control.SIZE_EXPAND_FILL               # 撑满滚动区宽度，居中才生效
 	_red_pick_btns = {}
 	_blue_pick_btns = {}
 	cols.add_child(_pick_card("红方（主机）" if Global.net_mode else "红方（你）", COL_RED, true))
@@ -472,25 +415,25 @@ func _select_screen() -> void:
 	_pick_lab = Label.new()
 	_pick_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_pick_lab.text = "红方：%s ｜ 蓝方：%s" % [_HD.ALL[_red_id].name, _HD.ALL[_blue_id].name]
-	_pick_lab.add_theme_font_size_override("font_size", 16)
-	_pick_lab.add_theme_color_override("font_color", Color(0.85, 0.89, 0.95))
+	_pick_lab.add_theme_font_size_override("font_size", 15)
+	_pick_lab.add_theme_color_override("font_color", UiDesign.INK_200)
 	v.add_child(_pick_lab)
 	# PVE：进选人界面即让 AI 随机定好蓝方（界面从第一刻就显示蓝方真正会选的人，而非默认邪神）
 	if not Global.net_mode and Global.offline_type != "hotseat":
 		_ai_pick_blue()
 	var start := Button.new()
 	start.text = "开 始 对 战"
-	start.custom_minimum_size = Vector2(300, 58)
-	start.add_theme_font_size_override("font_size", 22)
+	start.custom_minimum_size = Vector2(260, 52)
+	start.add_theme_font_size_override("font_size", 20)
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.941, 0.780, 0.369)
+	sb.bg_color = UiDesign.GOLD_500
 	sb.set_corner_radius_all(10)
-	var sh := sb.duplicate(); sh.bg_color = Color(1.0, 0.88, 0.55)
-	var sp := sb.duplicate(); sp.bg_color = Color(0.78, 0.62, 0.22)
+	var sh := sb.duplicate(); sh.bg_color = UiDesign.GOLD_400
+	var sp := sb.duplicate(); sp.bg_color = UiDesign.GOLD_600
 	start.add_theme_stylebox_override("normal", sb)
 	start.add_theme_stylebox_override("hover", sh)
 	start.add_theme_stylebox_override("pressed", sp)
-	start.add_theme_color_override("font_color", Color(0.12, 0.09, 0.05))
+	start.add_theme_color_override("font_color", UiDesign.BTN_TEXT_ON_GOLD)
 	start.pressed.connect(_on_start)
 	if Global.net_mode:
 		start.visible = false   # 联机：双方选完自动开局
@@ -507,7 +450,7 @@ func _pick_card(title_txt: String, col: Color, is_red: bool) -> PanelContainer:
 	cs.border_color = col
 	cs.set_border_width_all(1)
 	card.add_theme_stylebox_override("panel", cs)
-	card.custom_minimum_size = Vector2(430, 0)
+	card.custom_minimum_size = Vector2(350, 0)   # 350 = 2×156 按钮 + 8 间距 + 20 内边距（2026-10-05 由 430 收窄）
 	var mg := MarginContainer.new()
 	mg.add_theme_constant_override("margin_left", 12)
 	mg.add_theme_constant_override("margin_right", 12)
@@ -520,20 +463,20 @@ func _pick_card(title_txt: String, col: Color, is_red: bool) -> PanelContainer:
 	var lab := Label.new()
 	lab.text = title_txt
 	lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lab.add_theme_font_size_override("font_size", 19)
+	lab.add_theme_font_size_override("font_size", 16)
 	lab.add_theme_color_override("font_color", col)
 	v.add_child(lab)
 	var grid := GridContainer.new()
 	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 10)
-	grid.add_theme_constant_override("v_separation", 10)
+	grid.add_theme_constant_override("h_separation", 8)
+	grid.add_theme_constant_override("v_separation", 8)
 	v.add_child(grid)
 	for hid in _hero_ids:
 		var def: Dictionary = _HD.ALL[hid]
 		var nb := Button.new()
 		nb.text = "%s\n〔%s〕" % [def.name, def.element]
-		nb.custom_minimum_size = Vector2(196, 54)
-		nb.add_theme_font_size_override("font_size", 15)
+		nb.custom_minimum_size = Vector2(156, 48)
+		nb.add_theme_font_size_override("font_size", 13)
 		_apply_pick_style(nb, false, col)
 		if is_red:
 			_red_pick_btns[hid] = nb
@@ -568,15 +511,15 @@ func _pick_card(title_txt: String, col: Color, is_red: bool) -> PanelContainer:
 
 func _apply_pick_style(nb: Button, selected: bool, col: Color) -> void:
 	var n := StyleBoxFlat.new()
-	n.bg_color = Color(0.16, 0.19, 0.29) if not selected else col.lerp(Color(0.16, 0.19, 0.29), 0.35)
-	n.border_color = COL_GOLD if selected else Color(0.40, 0.36, 0.26)
+	n.bg_color = UiDesign.INK_700 if not selected else col.lerp(UiDesign.INK_700, 0.35)
+	n.border_color = COL_GOLD if selected else UiDesign.BORDER_WARM
 	n.set_border_width_all(2 if selected else 1)
 	n.set_corner_radius_all(8)
-	var h := n.duplicate(); h.bg_color = n.bg_color.lerp(Color(1, 1, 1), 0.08)
+	var h := n.duplicate(); h.bg_color = n.bg_color.lerp(UiDesign.BAR_NUM, 0.08)
 	nb.add_theme_stylebox_override("normal", n)
 	nb.add_theme_stylebox_override("hover", h)
 	nb.add_theme_stylebox_override("pressed", n)
-	nb.add_theme_color_override("font_color", Color(1.0, 0.95, 0.8) if selected else Color(0.92, 0.95, 0.99))
+	nb.add_theme_color_override("font_color", UiDesign.GOLD_300 if selected else UiDesign.INK_100)
 
 func _refresh_pick_highlight() -> void:
 	for hid in _red_pick_btns:
@@ -622,54 +565,10 @@ func _on_start() -> void:
 	_step()
 
 # ---------- 联机核心（阶段4）----------
-func _my_team() -> int:
-	return 0 if Global.net_is_host else 1
-
-func _can_input() -> bool:
-	if _battle == null or _phase != "play" or not _battle.waiting():
-		return false
-	if Global.net_mode and _battle.current().team != _my_team():
-		return false
-	return true
-
-## 本方操作 → 本地执行 + 成功才广播（失败仅本地提示，与单机一致）
-func _op_move(cell: Vector2i) -> String:
-	var idx := _battle.units.find(_battle.current())
-	var r: String = _battle.human_move(cell)
-	if r.begins_with("!"):
-		Sfx.play("error")
-	else:
-		Sfx.play("footstep")
-	if not r.begins_with("!") and Global.net_mode:
-		Net.send_cmd(_NP.make_move(idx, cell))
-	return r
-
-func _op_cast(slot: int, enemy: BattleUnit = null, landing := Vector2i(-1, -1)) -> String:
-	var idx := _battle.units.find(_battle.current())
-	var me_u: BattleUnit = _battle.current()
-	var old_cell: Vector2i = me_u.cell if me_u != null else Vector2i(-9, -9)
-	var was_dash: bool = me_u != null and _battle.is_charge(me_u, slot)
-	var r: String = _battle.human_cast(slot, enemy, landing)
-	if r.begins_with("!"):
-		Sfx.play("error")
-	elif me_u != null:
-		if me_u.cell != old_cell:
-			Sfx.play("dash" if was_dash else "teleport")
-		elif _battle.land_aoe(me_u, slot):
-			Sfx.play("explosion")
-		elif _battle.self_skill(me_u, slot):
-			Sfx.play("powerup")
-		else:
-			Sfx.play("hit")
-	if not r.begins_with("!") and Global.net_mode:
-		Net.send_cmd(_NP.make_cast(idx, slot, enemy, _battle, landing))
-	return r
-
-func _op_done() -> void:
-	var idx := _battle.units.find(_battle.current())
-	_battle.human_done()
-	if Global.net_mode:
-		Net.send_cmd(_NP.make_done(idx))
+## 阵营判定 / 输入门禁 / 三个操作入口（_my_team / _can_input / _op_move / _op_cast / _op_done）
+## 已于 2026-09-30 上提到 BattleScreen 基类。这里只留 human_cast 的签名适配点：1V1 用 3 参版本。
+func _cast_via(slot: int, enemy: BattleUnit, landing: Vector2i) -> String:
+	return (_battle as Battle).human_cast(slot, enemy, landing)
 
 ## 选英雄交换：对方 pick 到达 / 本方 pick 已发 → 双方齐即开局
 func _on_net_pick(side: int, hero_id: String) -> void:
@@ -758,7 +657,6 @@ func _on_net_left() -> void:
 ## 用法：
 ##   host: godot --headless --path . res://scenes/Duel.tscn ++ autonet=host
 ##   join: godot --headless --path . res://scenes/Duel.tscn ++ autonet=join
-var _autonet_role := ""
 
 func _autonet_detect() -> void:
 	var ws_mode := false
@@ -951,15 +849,15 @@ func _refresh_ui() -> void:
 		nb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		nb.custom_minimum_size = Vector2(0, 42)
 		nb.add_theme_font_size_override("font_size", 15)
-		nb.add_theme_color_override("font_color", Color(0.92, 0.95, 0.99))
-		nb.add_theme_color_override("font_hover_color", Color(1.0, 0.95, 0.8))
+		nb.add_theme_color_override("font_color", UiDesign.INK_100)
+		nb.add_theme_color_override("font_hover_color", UiDesign.GOLD_300)
 		var bn := StyleBoxFlat.new()
-		bn.bg_color = Color(0.16, 0.19, 0.29)
-		bn.border_color = Color(0.40, 0.36, 0.26)
+		bn.bg_color = UiDesign.INK_700
+		bn.border_color = UiDesign.BORDER_WARM
 		bn.set_border_width_all(1)
 		bn.set_corner_radius_all(7)
-		var bh := bn.duplicate(); bh.bg_color = Color(0.23, 0.27, 0.42)
-		var bp := bn.duplicate(); bp.bg_color = Color(0.12, 0.15, 0.24)
+		var bh := bn.duplicate(); bh.bg_color = UiDesign.INK_600
+		var bp := bn.duplicate(); bp.bg_color = UiDesign.INK_750
 		nb.add_theme_stylebox_override("normal", bn)
 		nb.add_theme_stylebox_override("hover", bh)
 		nb.add_theme_stylebox_override("pressed", bp)
@@ -1051,8 +949,9 @@ func _open_settings() -> void:
 	if _settings == null or not is_instance_valid(_settings):
 		_settings = SettingsLayer.new()
 		add_child(_settings)
+		_settings.service_url = Global.cloud_service      # Bug 上报走同一个云端地址
 		_settings.visible = false
-	var mode := "1V1 · 热座" if Global.offline_type == "hotseat" else "1V1 · 离线 PVE"
+	var mode := "1V1 · 热座" if Global.offline_type == "hotseat" else "1V1 · 单机 PVE"
 	_settings.ctx = {
 		"mode": mode,
 		"round": _battle.round if _battle != null else 0,
@@ -1238,7 +1137,7 @@ func _refresh_board_view() -> void:
 		n.bg_color = base
 		n.border_color = border_col
 		n.set_border_width_all(int(bw))
-		var h := n.duplicate(); h.bg_color = base.lerp(Color(1, 1, 1), 0.10)
+		var h := n.duplicate(); h.bg_color = base.lerp(UiDesign.BAR_NUM, 0.10)
 		var pr := n.duplicate(); pr.bg_color = base.lerp(Color(0, 0, 0), 0.12)
 		cb.add_theme_stylebox_override("normal", n)
 		cb.add_theme_stylebox_override("hover", h)
@@ -1341,7 +1240,7 @@ func _open_log_popup() -> void:
 		if is_instance_valid(cl):
 			cl.queue_free())
 	var bg := ColorRect.new()
-	bg.color = Color(0.04, 0.05, 0.09, 1.0)   # 不透明：挡死底下棋子（用户要求弹窗不透明）
+	bg.color = UiDesign.INK_950   # 不透明：挡死底下棋子（用户要求弹窗不透明）
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	layer.add_child(bg)
 	var panel := Panel.new()
@@ -1351,7 +1250,7 @@ func _open_log_popup() -> void:
 	panel.offset_right = -70.0
 	panel.offset_bottom = -60.0
 	var ps := StyleBoxFlat.new()
-	ps.bg_color = Color(0.09, 0.11, 0.17, 0.99)
+	ps.bg_color = UiDesign.INK_800
 	ps.set_corner_radius_all(14)
 	ps.border_color = Color(0.55, 0.50, 0.36)
 	ps.set_border_width_all(1)
@@ -1368,7 +1267,7 @@ func _open_log_popup() -> void:
 	var tt := Label.new()
 	tt.text = "战斗日志（完整 · 最近 500 行）"
 	tt.add_theme_font_size_override("font_size", 22)
-	tt.add_theme_color_override("font_color", Color(0.941, 0.780, 0.369))
+	tt.add_theme_color_override("font_color", UiDesign.GOLD_500)
 	v.add_child(tt)
 	var rt := RichTextLabel.new()
 	rt.bbcode_enabled = true

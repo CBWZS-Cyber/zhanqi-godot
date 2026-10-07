@@ -13,15 +13,13 @@ const SPAWN_BLUE := Vector2i(4, 2)
 
 
 func _init(red_hero_id: String, blue_hero_id: String) -> void:
-	_hd = load("res://scripts/combat/hero_defs.gd")
-	_se = load("res://scripts/combat/skill_effects.gd")
 	rng.randomize()
 	units = [_make(red_hero_id, 0, SPAWN_RED), _make(blue_hero_id, 1, SPAWN_BLUE)]
 	log.push_back("对局开始：红方 %s（速%d）vs 蓝方 %s（速%d）" % [units[0].name, units[0].speed, units[1].name, units[1].speed])
 
 ## 联机确定性随机源：开局包设定同一种子 → 双方引擎随机结果一致
 func _make(hero_id: String, team: int, cell: Vector2i) -> BattleUnit:
-	var u := BattleUnit.new(_hd.ALL[hero_id].duplicate(true))
+	var u := BattleUnit.new(HeroDefsScript.ALL[hero_id].duplicate(true))
 	u.team = team
 	u.cell = cell
 	_sync_terrain(u)

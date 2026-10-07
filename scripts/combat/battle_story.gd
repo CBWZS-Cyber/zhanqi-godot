@@ -57,8 +57,6 @@ var escort_qi: BattleUnit = null        # 祁（2026-09-12 起同为被护送者
 var escaped := false
 
 func _init() -> void:
-	_hd = load("res://scripts/combat/hero_defs.gd")
-	_se = load("res://scripts/combat/skill_effects.gd")
 	rng.randomize()
 	max_rounds = max_rounds_limit
 	child_limit = 0
@@ -721,12 +719,6 @@ func targets_in_range(u: BattleUnit, slot: int) -> Array:
 	else:
 		out = super.targets_in_range(u, slot)
 	return out
-
-func max_targets_of(u: BattleUnit, slot: int) -> int:
-	var sk := u.get_skill(slot)
-	if sk == null:
-		return 1
-	return maxi(1, int(skill_data(sk.id).get("max_targets", 1)))
 
 ## 该技能是否可选友方/任意单位（UI 目标高亮用）
 func target_kind_of(u: BattleUnit, slot: int) -> String:

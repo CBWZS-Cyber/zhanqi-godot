@@ -24,10 +24,70 @@
 > 本文件里到处写着 `RELEASE-NOTES-START` 是为了让这条警告成立 —— 标记必须独立成行才算数。
 
 <!-- RELEASE-NOTES-START -->
-- 主菜单的「离线模式」改叫「单机模式」了（和登录页的「离线玩」不再撞名，之前容易看混）
-- 困难难度的战术模型现在有每日免费次数：不登录每天 3 次，登录后每天 10 次
-- 选难度时会显示今天还剩几次；用完了会提示你，登录一下就能提到 10 次（不用重装）
+- 注册新账号、找回密码可以用手机号收验证码了（短信直接发到手机上，不用等邮件）
+- 也能继续用邮箱：注册或找回时点一下「短信验证 / 邮箱验证」就能切换
+- 找回密码的验证码只发到该账号自己绑定的手机号或邮箱，别人拿不到（更安全）
 <!-- RELEASE-NOTES-END -->
+
+## [10.5.3 发包版] — 2026-10-09
+
+### Added
+- **短信验证通道**（**注册** + **找回密码**），邮箱保留为并列渠道 —— 客户要求
+  「把登录的邮箱验证改成短信验证，邮箱验证算是备选方」+「找回密码的那个也改一下」。
+  登录本身仍是昵称+密码（无验证码），不在本次范围。
+- `tools/cloud-service/sms.js`：阿里云「**短信认证**」(dypns，不是"短信服务") 的**零依赖**封装
+  （只用 `node:crypto` 做 RPC 签名 + 全局 `fetch`），两个动作 `SendSmsVerifyCode` / `CheckSmsVerifyCode`。
+  ⚠️ 验证码由**阿里云生成与校验**（发码时传 `##code##` 占位符）⇒ 服务端**不存短信码**，
+  因而也没有"重放"问题（`CheckSmsVerifyCode` 是一次性消费）。
+- `tools/cloud-service/server.js`：`channel` 分流 + `/bind-phone`（老账号补绑手机号，需登录）
+  + 账号 `phone` 字段（回给本人的只有**掩码**）。**向后兼容**：不传 `channel` 时行为与旧版逐字节一致
+  —— 这是已发布客户端不坏的前提。
+- `docs/短信验证_接口契约.md`：客户端实现契约（渠道语义 / 四个接口 / 限流 / 回归红线）。
+- `tools/cloud-service/selftest_sms.js`：短信通道端到端自检（**假 dypns 网关 + 假邮件网关**，
+  零真实短信消耗），覆盖两档注册闸门（`REQUIRE_EMAIL_CODE` 0 / 1）。
+- `tests/_probes/sms_channel_probe.gd` + `fake_sms.js`：**请求形状探针** ——
+  打到本地假云端、把收到的 JSON 读回来断言（不是读源码猜客户端发了什么）。
+
+### Changed
+- `scripts/net/cloud_api.gd`：新增 `register_sms` / `send_code_sms` / `send_reset_code_sms` /
+  `reset_password_sms` / `bind_phone_send` / `bind_phone_commit` 与 `bind_phone_done` 信号。
+  ⚠️ **刻意做成"不同渠道调不同方法"而不是给一个 `channel` 默认参数**：服务端缺省是邮箱，
+  靠默认值会"以为发短信、其实发邮件"，这种错极难查。
+- `scripts/ui/main_ui.gd`：注册与找回面板各加**两个横排小按钮**「短信验证 / 邮箱验证」（互斥切换），
+  联系方式输入框按渠道换提示词；切渠道**清空已填内容**（防"半截手机号当邮箱发"）。
+  找回面板的渠道在发码后**锁定**（防拿另一种渠道的码去撞）。
+- `scripts/ui/main_ui.gd`：`_login_email` → `_login_contact`（它现在按渠道是手机号**或**邮箱，
+  旧名字会误导后来人）；新增 `_make_channel_btn` / `_looks_like_phone` / `_norm_phone` 等辅助。
+
+### Fixed
+- 🔴 **回归测试会真的往外发信**：`tests/cloud_auth_smoke.gd` 里 `_on_forgot_send()` 会真发 HTTPS 请求，
+  而本机 `_cloud` 指向**线上** —— 原先 F 段那步 `_forgot_name.text = "曹博文"` 每次跑回归都会
+  给该账号绑定的邮箱**真发一封重置邮件**；加了短信渠道后同一步会**真发短信（每条计费）**。
+  已加 `_detach_cloud()`：回归一律摘掉 CloudApi，绝不触网。
+  （教训：**测试里凡是有副作用的入口，都要先确认它默认会打到哪台服务器。**）
+- `/register` 的**裸注册路径补 IP 限流**：`REQUIRE_EMAIL_CODE=0` 的过渡窗口里
+  "不带任何验证码"是唯一没有验证码把关的入口，可被脚本批量灌垃圾号。
+  只对**裸注册**计数（带码注册已有各自 60 秒冷却 + 每日上限），且**按建号成功计**
+  （昵称被占反复重试不消耗额度）。默认 5 个/小时、20 个/天（`REG_PER_IP_HOUR` / `REG_PER_IP_DAY` 可调）。
+
+### 服务端部署记录
+- 线上 `/opt/zhanqi-cloud/server.js`：`16ca8d68`(1469 行) → **`518cd702`(1852 行)**；新增 `sms.js`。
+- AK 落在 `/opt/zhanqi-cloud/.aliyun-sms.json`（600，属主 `svc-cloud`）。
+- 回滚点：`/root/svc-backup-20261009-134646/`（含 `server.js.pre-sms-deploy`、`server.js.pre-reglimit`）。
+
+### 验证
+- `selftest_sms.js`：本地 **49/49**（闸门 0）· **45/45**（闸门 1）· 服务器沙盒（node v20）**49/49**。
+- 签名实现用**真实 API** 校验：假号码调 `CheckSmsVerifyCode` → `isv.ValidateFail` + RequestId
+  （不是签名错误）⇒ 鉴权与请求形状正确，**零额度消耗**。
+- `sms_channel_probe.gd`：**24/24**（含"注册码请求不带 email"、"pass 字段名正确"）。
+- `cloud_auth_smoke.gd`：**116/116**（新增 G 段覆盖双通道界面与本地校验）。
+- 全量回归 13 条：见下方发版记录。
+
+### 已知取舍
+- `REQUIRE_EMAIL_CODE` **仍为 0**（老客户端过渡窗口）。新客户端发布后应切 1
+  —— 那时"裸注册"这条路径会自然失效（无码注册被直接 400），**不必再改代码**。
+- 短信**每条计费**（套餐 1000 次，至 2027-10-10）：同号 60 秒重发 / 5 条每日；
+  同 IP 10 条每小时 / 20 条每日；**全局日上限 200**。
 
 ## [10.5.2 发包版] — 2026-10-05
 

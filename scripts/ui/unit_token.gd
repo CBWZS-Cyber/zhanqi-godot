@@ -315,28 +315,33 @@ func _draw_overhead(c: Vector2, r: float) -> void:
 	var bh := maxf(3.0, minf(5.0, size.y * 0.033))
 	var bx := c.x - bw / 2.0
 	var gap := 1.0
-	# ---- 三条**各自独立**的细条（2026-10-04 重做）----
-	# 改之前：生命与护盾挤在同一根条里、只靠颜色分（绿+蓝），而能量又借用了敌方阵营蓝，
-	# 三者混在一起根本分不出谁是谁（用户实报：「生命值、盾、能量值要做区分」）。
-	# 现在：**一色一义、一条一槽、各自带深色描边**，从下往上排。
-	#   能量/理智 = 琥珀 / 紫（紧贴棋子，最常看）
-	#   生命      = 绿（带白条残影，反映这一下掉了多少）
-	#   护盾      = 蓝（**只在有盾时占一行**，不再和生命混在一条）
+	# ---- 两条条：能量/理智（紧贴棋子）+ 生命·护盾**合体条**（2026-10-07 改回用户原设计）----
+	# 历史：2026-10-04 曾把「生命」和「护盾」拆成**两条各自独立**的细条（护盾顶在最上面）。
+	# 用户 2026-10-07 实报：这跟原设计不符 —— **盾和血要共用一条**，长度按两种情形来：
+	#   ① hp + shield ≤ max_hp → 分母 = max_hp（血按点数占位、盾紧接其后、剩余留空）
+	#   ② hp + shield >  max_hp → 分母 = hp + shield（两段按比例铺满整条）
+	# 换算**直接复用** DamageFx.hp_shield_layout()，与侧栏 hp_shield_bar 同源（改一处两处都变）。
+	# 能量/理智仍是独立一条：2026-10-04 用户点名要求「生命/盾/能量」三者可区分，分开才分得清。
 	var top := c.y - r - bh - 2.0
 	var ev_cur := sanity if has_sanity else energy
 	var ev_max := sanity_cap if has_sanity else max_energy
 	_mini_bar(bx, top, bw, bh, ev_cur / maxf(1.0, ev_max),
 		UiDesign.SANITY if has_sanity else UiDesign.ENERGY)
 	top -= bh + gap
-	_mini_bar(bx, top, bw, bh, hp / maxf(1.0, max_hp), UiDesign.HP, _hp_ghost / maxf(1.0, max_hp))
-	if shield > 0.0:
-		top -= bh + gap
-		_mini_bar(bx, top, bw, bh, shield / maxf(1.0, max_hp), UiDesign.SHIELD)
-	# 名字（所有条的上方）
+	# 生命 + 护盾：同一条内左血右盾。白条残影必须用**同一个分母**，否则和血段对不齐。
+	var lay := DamageFx.hp_shield_layout(hp, shield, max_hp)
+	var denom: float = lay.x
+	_mini_hp_bar(bx, top, bw, bh, bw * clampf(hp / denom, 0.0, 1.0),
+		bw * clampf(_hp_ghost / denom, 0.0, 1.0), bw * clampf(lay.z, 0.0, 1.0))
+	# 名字（所有条的上方）：白字 + 深色描边。
+	# 用户 2026-10-07 实报「棋子名字在棋盘上很淡、看不清」——根因是只画白字、无描边，
+	# 而棋盘是浅色羊皮纸格，白字直接"化"进背景。描边色沿用 BAR_NUM_SHADOW（数字阴影专用令牌）。
 	var fs := clampi(int(size.y * 0.14), 9, 16)
 	var w := f.get_string_size(hero_name, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-	draw_string(f, Vector2(c.x - w / 2.0, top - 2.0), hero_name,
-		HORIZONTAL_ALIGNMENT_LEFT, -1, fs, UiDesign.BAR_NUM, -1.0)
+	var np := Vector2(c.x - w / 2.0, top - 3.0)
+	draw_string_outline(f, np, hero_name, HORIZONTAL_ALIGNMENT_LEFT, -1, fs,
+		maxi(2, int(round(fs * 0.22))), UiDesign.BAR_NUM_SHADOW)
+	draw_string(f, np, hero_name, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, UiDesign.BAR_NUM, -1.0)
 
 
 ## 画一条迷你条：底槽 + 填充 +（可选）白条残影 + 深色描边。
@@ -352,6 +357,23 @@ func _mini_bar(x: float, y: float, w: float, h: float, ratio: float, col: Color,
 		var g := clampf(ghost_ratio, 0.0, 1.0)
 		if g > r + 0.002:
 			draw_rect(Rect2(x + w * r, y, w * (g - r), h), UiDesign.GHOST)
+	draw_rect(Rect2(x, y, w, h), UiDesign.BAR_EDGE, false, 1.0)
+
+## 画「生命 + 护盾」合体条：底槽 → 血段 → 盾段 → 白条残影 → 血盾分隔线 → 深色外描边。
+## 绘制顺序照抄 hp_shield_bar._draw()：残影要盖住盾一小会儿（反映"这一下掉了多少"），
+## 分隔线必须画在残影**之后**，否则细条上会被残影糊掉、看不出血到哪、盾多少。
+## 参数用**像素宽度**而不是比例：分段要严格首尾相接，先算比例再乘回来会因取整出现 1px 缝。
+func _mini_hp_bar(x: float, y: float, w: float, h: float,
+		hp_w: float, ghost_w: float, sh_w: float) -> void:
+	draw_rect(Rect2(x, y, w, h), UiDesign.BAR_TRACK)
+	if hp_w > 0.5:
+		draw_rect(Rect2(x, y, hp_w, h), UiDesign.HP)
+	if sh_w > 0.5:
+		draw_rect(Rect2(x + hp_w, y, sh_w, h), UiDesign.SHIELD)
+	if ghost_w > hp_w + 0.5:
+		draw_rect(Rect2(x + hp_w, y, ghost_w - hp_w, h), UiDesign.GHOST)
+	if hp_w > 0.5 and sh_w > 0.5:
+		draw_rect(Rect2(x + hp_w - 1.0, y, 2.0, h), UiDesign.BAR_EDGE)
 	draw_rect(Rect2(x, y, w, h), UiDesign.BAR_EDGE, false, 1.0)
 
 ## 棋子下方：装备武器名（最多显示 3 件，超出显示 +N）

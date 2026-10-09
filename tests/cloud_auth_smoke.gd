@@ -90,6 +90,9 @@ func _initialize() -> void:
 	print("【F】忘记密码：客户端契约 + 界面（不真发信）")
 	await _test_forgot_password()
 
+	print("【G】短信/邮箱双通道：客户端契约 + 界面（不真发短信）")
+	await _test_sms_channel()
+
 	_restore_all()
 	print("== 云端登录态结果: PASS %d / FAIL %d ==" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -321,6 +324,20 @@ func _test_isolation() -> void:
 
 # ---------------- 控件树辅助（只读遍历）----------------
 
+## 🔴 测试卫生（2026-10-09 加）：**把 CloudApi 摘掉**，让界面上任何"发送"动作都停在
+## `_cloud == null` 的早退分支上。
+##
+## 为什么必须有：`_on_forgot_send()` / `_on_cloud_register()` 会**真发 HTTPS 请求**，
+## 而本机 `_cloud` 指向的是**线上**服务器。原先 F 段那步 `_forgot_name.text = "曹博文"`
+## 会真的给该账号绑定的邮箱**发一封重置邮件**（每跑一次回归就发一封）。
+## 2026-10-09 加了短信渠道、默认渠道变短信后，同一步会**真发短信（每条计费）**。
+## ⇒ 回归**必须绝不触网**：需要"已发码"状态时，直接手动调 `_on_forgot_send_done(...)`。
+func _detach_cloud(ui: Variant) -> void:
+	if ui._cloud != null and is_instance_valid(ui._cloud):
+		ui._cloud.queue_free()
+	ui._cloud = null
+
+
 func _collect_all_texts(n: Node) -> Array:
 	var out := []
 	if n is Label:
@@ -391,6 +408,7 @@ func _test_forgot_password() -> void:
 	root.add_child(ui)
 	for i in range(5):
 		await process_frame
+	_detach_cloud(ui)   # 🔴 回归绝不触网（详见该函数注释）
 	ck(str(ui._current) == "tut_login", "先落登录页（实际 %s）" % str(ui._current))
 	ck(_has_text(ui, "忘记密码"), "★ 登录页有「忘记密码？」入口")
 
@@ -421,24 +439,28 @@ func _test_forgot_password() -> void:
 	ck(str(ui._forgot_msg.text).find("昵称") >= 0,
 		"空昵称时给出提示（实际「%s」）" % str(ui._forgot_msg.text))
 
-	# ④ 服务端回「空掩码」= 该账号没绑邮箱 → 必须给出明确出路
-	#    （老账号就是这个下场：过渡档里填了邮箱却没走验证码的，服务端存的是空）
+	# ④ 服务端回「空掩码」= 该账号没绑**当前渠道**的联系方式 → 必须给出明确出路
+	#    （老账号就是这个下场：只绑了邮箱的账号来走短信找回）
 	ui._forgot_name.text = "老账号"
 	ui._on_forgot_send()
 	ui._on_forgot_send_done(true, "")
-	ck(str(ui._forgot_msg.text).find("没有绑定邮箱") >= 0,
-		"★ 无绑定邮箱时明确告知（实际「%s」）" % str(ui._forgot_msg.text))
+	ck(str(ui._forgot_msg.text).find("没有绑定手机号") >= 0,
+		"★ 无绑定手机号时明确告知（实际「%s」）" % str(ui._forgot_msg.text))
+	ck(str(ui._forgot_msg.text).find("邮箱验证") >= 0,
+		"★ 并指出另一条出路：改用邮箱验证")
 	ck(ui._forgot_step == 0, "这种情况**不进入第 1 步**（没码可填）")
 
 	# ⑤ 正常发码 → 进入第 1 步，昵称锁定，码/密码解锁
 	ui._forgot_name.text = "曹博文"
 	ui._on_forgot_send()
-	ui._on_forgot_send_done(true, "c***n@qq.com")
+	# `_cloud` 已摘除 ⇒ 上一步在早退分支停下、不会设 `_forgot_lock_name`；补上以模拟"已发码"
+	ui._forgot_lock_name = "曹博文"
+	ui._on_forgot_send_done(true, "138****0001")
 	ck(ui._forgot_step == 1, "★ 发码成功 → 进入第 1 步")
 	ck(not ui._forgot_name.editable, "★ 昵称锁定（防中途改掉 → 第二步对不上账号）")
 	ck(ui._forgot_code.editable and ui._forgot_pass.editable, "验证码与新密码解锁")
 	ck(not ui._forgot_apply_btn.disabled, "「重置密码」启用")
-	ck(str(ui._forgot_msg.text).find("c***n@qq.com") >= 0, "提示里带掩码邮箱（不泄露完整地址）")
+	ck(str(ui._forgot_msg.text).find("138****0001") >= 0, "提示里带掩码手机号（不泄露完整号码）")
 
 	# ⑥ 本地校验：码位数 / 新密码长度
 	ui._forgot_code.text = "12"
@@ -455,5 +477,127 @@ func _test_forgot_password() -> void:
 	await process_frame
 	ck(ui._forgot_layer == null, "★ 切面板后弹层自动收起")
 
+	ui.queue_free()
+	await process_frame
+
+
+# ---------------- G. 短信 / 邮箱双通道（2026-10-09 加）----------------
+
+## 客户 2026-10-09：「把登录的邮箱验证改成短信验证，邮箱验证算是备选方」+「找回密码的那个也改一下」。
+## 范围：**注册** 与 **找回密码**（登录本身是昵称+密码、无验证码，不动）；**双通道、各自可绑**。
+##
+## ⚠️ 这里只测**客户端契约 + 界面**：不真发短信（每条计费）、不碰线上。
+##    服务端已上线（`channel` 缺省 = 邮箱老路，保证已发布客户端不坏）；
+##    发出去的**请求形状**由 `tests/_probes/sms_channel_probe.gd`（配合本地假服务端）单独钉。
+func _test_sms_channel() -> void:
+	print("【G】短信/邮箱双通道：客户端契约 + 界面（不真发短信）")
+
+	# ① 接口契约：短信方法必须**显式**带 channel=sms —— 服务端缺省是邮箱，
+	#    靠默认值会"以为发短信、其实发邮件"，这种错极难查。
+	var api_src: String = FileAccess.get_file_as_string("res://scripts/net/cloud_api.gd")
+	for k in ["register_sms", "send_code_sms", "send_reset_code_sms", "reset_password_sms",
+			"bind_phone_send", "bind_phone_commit"]:
+		ck(api_src.find("func %s" % k) >= 0, "CloudApi 有 %s()" % k)
+	ck(api_src.find("const CH_SMS := \"sms\"") >= 0, "渠道字面量 CH_SMS = sms")
+	ck(api_src.find("\"channel\": CH_SMS") >= 0, "短信方法显式传 channel（不依赖服务端默认）")
+	ck(api_src.find("\"/bind-phone\"") >= 0, "走 POST /bind-phone")
+	ck(api_src.find("signal bind_phone_done") >= 0, "有信号 bind_phone_done")
+
+	var api := CloudApi.new()
+	root.add_child(api)
+	await process_frame
+	ck(api.has_method("register_sms") and api.has_method("send_code_sms")
+		and api.has_method("send_reset_code_sms") and api.has_method("reset_password_sms"),
+		"实例上有四个短信方法")
+	var names: Array = []
+	for s in api.get_signal_list():
+		names.append(str((s as Dictionary).get("name", "")))
+	ck(names.has("bind_phone_done"), "信号表里有 bind_phone_done")
+	api.queue_free()
+	await process_frame
+
+	# ② 界面：注册面板的渠道切换
+	ProgressStore.reset()
+	var g: Variant = _g()
+	if g == null:
+		return
+	g.cloud_online = false
+	g.cloud_account = {}
+	CloudSession.clear()
+	var ui: Variant = load("res://scenes/MainUI.tscn").instantiate()
+	root.add_child(ui)
+	for i in range(5):
+		await process_frame
+	_detach_cloud(ui)   # 🔴 回归绝不触网（详见该函数注释）
+	ck(str(ui._current) == "tut_login", "先落登录页（实际 %s）" % str(ui._current))
+
+	ui._on_cloud_register()
+	await process_frame
+	ck(ui._reg_box != null and ui._reg_box.visible, "★ 点「注册新账号」展开注册字段")
+	ck(ui._reg_btn_sms != null and ui._reg_btn_mail != null, "★ 有「短信 / 邮箱」两个渠道按钮")
+	ck(ui._reg_ch == CloudApi.CH_SMS, "★ 默认渠道 = 短信（用户定的主用渠道）")
+	ck(ui._reg_btn_sms.text.begins_with("●") and ui._reg_btn_mail.text.begins_with("○"),
+		"选中态用 ● / ○ 标出（短信选中、邮箱未选）")
+	ck(ui._login_contact.placeholder_text.find("手机号") >= 0,
+		"输入框提示跟着渠道走 = 手机号（实际「%s」）" % ui._login_contact.placeholder_text)
+
+	# ③ 切到邮箱 → 提示词 / 选中态都换，且**清空已填内容**
+	ui._login_contact.text = "13800000001"
+	ui._login_code.text = "123456"
+	ui._on_reg_channel(CloudApi.CH_EMAIL)
+	await process_frame
+	ck(ui._reg_ch == CloudApi.CH_EMAIL, "★ 渠道切到邮箱")
+	ck(ui._login_contact.placeholder_text.find("邮箱") >= 0,
+		"★ 输入框提示换成邮箱（实际「%s」）" % ui._login_contact.placeholder_text)
+	ck(ui._login_contact.text == "", "★ 切渠道清空联系方式（防『半截手机号当邮箱发』）")
+	ck(ui._login_code.text == "", "切渠道也清空验证码")
+	ck(ui._reg_btn_mail.text.begins_with("●") and ui._reg_btn_sms.text.begins_with("○"),
+		"邮箱按钮变选中")
+
+	# ④ 短信渠道的本地校验 + 归一化
+	ui._on_reg_channel(CloudApi.CH_SMS)
+	ck(ui._norm_phone("138-0000-0001") == "13800000001", "手机号归一化：去横线")
+	ck(ui._norm_phone("+86 13800000001") == "13800000001", "手机号归一化：去 +86 与空格")
+	ck(ui._norm_phone("8613800000001") == "13800000001", "手机号归一化：去 13 位的 86 前缀")
+	ck(ui._looks_like_phone("13800000001"), "合法手机号判为真")
+	ck(not ui._looks_like_phone("12345"), "5 位数字判为假")
+	ck(not ui._looks_like_phone("23800000001"), "非 1 开头判为假")
+
+	ui._login_name.text = "联调甲"
+	ui._login_pass.text = "abcdef"
+	ui._login_contact.text = "12345"
+	ui._login_code.text = "123456"
+	ui._on_cloud_register()
+	ck(str(ui._login_msg.text).find("手机号") >= 0,
+		"★ 手机号格式不对时拦住（实际「%s」）" % str(ui._login_msg.text))
+
+	# ⑤ 找回面板也有渠道按钮；发码后锁渠道
+	ui._open_forgot_panel()
+	await process_frame
+	ck(ui._forgot_btn_sms != null and ui._forgot_btn_mail != null, "★ 找回面板有渠道按钮")
+	ck(ui._forgot_ch == CloudApi.CH_SMS and ui._forgot_btn_sms.text.begins_with("●"),
+		"找回默认短信且选中态正确")
+	ck(str(ui._forgot_msg.text).find("手机号") >= 0,
+		"提示说的是「绑定手机号」（实际「%s」）" % str(ui._forgot_msg.text))
+
+	ui._forgot_name.text = "曹博文"
+	ui._on_forgot_send()
+	ui._on_forgot_send_done(true, "138****0001")
+	ck(ui._forgot_step == 1, "发码成功 → 第 1 步")
+	ck(ui._forgot_btn_sms.disabled and ui._forgot_btn_mail.disabled,
+		"★ 发码后锁定渠道（防拿另一种渠道的码去撞）")
+
+	# ⑥ 找回可切到邮箱渠道，且提示词跟着变（把状态复位成"未发码"再切）
+	ui._forgot_step = 0
+	ui._forgot_btn_sms.disabled = false
+	ui._forgot_btn_mail.disabled = false
+	ui._on_forgot_channel(CloudApi.CH_EMAIL)
+	ck(ui._forgot_ch == CloudApi.CH_EMAIL, "★ 找回可切到邮箱渠道")
+	ck(str(ui._forgot_msg.text).find("邮箱") >= 0,
+		"提示词跟着换成邮箱（实际「%s」）" % str(ui._forgot_msg.text))
+
+	ui._show_panel("start")
+	await process_frame
+	ck(ui._forgot_layer == null, "切面板后弹层自动收起")
 	ui.queue_free()
 	await process_frame

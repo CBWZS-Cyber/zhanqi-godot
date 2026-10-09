@@ -269,6 +269,22 @@ func _initialize() -> void:
 	DamageFx.update_bar(null, 1.0, 2.0)
 	ck(true, "bar 为 null 时不崩（防御）")
 
+	# ============ ④ 棋子头顶：血盾合体条 + 名字描边（2026-10-07）============
+	# 背景：2026-10-04 曾把「生命」和「护盾」拆成两条各自独立的细条（护盾顶在最上面），
+	#       用户 2026-10-07 实报「盾条不该独立显示在血条上面，要按原设计合在一条里」。
+	# 为什么是**源码级**断言：headless 不执行 _draw()，绘制路径在无头模式下拿不到像素，
+	#   所以这里断言"代码里的结构"，与 ui_design_smoke 的 Z_UNIT_LABEL 检查同一套路。
+	# 布局算式本身由上面 ③ 的 7 条断言覆盖（token 复用同一个 hp_shield_layout）。
+	var ut_src := FileAccess.get_file_as_string("res://scripts/ui/unit_token.gd")
+	ck(ut_src.length() > 0, "unit_token.gd 源码可读")
+	ck(ut_src.find("hp_shield_layout") >= 0, "头顶血条复用 DamageFx.hp_shield_layout（与侧栏同源）")
+	ck(ut_src.find("_mini_hp_bar") >= 0, "存在血盾合体条绘制函数 _mini_hp_bar")
+	ck(ut_src.find("shield / maxf(1.0, max_hp)") < 0,
+		"旧写法「护盾单独占一行」已移除（不再有 shield 独立条）")
+	ck(ut_src.find("draw_string_outline") >= 0,
+		"棋子名字带深色描边（白字无描边会在浅色羊皮纸格上看不清）")
+	ck(ut_src.find("UiDesign.BAR_NUM_SHADOW") >= 0, "名字描边色走令牌 UiDesign.BAR_NUM_SHADOW")
+
 	print("== 掉血特效回归结果: PASS %d / FAIL %d ==" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 

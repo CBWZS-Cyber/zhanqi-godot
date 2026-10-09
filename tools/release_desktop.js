@@ -326,21 +326,21 @@ function releaseNotes() {
   //      ① 只推 main 与 tag，**绝不 --force**，绝不碰其它分支；
   //      ② 推送前跑安全闸：明文密钥（sk- 长串）与敏感文件名一律拦下、中止；
   //      ③ 令牌不进 `.git/config` —— 走本机 credentials 文件。
-  //   ⚠️ 失败**不阻断发版**（Gitee 是附加备份），但会**大声告警**。
-  if (flag('--no-gitee')) {
-    console.log('\n（--no-gitee：跳过 Gitee 源码同步）');
+  //   ⚠️ 失败**不阻断发版**（代码仓是附加备份），但会**大声告警**。
+  if (flag('--no-publish') || flag('--no-gitee')) {
+    console.log('\n（--no-publish：跳过源码仓同步）');
   } else {
-    const pub = opt('--gitee-script',
-      'C:/Users/Caobo/.workbuddy/skills/云端服务器/scripts/gitee_publish.js');
+    const pub = opt('--publish-script',
+      'C:/Users/Caobo/.workbuddy/skills/云端服务器/scripts/repo_publish.js');
     if (!fs.existsSync(pub)) {
-      console.warn(`\n⚠ 未找到 Gitee 发布脚本，已跳过源码同步：${pub}`);
+      console.warn(`\n⚠ 未找到源码发布脚本，已跳过源码同步：${pub}`);
     } else {
-      console.log('\n▸ 同步源码到 Gitee（提交 + 打 tag + 推送）…');
+      console.log('\n▸ 同步源码到代码仓（Gitee + GitHub：提交 + 打 tag + 推送）…');
       try {
-        execFileSync(process.execPath, [pub, '--dir', ROOT, '--version', `v${VER}`, '--keep', '5'],
+        execFileSync(process.execPath, [pub, '--dir', ROOT, '--version', `v${VER}`],
           { stdio: 'inherit' });
       } catch (e) {
-        console.error('\n⚠⚠ Gitee 推送失败 —— **本次源码未进 Gitee**（其余发版步骤不受影响）。');
+        console.error('\n⚠⚠ 源码仓推送失败 —— **本次源码未进 Gitee / GitHub**（其余发版步骤不受影响）。');
         console.error(`   ${String(e.message).split('\n')[0]}`);
         console.error('   可单独重跑该脚本，或手动提交推送。');
       }

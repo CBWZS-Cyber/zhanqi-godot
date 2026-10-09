@@ -10,6 +10,12 @@ extends Node
 ##   POST /bug-report {title, detail, ...}       → {ok, id}        （服务端直投 AgentMail）
 ##   POST /send-code {name, purpose:"reset"}     → {ok, masked, ttl}  （忘记密码·重置码，2026-10-05 加）
 ##   POST /reset-password {name, code, newpass}  → {ok, token, account}（忘记密码·换新密码，同上）
+##   POST /bind-phone {action, phone[, code]}    → {ok, account}   （老账号补绑手机号，需登录）
+##
+## 🔀 **双通道（2026-10-09）**：上面的接口都可加 `channel:"sms"` 走**短信**（把 `email` 换成 `phone`）——
+##    **缺省 channel = 邮箱老路**（已发布客户端不传该字段，语义逐字节不变）。
+##    短信验证码由阿里云生成与校验（服务端不存码），每条计费 ⇒ 服务端限流更严。
+##    契约见 docs/短信验证_接口契约.md。
 ##
 ## 账号本体存在服务器上（默认一人一个 JSON 小文件，见 store.js），密码是 scrypt
 ## 加盐哈希 —— **任何响应都不会带 salt/hash**，客户端也永远不存密码明文。
@@ -35,6 +41,14 @@ signal report_done(ok: bool, msg: String)
 signal reset_code_done(ok: bool, msg: String)
 ## 忘记密码·重置结果：成功时已带上新 token（= 直接登录了），失败时 error 是中文原因
 signal reset_password_done(ok: bool, account: Dictionary, error: String)
+## 绑定手机号（老账号补绑，`/bind-phone`）：成功时 msg 是掩码手机号，失败时是中文原因
+signal bind_phone_done(ok: bool, msg: String)
+
+## 渠道标识（2026-10-09 短信通道）—— 与服务端 `channel` 字段同字面量
+## ⚠️ 故意做成"不同渠道调不同方法"而不是给一个默认参数：调用点漏传时不会静默退回邮箱，
+##    否则"该发短信却发了邮件"这种问题极难查（服务端缺省 = 邮箱老路）。
+const CH_EMAIL := "email"
+const CH_SMS := "sms"
 
 const TIMEOUT_SEC := 8.0
 ## 兜底地址；正常路径由 main_ui 注入 Global.cloud_service
@@ -86,9 +100,33 @@ func register(name: String, pwd: String, email := "", code := "") -> void:
 	_post("register", "/register", body)
 
 
+## 注册新账号 · **短信通道**（2026-10-09）。`code` 是阿里云下发的短信验证码。
+## 服务端会校验"该手机号没绑过别的账号"，成功后账号的 `phone` 即被绑定。
+func register_sms(name: String, pwd: String, phone: String, code: String) -> void:
+	_post("register", "/register", {
+		"channel": CH_SMS, "name": name, "pass": pwd, "phone": phone, "code": code,
+	})
+
+
 ## 给邮箱发注册验证码（6 位，5 分钟有效）。服务端有 60 秒重发间隔与每日上限。
 func send_code(email: String) -> void:
 	_post("send_code", "/send-code", {"email": email})
+
+
+## 给手机号发注册验证码 · **短信通道**（2026-10-09）。**每次调用都计费**，
+## 服务端限流比邮箱更严（同号 60 秒 / 5 条每日，同 IP 10 条每小时 / 20 条每日，全局日 200）。
+func send_code_sms(phone: String) -> void:
+	_post("send_code", "/send-code", {"channel": CH_SMS, "phone": phone})
+
+
+## 绑定手机号 · 发码（需登录；老账号补绑用）。模板 `100004`。
+func bind_phone_send(phone: String) -> void:
+	_post("bind_phone", "/bind-phone", {"action": "send", "phone": phone})
+
+
+## 绑定手机号 · 提交（需登录）。成功后 `account.phoneBound` 变 true、`account.phone` 是掩码。
+func bind_phone_commit(phone: String, code: String) -> void:
+	_post("bind_phone", "/bind-phone", {"action": "commit", "phone": phone, "code": code})
 
 
 ## 提交 Bug 上报 —— **服务端直接把邮件投到 AI 邮箱**，玩家不用自己发信。
@@ -102,14 +140,30 @@ func submit_bug_report(payload: Dictionary) -> void:
 ## ⚠️ 服务端把码发到**该账号自己绑定的**邮箱（不是调用方传进来的任何地址），
 ## 所以谁也拿不到别人账号的重置码。这就是服务端「只绑定验证过的邮箱」那条设计的兑现
 ## —— 若是过渡档里填了邮箱却没走验证码的账号，服务端存的是空邮箱，这一步会明确拒绝。
+##
+## 成功时 `reset_code_done` 带回**掩码**（如 `c***g@qq.com`）；**空串 = 该账号没绑这个联系方式**
+## （老账号，或绑的是另一种渠道）⇒ 界面据此提示"改用另一种验证方式"。
 func send_reset_code(name: String) -> void:
 	_post("reset_code", "/send-code", {"name": name, "purpose": "reset"})
+
+
+## 忘记密码 · 第一步（**短信通道**，2026-10-09）：码发到该账号**自己绑定的**手机号。
+## 收不到码的三种情形**故意回同一形状**（`masked:""`），不区分"昵称不存在/没绑手机号"——防枚举。
+func send_reset_code_sms(name: String) -> void:
+	_post("reset_code", "/send-code", {"channel": CH_SMS, "name": name, "purpose": "reset"})
 
 
 ## 忘记密码 · 第二步：用重置码换新密码。
 ## 成功后服务端直接下发新 token（= 已登录），不要求再输一次密码。
 func reset_password(name: String, code: String, newpass: String) -> void:
 	_post("reset_password", "/reset-password", {"name": name, "code": code, "newpass": newpass})
+
+
+## 忘记密码 · 第二步（**短信通道**）：`code` 是阿里云短信验证码。
+func reset_password_sms(name: String, code: String, newpass: String) -> void:
+	_post("reset_password", "/reset-password", {
+		"channel": CH_SMS, "name": name, "code": code, "newpass": newpass,
+	})
 
 
 func login(name: String, pwd: String) -> void:
@@ -184,6 +238,9 @@ func _on_done(result: int, code: int, _headers: PackedStringArray, body: PackedB
 			reset_code_done.emit(true, str(data.get("masked", "")))
 		"reset_password":
 			reset_password_done.emit(true, account, "")
+		"bind_phone":
+			# 掩码手机号由服务端回在 account.phone 里（成功即已写入账号）
+			bind_phone_done.emit(true, str(account.get("phone", "")))
 		_:
 			pass
 
@@ -204,5 +261,7 @@ func _fail(req: String, reason: String) -> void:
 			reset_code_done.emit(false, reason)
 		"reset_password":
 			reset_password_done.emit(false, {}, reason)
+		"bind_phone":
+			bind_phone_done.emit(false, reason)
 		_:
 			pass

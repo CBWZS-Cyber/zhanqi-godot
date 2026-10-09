@@ -9,9 +9,11 @@
  *      POST /login           登录
  *      GET  /me              用 token 换账号
  *      POST /progress        上传进度（水平档位 / 教程进度）
- *      POST /send-code       邮箱验证码：默认 {email}（注册）；带 purpose="reset" 时改按
- *                            **昵称**给该账号已绑定的邮箱发重置码 → {ok,masked,ttl}
- *      POST /reset-password  忘记密码：用重置码换新密码，成功即下发 token（= 已登录）
+ *      POST /send-code       验证码。**channel 缺省 = 邮箱**（与老版逐字节一致）；
+ *                            channel="sms" 走**短信**（阿里云 dypns，见 sms.js）。
+ *                            带 purpose="reset" 时按**昵称**找账号，发到它绑定的渠道。
+ *      POST /reset-password  忘记密码：用验证码换新密码，成功即下发 token（= 已登录）
+ *      POST /bind-phone      登录后绑定手机号（action="send" 发码 / "commit" 提交）
  *      POST /bug-report      Bug 上报（直投 AgentMail，不抄送玩家本人）
  *   3) GET  /health          自检
  *
@@ -56,6 +58,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const oss = require('./oss');
 const store = require('./store');   // 账号存储后端（local / oss，见 store.js 头注释）
+const sms = require('./sms');       // 短信通道（阿里云 dypns 短信认证，见 sms.js 头注释）
 
 // ── 配置 ──────────────────────────────────────────────────────────────────
 const PORT = Number(process.env.PORT || 8789);
@@ -101,6 +104,18 @@ const REPORT_MAX_BODY = 16384;
 // 注册是否强制邮箱验证码（`REQUIRE_EMAIL_CODE=0` 可临时关掉，供未升级的老客户端过渡）
 const REQUIRE_EMAIL_CODE = String(process.env.REQUIRE_EMAIL_CODE == null ? '1' : process.env.REQUIRE_EMAIL_CODE) !== '0';
 const EMAIL_RE = /^[^\s@,;<>]{1,64}@[^\s@,;<>]+\.[A-Za-z]{2,}$/;
+
+// ── 短信通道（2026-10-09 新增）──────────────────────────────────────────
+// 产品是阿里云「**短信认证**」(dypns)，不是「短信服务」——详见 sms.js 头注释。
+// 🔴 短信**每条计费**（套餐 1000 次）⇒ 限流比邮箱更严，另有全局日上限兜底。只支持大陆号。
+const PHONE_RE = /^1[3-9]\d{9}$/;
+const SMS_ON = process.env.SMS_DISABLED !== '1';              // 紧急开关：=1 时短信整体拒绝
+const SMS_RESEND_MS = envNum('SMS_RESEND_MS', 60 * 1000);     // 同号重发间隔
+const SMS_PER_PHONE_DAY = envNum('SMS_PER_PHONE_DAY', 5);     // 同号每日上限
+const SMS_PER_IP_HOUR = envNum('SMS_PER_IP_HOUR', 10);
+const SMS_PER_IP_DAY = envNum('SMS_PER_IP_DAY', 20);
+const SMS_GLOBAL_PER_DAY = envNum('SMS_GLOBAL_PER_DAY', 200); // 全局日上限（保护套餐）
+const SMS_CODE_TTL_SEC = envNum('SMS_CODE_TTL_SEC', 300);     // 与阿里云 ValidTime 一致
 
 // ── token 密钥：env > 同目录 secret.txt > 自动生成并落盘 ────────────────────
 function loadSecret() {
@@ -165,6 +180,9 @@ function publicAccount(a) {
     uid: a.uid,
     name: a.name,
     email: a.email || '',
+    // 手机号只回**掩码**（本人确认"绑的是我的号"够用了；完整号码只留服务端）
+    phone: maskPhone(normPhone(a.phone)),
+    phoneBound: !!normPhone(a.phone),
     created: a.created || '',
     progress: a.progress || { tier: '', tutorial_done: false, tutorial_hero: '' },
   };
@@ -207,12 +225,16 @@ function readBody(req, maxBytes) {
     req.on('error', () => resolve({ bad: true }));
   });
 }
+// 🔴 刻意**不**发 CORS 头（2026-10-05 移除 `Access-Control-Allow-Origin: *`）：
+//    游戏客户端（Godot 原生）与单机工具（桌面 exe）都不走浏览器、不需要 CORS；
+//    而全放通会让**任意网页**在浏览器里跨域读取本服务响应，甚至静默消耗访客的 AI 额度
+//    （AI 代理本身无身份校验，唯一门槛就是"浏览器调不到"）。
+//    ⚠️ 将来若真要做网页端，改成**固定来源白名单**，别再用 `*`。
 function sendJson(res, code, obj) {
   const body = Buffer.from(JSON.stringify(obj), 'utf8');
   res.writeHead(code, {
     'Content-Type': 'application/json; charset=utf-8',
     'Content-Length': body.length,
-    'Access-Control-Allow-Origin': '*',
     'Cache-Control': 'no-store',
   });
   res.end(body);
@@ -235,6 +257,12 @@ function bearer(req) {
  */
 const clientIp = (req) =>
   (req.socket && req.socket.remoteAddress) || '?';
+
+/** 是否来自本机回环（真实 TCP 对端，同样不读任何请求头）—— 用于给详情接口分级 */
+const isLoopback = (req) => {
+  const a = (req.socket && req.socket.remoteAddress) || '';
+  return a === '127.0.0.1' || a === '::1' || a === '::ffff:127.0.0.1';
+};
 
 // ── 版本清单缓存 ──────────────────────────────────────────────────────────
 let verCache = { at: 0, text: '' };
@@ -432,6 +460,10 @@ async function handleSendCode(req, res) {
   //    已发布的客户端仍用 {email} 调本接口发注册码 —— 那边不带 purpose，走下面的老路。
   if (trim(data.purpose).toLowerCase() === 'reset') return handleSendResetCode(res, ip, data);
 
+  // ── 短信通道：**必须显式传 channel="sms"**；不传一律走下面的邮箱老路
+  //    （已发布客户端只会发 {email}，语义不能变，否则老客户端注册直接坏）
+  if (trim(data.channel).toLowerCase() === 'sms') return handleSendRegisterSms(res, ip, data);
+
   const email = trim(data.email).toLowerCase();
   if (!EMAIL_RE.test(email)) return sendJson(res, 400, { ok: false, error: '邮箱格式不对' });
 
@@ -527,6 +559,9 @@ function resetMailText(code) {
 async function handleSendResetCode(res, ip, data) {
   const name = trim(data.name);
   if (!name) return sendJson(res, 400, { ok: false, error: '请先填昵称' });
+
+  // 短信通道：按昵称找账号 → 发到它**自己绑定的**手机号（绝不看请求体里的号码）
+  if (trim(data.channel).toLowerCase() === 'sms') return handleSendResetSms(res, ip, name);
 
   let g;
   try { g = await store.getAccount(uidOf(name)); }
@@ -627,6 +662,43 @@ async function handleResetPassword(req, res) {
   }
   const email = (g.ok && g.data && typeof g.data.email === 'string')
     ? g.data.email.trim().toLowerCase() : '';
+
+  // ── 短信通道（channel="sms"）：验证码在**阿里云**侧存储与校验，不经本地 codes Map ──
+  //    ⚠️ 这里刻意**不复用**下面邮箱路径的落库代码：邮箱那条有"失败要把码放回"的语义
+  //    （codeRestore），短信码是一次性的、放不回去 —— 两条路的失败处理不同，硬合并更危险。
+  if (trim(data.channel).toLowerCase() === 'sms') {
+    const ph = (g.ok && g.data) ? normPhone(g.data.phone) : '';
+    if (!PHONE_RE.test(ph)) {
+      // 未绑手机号 / 昵称不存在 → 与"码不对"同一句，不给枚举探测器
+      console.log(`[reset] sms 通道但账号未绑手机号（或不存在的昵称） ip=${ip}`);
+      noteFail(ip);
+      return sendJson(res, 400, { ok: false, error: '验证码不正确或已过期' });
+    }
+    if (!(await smsCheckOrFail(res, ph, code))) { noteFail(ip); return; }
+    if (!g.ok || !g.data) {
+      console.error('[reset] 异常状态：验码通过却取不到账号');
+      return sendJson(res, 502, { ok: false, error: '云端暂时不可用，请稍后再试' });
+    }
+    const acctS = g.data;
+    const saltS = crypto.randomBytes(16).toString('hex');
+    acctS.salt = saltS;
+    acctS.hash = hashPass(newpass, saltS);
+    acctS.updated = nowIso();
+    // ⚠️ 只动 salt/hash/updated：uid / name / created / email / phone / progress 一律保留
+    try {
+      const rS = await store.saveAccount(acctS.uid, acctS);
+      if (!rS.ok) {
+        console.error('[reset] 写回失败:', rS.error || '');
+        return sendJson(res, 502, { ok: false, error: '云端暂时不可用，请稍后再试' });
+      }
+    } catch (e) {
+      console.error('[reset] 存储异常:', e.message);
+      return sendJson(res, 502, { ok: false, error: '云端暂时不可用，请稍后再试' });
+    }
+    clearFail(ip);
+    console.log(`[reset] 改密成功(sms) uid=${acctS.uid}`);
+    return sendJson(res, 200, { ok: true, token: makeToken(acctS.uid), account: publicAccount(acctS) });
+  }
 
   const c = codeTake(email, code);          // 成功即已作废该邮箱上的码（防重放）
   if (!c.ok) return rejCode(c.error);
@@ -739,8 +811,42 @@ async function handleBugReport(req, res) {
 
 // ── 业务 ──────────────────────────────────────────────────────────────────
 
+// ── 注册 IP 限流（2026-10-09）────────────────────────────────────────────
+// 背景：`REQUIRE_EMAIL_CODE=0` 的过渡窗口里，“裸注册”（不带任何验证码）是**唯一没有
+//   验证码把关**的入口 ⇒ 可被脚本批量灌垃圾号（email-gate.conf 里点名的就是这个洞）。
+// ⚠️ **只对“没走任何验证码”的注册计数**：
+//   · 带邮箱码 / 短信码的注册已有各自的 60 秒冷却 + 每日上限，不受这里影响；
+//   · 于是闸门切回 1 后这条路径自然失效（那时无码注册会被直接 400），不必再改代码。
+// 额度按**建号成功**计（昵称被占反复重试不消耗），避免误伤正常玩家。
+const REG_PER_IP_HOUR = envNum('REG_PER_IP_HOUR', 5);   // 裸注册：同 IP 每小时上限
+const REG_PER_IP_DAY = envNum('REG_PER_IP_DAY', 20);    // 裸注册：同 IP 每日上限
+const regIp = new Map();               // ip -> { hourAt, hourN, day, dayN }
+
+/** 返回 "" 放行，否则是给用户看的中文原因（只查不计） */
+function regRateCheck(ip) {
+  const now = Date.now(), day = _todayBJ();
+  const r = regIp.get(ip);
+  if (!r) return '';
+  if (r.day !== day) return '';                      // 跨天：下次计数时会重建
+  if (now - r.hourAt > 3600000) return '';           // 滑出小时窗
+  if (r.hourN >= REG_PER_IP_HOUR) return `这台设备注册太频繁了（每小时最多 ${REG_PER_IP_HOUR} 个账号），过一会儿再试`;
+  if (r.dayN >= REG_PER_IP_DAY) return `这台设备今天注册的新账号太多了（上限 ${REG_PER_IP_DAY} 个），明天再试`;
+  return '';
+}
+
+/** 只在**建号成功**时调 */
+function regNote(ip) {
+  const now = Date.now(), day = _todayBJ();
+  let r = regIp.get(ip);
+  if (!r) { r = { hourAt: now, hourN: 0, day: day, dayN: 0 }; regIp.set(ip, r); }
+  if (r.day !== day) { r.day = day; r.dayN = 0; }
+  if (now - r.hourAt > 3600000) { r.hourAt = now; r.hourN = 0; }
+  r.hourN += 1; r.dayN += 1;
+}
+
 /** 注册：条件写保证昵称唯一（原子） */
 async function handleRegister(req, res) {
+  const ip = clientIp(req);
   const { data, bad, tooLarge } = await readBody(req);
   if (tooLarge) return sendJson(res, 413, { ok: false, error: '请求体过大' });
   if (bad) return sendJson(res, 400, { ok: false, error: '请求格式不对' });
@@ -751,6 +857,10 @@ async function handleRegister(req, res) {
   if (pass.length < PASS_MIN || pass.length > PASS_MAX) {
     return sendJson(res, 400, { ok: false, error: `密码需要 ${PASS_MIN}~${PASS_MAX} 位` });
   }
+
+  // ── 短信注册通道（2026-10-09）：**必须显式传 channel="sms"** ──
+  //    不传就是下面的邮箱老路（已发布客户端的语义不能变）。
+  if (trim(data.channel).toLowerCase() === 'sms') return handleRegisterBySms(res, name, pass, data);
 
   // ── 邮箱验证码（2026-10-04；2026-10-05 修了一个**能让验证码完全失效**的洞）──
   // 🔴 原写法 `if (REQUIRE_EMAIL_CODE || code)` 里 `code` 是 **falsy 判断**：
@@ -772,19 +882,210 @@ async function handleRegister(req, res) {
     const c = codeTake(email, code);
     if (!c.ok) return sendJson(res, 400, { ok: false, error: c.error });
     saved = c.saved;
+  } else {
+    // ⚠️ 走到这里 = 既没开闸门（REQUIRE_EMAIL_CODE=0）也没带码 = 裸注册。
+    //    这是过渡期唯一没有验证码把关的入口 ⇒ 靠 IP 限流兜底。
+    const why = regRateCheck(ip);
+    if (why) {
+      console.log(`[register] 限流 ip=${ip}（裸注册）:: ${why}`);
+      return sendJson(res, 429, { ok: false, error: why });
+    }
   }
 
+  // 建号收敛到 createAccountCore（与短信通道共用，避免两条路把账号形状写歪）。
+  // `onExists` = 昵称被占时把邮箱验证码放回去（否则用户白等 60 秒冷却）。
+  // `onCreated` = **只在建号成功**时调 —— 裸注册此刻记一笔 IP 额度。
+  return createAccountCore(res, name, pass, { email: saved ? email : '' },
+    () => codeRestore(email, saved),
+    hasCodeField || REQUIRE_EMAIL_CODE ? null : () => regNote(ip));
+}
+
+
+// ══ 短信通道（2026-10-09）════════════════════════════════════════════════
+// 产品是阿里云「**短信认证**」(dypns)，不是「短信服务」——详见 ./sms.js 头注释。三条红线：
+//   1. **绝不按请求体里的手机号**发"找回密码"的码 —— 只发到账号**自己绑定的**号，
+//      否则就是把重置验证码投给攻击者指定的号码。
+//   2. **每次调用都计费**（套餐 1000 次）⇒ 限流比邮箱更严，另有**全局日上限**兜底。
+//   3. 验证码由**阿里云存储与校验**（发码时传 `##code##` 占位符）⇒ 本地没有短信码表，
+//      因而也没有"重放"问题：`CheckSmsVerifyCode` 是一次性消费。
+
+/** 归一：去空格/横线/括号、去 +86 前缀 ⇒ 统一成 11 位 */
+function normPhone(s) {
+  let t = String(s == null ? '' : s).replace(/[\s\-()]/g, '');
+  if (t.startsWith('+86')) t = t.slice(3);
+  else if (t.startsWith('86') && t.length === 13) t = t.slice(2);
+  return t;
+}
+/** 回给**账号本人**看的掩码：`182****0225`（完整号码只留服务端） */
+function maskPhone(p) {
+  const s = String(p == null ? '' : p);
+  return PHONE_RE.test(s) ? `${s.slice(0, 3)}****${s.slice(-4)}` : '';
+}
+
+const smsPhone = new Map();            // phone -> { lastSent, day, dayN }
+const smsIp = new Map();               // ip    -> { hourAt, hourN, day, dayN }
+let smsGlobal = { day: '', dayN: 0 };  // 全局日计数（保护 1000 次套餐）
+
+/** 返回 "" 放行，否则是给用户看的中文原因。**调用即记账**（发失败要 smsUnnote 退）。 */
+function smsRateCheck(ip, phone) {
+  const now = Date.now(), day = _todayBJ();
+  if (!SMS_ON) return '短信通道暂时不可用，请改用邮箱验证';
+  if (!sms.available()) return '短信通道暂时不可用，请改用邮箱验证';
+  if (smsGlobal.day !== day) smsGlobal = { day: day, dayN: 0 };
+  if (smsGlobal.dayN >= SMS_GLOBAL_PER_DAY) return '今天短信额度已用完，请改用邮箱验证';
+
+  let pr = smsPhone.get(phone);
+  if (!pr) { pr = { lastSent: 0, day: day, dayN: 0 }; smsPhone.set(phone, pr); }
+  if (pr.day !== day) { pr.day = day; pr.dayN = 0; }
+  if (pr.lastSent && now - pr.lastSent < SMS_RESEND_MS) {
+    return `请 ${Math.ceil((SMS_RESEND_MS - (now - pr.lastSent)) / 1000)} 秒后再试`;
+  }
+  if (pr.dayN >= SMS_PER_PHONE_DAY) return '这个手机号今天的验证码次数用完了，明天再试，或改用邮箱验证';
+
+  let ir = smsIp.get(ip);
+  if (!ir) { ir = { hourAt: now, hourN: 0, day: day, dayN: 0 }; smsIp.set(ip, ir); }
+  if (now - ir.hourAt > 3600000) { ir.hourAt = now; ir.hourN = 0; }
+  if (ir.day !== day) { ir.day = day; ir.dayN = 0; }
+  if (ir.hourN >= SMS_PER_IP_HOUR) return '操作太频繁了，过一会儿再试';
+  if (ir.dayN >= SMS_PER_IP_DAY) return '今天这台设备的短信次数用完了，明天再试';
+
+  pr.lastSent = now; pr.dayN += 1;
+  ir.hourN += 1; ir.dayN += 1;
+  smsGlobal.dayN += 1;
+  return '';
+}
+
+/** 发失败时退账 + 退冷却（否则用户白等 60 秒） */
+function smsUnnote(ip, phone) {
+  const pr = smsPhone.get(phone);
+  if (pr) { if (pr.dayN > 0) pr.dayN -= 1; pr.lastSent = 0; }
+  const ir = smsIp.get(ip);
+  if (ir) { if (ir.dayN > 0) ir.dayN -= 1; if (ir.hourN > 0) ir.hourN -= 1; }
+  if (smsGlobal.dayN > 0) smsGlobal.dayN -= 1;
+}
+
+/**
+ * 按手机号找账号：扫本地账号目录（账号量级百级，O(n) 读文件是毫秒级）。
+ * 为什么不用"手机号索引文件"：索引会漂移，而这里**正确性优先**（注册/绑定靠它判唯一）。
+ * STORE_MODE=oss 时直接返回 null（当前线上是 local；真换 OSS 再补索引）。
+ */
+function findAccountByPhone(phone) {
+  const root = store.LOCAL_DIR;
+  let shards = [];
+  try { shards = fs.readdirSync(root, { withFileTypes: true }); } catch (e) { return null; }
+  for (const d of shards) {
+    if (!d.isDirectory()) continue;
+    let files = [];
+    try { files = fs.readdirSync(path.join(root, d.name)); } catch (e) { continue; }
+    for (const f of files) {
+      if (!f.endsWith('.json')) continue;
+      try {
+        const a = JSON.parse(fs.readFileSync(path.join(root, d.name, f), 'utf8'));
+        if (a && normPhone(a.phone) === phone) return a;
+      } catch (e) { /* 单个坏文件跳过，不影响整体 */ }
+    }
+  }
+  return null;
+}
+
+/** 校验短信码；失败时**自己发好响应**并返回 false（调用方只管 `return`） */
+async function smsCheckOrFail(res, phone, code) {
+  let r;
+  try {
+    r = await sms.checkVerifyCode(phone, code);
+  } catch (e) {
+    console.error('[sms] 校验异常:', e.message);
+    sendJson(res, 502, { ok: false, error: '短信通道暂时不可用，请改用邮箱验证' });
+    return false;
+  }
+  if (!r.ok) {
+    console.log(`[sms] 校验未通过 phone=${maskPhone(phone)} code=${r.code} ${r.message}`);
+    sendJson(res, 400, { ok: false, error: '验证码不正确或已过期' });
+    return false;
+  }
+  return true;
+}
+
+/** 发短信验证码（共用）。true = 已发出 */
+async function smsSendOrFail(res, ip, phone, purpose) {
+  const why = smsRateCheck(ip, phone);
+  if (why) {
+    console.log(`[sms] 限流 ip=${ip} phone=${maskPhone(phone)} :: ${why}`);
+    sendJson(res, 429, { ok: false, error: why });
+    return false;
+  }
+  try {
+    const r = await sms.sendVerifyCode(phone, purpose);
+    if (!r.ok) {
+      smsUnnote(ip, phone);
+      console.error(`[sms] 发送失败 phone=${maskPhone(phone)} code=${r.code} ${r.message}`);
+      sendJson(res, 502, { ok: false, error: '短信发送失败，请稍后再试，或改用邮箱验证' });
+      return false;
+    }
+  } catch (e) {
+    smsUnnote(ip, phone);
+    console.error('[sms] 发送异常:', e.message);
+    sendJson(res, 502, { ok: false, error: '短信通道暂时不可用，请改用邮箱验证' });
+    return false;
+  }
+  console.log(`[sms] 已发送 phone=${maskPhone(phone)} ip=${ip} purpose=${purpose}`);
+  return true;
+}
+
+/** 发送成功的统一响应形状（客户端据 channel 决定文案） */
+function smsOkBody(phone) {
+  return {
+    ok: true, channel: 'sms', masked: maskPhone(phone),
+    ttl: SMS_CODE_TTL_SEC, resendAfter: Math.floor(SMS_RESEND_MS / 1000),
+  };
+}
+
+/** POST /send-code {channel:"sms", phone} —— 注册用短信码 */
+async function handleSendRegisterSms(res, ip, data) {
+  const phone = normPhone(data.phone);
+  if (!PHONE_RE.test(phone)) {
+    return sendJson(res, 400, { ok: false, error: '手机号格式不对（只支持中国大陆 11 位）' });
+  }
+  if (!(await smsSendOrFail(res, ip, phone, 'login'))) return;
+  return sendJson(res, 200, smsOkBody(phone));
+}
+
+/** POST /send-code {channel:"sms", name, purpose:"reset"} —— 重置码只发账号**自己绑定的**号 */
+async function handleSendResetSms(res, ip, name) {
+  let g;
+  try { g = await store.getAccount(uidOf(name)); }
+  catch (e) {
+    console.error('[reset] 存储异常:', e.message);
+    return sendJson(res, 502, { ok: false, error: '云端暂时不可用，请稍后再试' });
+  }
+  const phone = (g.ok && g.data) ? normPhone(g.data.phone) : '';
+  // 昵称不存在 / 未绑手机号 → 与"已发出"同一形状（masked 为空），不区分这两种情况（防枚举）
+  if (!PHONE_RE.test(phone)) {
+    console.log(`[reset] sms 无可用手机号（昵称不存在或未绑定） ip=${ip}`);
+    return sendJson(res, 200, { ok: true, channel: 'sms', masked: '', ttl: SMS_CODE_TTL_SEC });
+  }
+  if (!(await smsSendOrFail(res, ip, phone, 'reset'))) return;
+  return sendJson(res, 200, smsOkBody(phone));
+}
+
+/**
+ * 建号（**两条通道共用** —— 保证账号形状不会在两条路上漂移）。
+ * `contact` = { email } 或 { phone }，只写**验证过**的那个。
+ * `onExists` 用于邮箱通道把码放回去（短信码是一次性的，放不回去，所以传 null）。
+ * `onCreated` **只在建号成功**时调（昵称被占不调）—— 裸注册用它记 IP 额度。
+ */
+async function createAccountCore(res, name, pass, contact, onExists, onCreated) {
   const uid = uidOf(name);
   const salt = crypto.randomBytes(16).toString('hex');
   const acct = {
     v: 1, uid, name, salt, hash: hashPass(pass, salt),
-    // 🔴 只绑定**验证过**的邮箱。过渡档里"填了邮箱但没走验证码"的请求一律不绑定 ——
-    //    否则谁都能填别人的邮箱，将来做「忘记密码」就会把重置信发到受害者信箱。
-    email: saved ? email : '',
+    // 🔴 只绑定**验证过**的联系方式；没走验证的一律空串 ——
+    //    否则谁都能填别人的邮箱/手机号，将来做「忘记密码」就会把重置信发到受害者那边。
+    email: contact.email || '',
+    phone: contact.phone || '',
     created: nowIso(), updated: nowIso(),
     progress: { tier: '', tutorial_done: false, tutorial_hero: '' },
   };
-  const key = store.localPath(uid);
   let r;
   try {
     r = await store.createAccount(uid, acct);
@@ -793,16 +1094,94 @@ async function handleRegister(req, res) {
     return sendJson(res, 502, { ok: false, error: '云端暂时不可用，请稍后再试' });
   }
   if (r.exists) {
-    // 码是对的、只是昵称被占了 → 把验证码放回去（否则用户得白等 60 秒冷却重来一遍）
-    codeRestore(email, saved);
+    if (onExists) onExists();
     return sendJson(res, 409, { ok: false, error: '这个昵称已经有人用了，换一个' });
   }
   if (!r.ok) {
-    console.error('[register] 写入失败:', r.error || key);
+    console.error('[register] 写入失败:', r.error || '');
     return sendJson(res, 502, { ok: false, error: '云端暂时不可用，请稍后再试' });
   }
-  console.log(`[register] ok uid=${uid}`);
+  if (onCreated) onCreated();
+  console.log(`[register] ok uid=${uid} via=${contact.phone ? 'sms' : 'email'}`);
   return sendJson(res, 201, { ok: true, token: makeToken(uid), account: publicAccount(acct) });
+}
+
+/** 注册 · 短信通道（channel="sms"） */
+async function handleRegisterBySms(res, name, pass, data) {
+  const phone = normPhone(data.phone);
+  const code = trim(data.code);
+  if (!PHONE_RE.test(phone)) return sendJson(res, 400, { ok: false, error: '请填一个中国大陆手机号' });
+  if (!/^\d{6}$/.test(code)) return sendJson(res, 400, { ok: false, error: '请填 6 位数字验证码' });
+
+  // ① 先**探测**昵称（非原子，只为"别白烧一张短信码"；唯一性最终仍由条件写保证）
+  try {
+    const g = await store.getAccount(uidOf(name));
+    if (g.ok) return sendJson(res, 409, { ok: false, error: '这个昵称已经有人用了，换一个' });
+  } catch (e) {
+    console.error('[register] 存储异常:', e.message);
+    return sendJson(res, 502, { ok: false, error: '云端暂时不可用，请稍后再试' });
+  }
+  // ② 手机号全站唯一（否则"按手机号找回"会有歧义）
+  if (findAccountByPhone(phone)) {
+    return sendJson(res, 409, { ok: false, error: '这个手机号已经绑过账号了' });
+  }
+  // ③ 验码（阿里云侧一次性消费）
+  if (!(await smsCheckOrFail(res, phone, code))) return;
+  // ④ 建号
+  return createAccountCore(res, name, pass, { phone: phone }, null);
+}
+
+/**
+ * POST /bind-phone（**需登录**）
+ *   {action:"send",   phone}        → 给该号发绑定码（模板 100004）
+ *   {action:"commit", phone, code}  → 验码并写入当前账号（缺省 action = commit）
+ */
+async function handleBindPhone(req, res, uid) {
+  const ip = clientIp(req);
+  const { data, bad, tooLarge } = await readBody(req);
+  if (tooLarge) return sendJson(res, 413, { ok: false, error: '请求体过大' });
+  if (bad) return sendJson(res, 400, { ok: false, error: '请求格式不对' });
+
+  const action = trim(data.action).toLowerCase() || 'commit';
+  const phone = normPhone(data.phone);
+  if (!PHONE_RE.test(phone)) {
+    return sendJson(res, 400, { ok: false, error: '手机号格式不对（只支持中国大陆 11 位）' });
+  }
+  const owner = findAccountByPhone(phone);
+  if (owner && owner.uid !== uid) {
+    return sendJson(res, 409, { ok: false, error: '这个手机号已经绑过别的账号了' });
+  }
+  if (action === 'send') {
+    if (!(await smsSendOrFail(res, ip, phone, 'bind'))) return;
+    return sendJson(res, 200, smsOkBody(phone));
+  }
+  if (action !== 'commit') return sendJson(res, 400, { ok: false, error: 'action 只支持 send / commit' });
+
+  const code = trim(data.code);
+  if (!/^\d{6}$/.test(code)) return sendJson(res, 400, { ok: false, error: '请填 6 位数字验证码' });
+  if (!(await smsCheckOrFail(res, phone, code))) return;
+
+  let g;
+  try { g = await store.getAccount(uid); }
+  catch (e) {
+    console.error('[bind-phone] 存储异常:', e.message);
+    return sendJson(res, 502, { ok: false, error: '云端暂时不可用，请稍后再试' });
+  }
+  if (!g.ok || !g.data) return sendJson(res, 401, { ok: false, error: '登录已过期，请重新登录' });
+  g.data.phone = phone;
+  g.data.updated = nowIso();
+  try {
+    const r = await store.saveAccount(uid, g.data);
+    if (!r.ok) {
+      console.error('[bind-phone] 写入失败:', r.error || '');
+      return sendJson(res, 502, { ok: false, error: '云端暂时不可用，请稍后再试' });
+    }
+  } catch (e) {
+    console.error('[bind-phone] 存储异常:', e.message);
+    return sendJson(res, 502, { ok: false, error: '云端暂时不可用，请稍后再试' });
+  }
+  console.log(`[bind-phone] ok uid=${uid} phone=${maskPhone(phone)}`);
+  return sendJson(res, 200, { ok: true, account: publicAccount(g.data) });
 }
 
 /** 登录：验哈希。失败一律同一句话，不泄漏"昵称是否存在" */
@@ -1217,7 +1596,6 @@ async function handleGatewayProxy(req, res, gpath, { rateLimit = true } = {}) {
     res.writeHead(r.status, {
       'Content-Type': 'application/json; charset=utf-8',
       'Content-Length': Buffer.byteLength(text),
-      'Access-Control-Allow-Origin': '*',
       'Cache-Control': 'no-store',
     });
     return res.end(text);
@@ -1329,7 +1707,6 @@ async function handleLegacyLlm(req, res) {
     res.writeHead(r.status, {
       'Content-Type': 'application/json; charset=utf-8',
       'Content-Length': Buffer.byteLength(text),
-      'Access-Control-Allow-Origin': '*',
       'Cache-Control': 'no-store',
     });
     return res.end(text);
@@ -1344,21 +1721,23 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const p = url.pathname.replace(/\/+$/, '') || '/';
 
+  // 预检：**不再回任何 CORS 头**。缺了 `Access-Control-Allow-Origin`，浏览器会把后续真实
+  // 请求直接拦下 —— 这正是想要的：本服务不给网页用。原生客户端不发预检，不受影响。
   if (req.method === 'OPTIONS') {
-    res.writeHead(204, {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Max-Age': '86400',
-    });
+    res.writeHead(204);
     return res.end();
   }
 
   if (p === '/health') {
+    // 公网只给"活着"这一条：详情（存储 / 备份 / 邮件 / OSS / 网关）合起来等于一份
+    // **资产与依赖清单**（含投递邮箱、对象存储桶名与接入点、供应商模型名），不该给陌生人看。
+    // 本机调用（探针 / systemd / 运维 ssh）行为完全不变（2026-10-05 收紧）。
+    const base = { ok: true, service: 'zhanqi-cloud', ts: nowIso() };
+    if (!isLoopback(req)) return sendJson(res, 200, base);
+
     const info = oss.bucketInfo();
     const st = store.stats();
-    return sendJson(res, 200, {
-      ok: true, service: 'zhanqi-cloud', ts: nowIso(),
+    return sendJson(res, 200, Object.assign(base, {
       store: {
         mode: st.mode, accounts: st.accounts, dataBytes: st.bytes,
         // 磁盘实占按 4 KB 块估（小文件会放大，见 store.js 头注释）
@@ -1374,8 +1753,15 @@ const server = http.createServer(async (req, res) => {
         cc: REPORT_CC.length ? REPORT_CC : null,
         requireEmailCode: REQUIRE_EMAIL_CODE,
       },
+      // 短信出口：凭证在本机 .aliyun-sms.json；这里只回"就绪没有"，不回任何凭证内容
+      sms: {
+        product: 'aliyun-dypns(短信认证)',
+        on: SMS_ON,
+        ready: sms.available(),
+        detail: SMS_ON ? (sms.available() ? 'ok' : sms.configError()) : 'SMS_DISABLED=1',
+      },
       oss: { bucket: info.bucket, endpoint: info.endpoint },
-    });
+    }));
   }
 
   if (p === '/llm/ping' || p === '/v1/ping') {
@@ -1395,7 +1781,6 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, {
       'Content-Type': 'application/json; charset=utf-8',
       'Content-Length': body.length,
-      'Access-Control-Allow-Origin': '*',
       'Cache-Control': 'public, max-age=60',
     });
     return res.end(body);
@@ -1409,14 +1794,33 @@ const server = http.createServer(async (req, res) => {
   if ((p === '/send-code' || p === '/register/code') && req.method === 'POST') return handleSendCode(req, res);
   // 忘记密码 · 第②步：用重置码换新密码（第①步走上面 /send-code + purpose:"reset"）
   if (p === '/reset-password' && req.method === 'POST') return handleResetPassword(req, res);
+  // 绑定手机号（**需登录**）：action="send" 发码 / 缺省 "commit" 提交
+  if (p === '/bind-phone' && req.method === 'POST') {
+    const uidB = verifyToken(bearer(req));
+    if (!uidB) return sendJson(res, 401, { ok: false, error: '登录已过期，请重新登录' });
+    return handleBindPhone(req, res, uidB);
+  }
   // Bug 上报：服务端直投 AgentMail（**不抄送本人邮箱**）
   if ((p === '/bug-report' || p === '/report') && req.method === 'POST') return handleBugReport(req, res);
 
   // ── LLM 出口（全部转发给本机 llm-gateway）─────────────────────────────
   // 新客户端用 /v1/chat；老战棋客户端用 /llm（语义相同，保留以省一次重发包）。
-  if (p === '/v1/chat' && req.method === 'POST') return handleGatewayProxy(req, res, '/v1/chat');
-  if (p === '/v1/providers') return handleGatewayProxy(req, res, '/v1/providers', { rateLimit: false });
-  if (p === '/llm' && req.method === 'POST') return handleLegacyLlm(req, res);
+  // 🔴 拒绝"来自浏览器"的调用：浏览器**一定**带 Origin，原生客户端（Godot / 桌面 exe）不带。
+  //    光去掉 CORS 头还不够 —— 用 text/plain 发的"简单请求"不触发预检，副作用（真的调模型、
+  //    真的扣额度）照样会发生。所以这里显式拦掉带 Origin 的调用（2026-10-05）。
+  const fromBrowser = !!req.headers.origin;
+  if (p === '/v1/chat' && req.method === 'POST') {
+    if (fromBrowser) return sendJson(res, 403, { ok: false, error: '本接口仅供客户端调用' });
+    return handleGatewayProxy(req, res, '/v1/chat');
+  }
+  if (p === '/v1/providers') {
+    if (fromBrowser) return sendJson(res, 403, { ok: false, error: '本接口仅供客户端调用' });
+    return handleGatewayProxy(req, res, '/v1/providers', { rateLimit: false });
+  }
+  if (p === '/llm' && req.method === 'POST') {
+    if (fromBrowser) return sendJson(res, 403, { ok: false, error: '本接口仅供客户端调用' });
+    return handleLegacyLlm(req, res);
+  }
 
   if (p === '/me' || p === '/progress') {
     const uid = verifyToken(bearer(req));

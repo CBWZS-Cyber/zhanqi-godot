@@ -2183,12 +2183,21 @@ var _login_msg: Label = null
 var _login_remember: CheckBox = null   # 「记住我（下次自动登录）」：不勾则下次启动不自动登录
 var _sign_btn: Button = null           # start 面板的「退出登录 / 登录云端」（二合一，文案动态）
 var _acct_row: HBoxContainer = null    # 账号信息 + 上面那个按钮，同处一行（紧跟标题）
-## 注册才需要的两项（邮箱 + 验证码）：默认收起 —— 登录的人不必看它们
+## 注册才需要的几项（联系方式 + 验证码 + 渠道切换）：默认收起 —— 登录的人不必看它们
 var _reg_box: VBoxContainer = null
-var _login_email: LineEdit = null
+## 联系方式输入框：**按渠道换语义**（短信 → 手机号；邮箱 → 邮件地址）。
+## 名字用 contact 而不是 email，就是为了不再暗示"注册只能填邮箱"（2026-10-09 双通道）。
+var _login_contact: LineEdit = null
 var _login_code: LineEdit = null
 var _code_btn: Button = null
 var _btn_register: Button = null
+## 注册渠道：默认**短信**（2026-10-09 用户定的"主用短信、邮箱作备选"）。
+## `_reg_pending_ch` 记"码是从哪个渠道发出的" —— 回调文案必须跟发出时一致，
+## 否则玩家在等码期间切了渠道，会看到"验证码已发到你的手机"但其实发的是邮箱。
+var _reg_ch := CloudApi.CH_SMS
+var _reg_pending_ch := ""
+var _reg_btn_sms: Button = null
+var _reg_btn_mail: Button = null
 var _cloud: CloudApi = null
 ## 自动更新（2026-10-04）：UpdateCheck 只查清单，AutoUpdate 负责下载与替换
 var _upd: UpdateCheck = null
@@ -2259,7 +2268,7 @@ func _build_login_panel() -> void:
 	var vb: VBoxContainer = card.get_meta("vbox")
 
 	var cached := CloudSession.cached_name(Global.cloud_service)
-	var tip := "登录后进度跟着账号走，换台电脑也能接着玩。\n不想登录就点最下面的「离线玩」：直接开始，只是进度只留在这台电脑。\n（注册新账号需要填一个邮箱来收验证码）"
+	var tip := "登录后进度跟着账号走，换台电脑也能接着玩。\n不想登录就点最下面的「离线玩」：直接开始，只是进度只留在这台电脑。\n（注册新账号要填手机号或邮箱来收验证码）"
 	if cached != "":
 		tip = "上次登录过「%s」，输密码就能继续。\n%s" % [cached, tip]
 	vb.add_child(_small_label(tip, 16))
@@ -2295,8 +2304,20 @@ func _build_login_panel() -> void:
 	_reg_box.visible = false
 	vb.add_child(_reg_box)
 
-	_login_email = _make_edit("邮箱（用来收验证码）", 420, 48, 20)
-	_reg_box.add_child(_login_email)
+	# 渠道切换（2026-10-09）：两个**横排小按钮**互斥（用户点名要的形态）。
+	# 为什么不做下拉框：只有两个选项，横排一眼看全，且少一次展开动作。
+	var chrow := HBoxContainer.new()
+	chrow.alignment = BoxContainer.ALIGNMENT_CENTER
+	chrow.add_theme_constant_override("separation", 10)
+	_reg_box.add_child(chrow)
+	var chgrp := ButtonGroup.new()
+	_reg_btn_sms = _make_channel_btn("短信验证", chgrp, Callable(self, "_on_reg_channel").bind(CloudApi.CH_SMS))
+	_reg_btn_mail = _make_channel_btn("邮箱验证", chgrp, Callable(self, "_on_reg_channel").bind(CloudApi.CH_EMAIL))
+	chrow.add_child(_reg_btn_sms)
+	chrow.add_child(_reg_btn_mail)
+
+	_login_contact = _make_edit("", 420, 48, 20)
+	_reg_box.add_child(_login_contact)
 
 	var code_row := HBoxContainer.new()
 	code_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -2307,6 +2328,7 @@ func _build_login_panel() -> void:
 	code_row.add_child(_login_code)
 	_code_btn = _make_button("获取验证码", Callable(self, "_on_send_code"))
 	code_row.add_child(_code_btn)
+	_sync_reg_channel_ui()
 
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -2364,11 +2386,17 @@ var _forgot_apply_btn: Button = null
 var _forgot_msg: Label = null
 var _forgot_step := 0        # 0 = 还没发码；1 = 已发码
 var _forgot_lock_name := ""  # 发码后锁定的昵称（中途改掉会让第二步对不上账号）
+## 找回渠道（2026-10-09）：默认短信。⚠️ 找回**不需要填联系方式** —— 码永远发到
+## "该账号自己绑定的"那个号/邮箱，这是防"拿别人邮箱重置别人账号"的核心设计。
+var _forgot_ch := CloudApi.CH_SMS
+var _forgot_btn_sms: Button = null
+var _forgot_btn_mail: Button = null
 
 func _open_forgot_panel() -> void:
 	_close_forgot_panel()
 	_forgot_step = 0
 	_forgot_lock_name = ""
+	_forgot_ch = CloudApi.CH_SMS   # 每次打开都回到默认（短信优先），免得沿用上次留下的渠道
 
 	var layer := Control.new()
 	layer.name = "ForgotPopup"
@@ -2411,11 +2439,23 @@ func _open_forgot_panel() -> void:
 	UiTheme.style_title(ti, 30)
 	vb.add_child(ti)
 
-	_forgot_msg = _small_label("填你的昵称，我们把 6 位验证码发到该账号绑定的邮箱。", 15)
+	_forgot_msg = _small_label("填你的昵称，我们把 6 位验证码发到该账号绑定的手机号。", 15)
 	vb.add_child(_forgot_msg)
 
 	_forgot_name = _make_edit("你的昵称", 400, 48, 20)
 	vb.add_child(_forgot_name)
+
+	# 找回渠道（2026-10-09）：同样两个横排小按钮。
+	var fchrow := HBoxContainer.new()
+	fchrow.alignment = BoxContainer.ALIGNMENT_CENTER
+	fchrow.add_theme_constant_override("separation", 10)
+	vb.add_child(fchrow)
+	var fchgrp := ButtonGroup.new()
+	_forgot_btn_sms = _make_channel_btn("短信验证", fchgrp, Callable(self, "_on_forgot_channel").bind(CloudApi.CH_SMS))
+	_forgot_btn_mail = _make_channel_btn("邮箱验证", fchgrp, Callable(self, "_on_forgot_channel").bind(CloudApi.CH_EMAIL))
+	fchrow.add_child(_forgot_btn_sms)
+	fchrow.add_child(_forgot_btn_mail)
+	_sync_forgot_channel_ui()
 
 	var crow := HBoxContainer.new()
 	crow.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -2470,6 +2510,34 @@ func _refresh_forgot_ui() -> void:
 		_forgot_send_btn.disabled = sent
 	if _forgot_apply_btn != null:
 		_forgot_apply_btn.disabled = not sent
+	# 发码后锁渠道：否则玩家可能切到另一种渠道，然后拿"另一个渠道的码"去撞
+	if _forgot_btn_sms != null:
+		_forgot_btn_sms.disabled = sent
+	if _forgot_btn_mail != null:
+		_forgot_btn_mail.disabled = sent
+
+
+## 把找回面板的渠道按钮与提示文案同步成当前渠道
+func _sync_forgot_channel_ui() -> void:
+	var sms := _forgot_ch == CloudApi.CH_SMS
+	for pair in [[_forgot_btn_sms, sms], [_forgot_btn_mail, not sms]]:
+		var b: Button = pair[0]
+		if b != null:
+			b.button_pressed = bool(pair[1])
+			b.text = ("● " if bool(pair[1]) else "○ ") + str(b.get_meta("ch_label"))
+	if _forgot_msg != null and _forgot_step == 0:
+		_forgot_msg.text = "填你的昵称，我们把 6 位验证码发到该账号绑定的手机号。" if sms \
+			else "填你的昵称，我们把 6 位验证码发到该账号绑定的邮箱。"
+
+
+func _on_forgot_channel(ch: String) -> void:
+	if ch == _forgot_ch or _forgot_step >= 1:
+		return
+	_forgot_ch = ch
+	if _forgot_code != null:
+		_forgot_code.text = ""
+	_sync_forgot_channel_ui()
+
 
 func _close_forgot_panel() -> void:
 	if _forgot_layer != null and is_instance_valid(_forgot_layer):
@@ -2483,6 +2551,8 @@ func _close_forgot_panel() -> void:
 	_forgot_msg = null
 	_forgot_step = 0
 	_forgot_lock_name = ""
+	_forgot_btn_sms = null
+	_forgot_btn_mail = null
 
 func _fmsg(t: String) -> void:
 	if _forgot_msg != null and is_instance_valid(_forgot_msg):
@@ -2498,7 +2568,10 @@ func _on_forgot_send() -> void:
 		return
 	_fmsg("正在发送…")
 	_forgot_lock_name = nm
-	_cloud.send_reset_code(nm)
+	if _forgot_ch == CloudApi.CH_SMS:
+		_cloud.send_reset_code_sms(nm)
+	else:
+		_cloud.send_reset_code(nm)
 
 func _on_forgot_send_done(ok: bool, msg: String) -> void:
 	if _forgot_layer == null or not is_instance_valid(_forgot_layer):
@@ -2507,8 +2580,11 @@ func _on_forgot_send_done(ok: bool, msg: String) -> void:
 		_fmsg(msg)
 		return
 	if msg == "":
-		# 空掩码 = 这个账号**没绑邮箱**（老账号，或过渡档里没走验证码注册的）
-		_fmsg("这个账号没有绑定邮箱，没法自助找回。\n换一台还记得密码的设备登录，或找作者帮你重置。")
+		# 空掩码 = 该账号**没绑这个联系方式**（老账号，或绑的是另一种渠道）。
+		# 服务端故意不区分"昵称不存在"与"没绑"（防枚举），所以出路得由界面给出。
+		var cur := "手机号" if _forgot_ch == CloudApi.CH_SMS else "邮箱"
+		var other := "邮箱" if _forgot_ch == CloudApi.CH_SMS else "短信"
+		_fmsg("这个账号没有绑定%s，没法用这种方式找回。\n点上面「%s验证」再试一次，或找作者帮你重置。" % [cur, other])
 		return
 	_forgot_step = 1
 	_refresh_forgot_ui()
@@ -2532,7 +2608,10 @@ func _on_forgot_apply() -> void:
 		_fmsg("云端组件没就绪，稍后再试")
 		return
 	_fmsg("正在重置…")
-	_cloud.reset_password(_forgot_lock_name, cd, pw)
+	if _forgot_ch == CloudApi.CH_SMS:
+		_cloud.reset_password_sms(_forgot_lock_name, cd, pw)
+	else:
+		_cloud.reset_password(_forgot_lock_name, cd, pw)
 
 func _on_forgot_reset_done(ok: bool, account: Dictionary, error: String) -> void:
 	if not ok:
@@ -2640,6 +2719,45 @@ func _build_update_widgets() -> void:
 	_update_btn.add_theme_font_size_override("font_size", 17)
 	_update_btn.visible = false
 	vb.add_child(_update_btn)
+
+
+## 渠道切换按钮（2026-10-09 双通道）：两个**横排小按钮**互斥（用户点名要的形态）。
+## ⚠️ 选中态用**文字前缀**（● / ○）而不只靠底色 —— `style_button` 只有
+##    normal/hover/pressed 三态、没有专门的 toggle 皮肤，仅靠底色在深色卡片上不够显眼。
+## 原始文案存在 meta 里，切换时重新拼前缀（别在 text 上反复加）。
+func _make_channel_btn(txt: String, grp: ButtonGroup, cb: Callable) -> Button:
+	var b := Button.new()
+	b.toggle_mode = true
+	b.button_group = grp
+	b.focus_mode = Control.FOCUS_NONE
+	b.custom_minimum_size = Vector2(150, 44)
+	b.set_meta("min_x", 150.0)
+	b.set_meta("min_y", 44.0)
+	b.set_meta("fz", 17.0)
+	b.set_meta("ch_label", txt)
+	b.add_theme_font_size_override("font_size", 17)
+	UiTheme.style_button(b, UiTheme.KIND_SECONDARY)
+	b.toggled.connect(func(on: bool) -> void:
+		if on:
+			cb.call())
+	return b
+
+
+## 手机号归一化：去空格 / 横线，去 `+86`（或 13 位的 `86…`）前缀。
+## 服务端也会归一，但**客户端先归**才能正确预校验，且发出去的就是干净号码。
+func _norm_phone(s: String) -> String:
+	var t := s.strip_edges().replace(" ", "").replace("-", "")
+	if t.begins_with("+86"):
+		t = t.substr(3)
+	elif t.begins_with("86") and t.length() == 13:
+		t = t.substr(2)
+	return t
+
+
+## 只做"像不像大陆手机号"的粗判（11 位、1 开头）。真正的校验在服务端。
+func _looks_like_phone(s: String) -> bool:
+	var t := _norm_phone(s)
+	return t.length() == 11 and t.begins_with("1") and t.is_valid_int()
 
 
 ## 统一样式的输入框（沿用 min_x/min_y/fz 自适应约定，_fit() 会按窗口缩放）
@@ -2903,21 +3021,76 @@ func _collapse_register() -> void:
 		_btn_register.text = "注册新账号"
 
 
-## 「获取验证码」：只负责发码，真正的校验在服务端
-func _on_send_code() -> void:
-	var em := "" if _login_email == null else _login_email.text.strip_edges()
-	if not _looks_like_email(em):
-		_login_msg.text = "先填一个能收到信的邮箱"
+## 把注册面板的控件同步成"当前渠道"的样子（输入框提示 / 渠道按钮选中态）
+func _sync_reg_channel_ui() -> void:
+	var sms := _reg_ch == CloudApi.CH_SMS
+	if _login_contact != null:
+		_login_contact.placeholder_text = "手机号（11 位，用来收短信）" if sms else "邮箱（用来收邮件）"
+	for pair in [[_reg_btn_sms, sms], [_reg_btn_mail, not sms]]:
+		var b: Button = pair[0]
+		if b != null:
+			b.button_pressed = bool(pair[1])
+			b.text = ("● " if bool(pair[1]) else "○ ") + str(b.get_meta("ch_label"))
+
+
+## 切渠道。**清空已填的联系方式与验证码** —— 半截手机号留在框里当邮箱发出去，
+## 服务端只会回一句"格式不对"，玩家得自己猜哪里错了。
+func _on_reg_channel(ch: String) -> void:
+	if ch == _reg_ch:
 		return
-	_login_msg.text = "正在发送验证码…"
-	_cloud.send_code(em)
+	_reg_ch = ch
+	if _login_contact != null:
+		_login_contact.text = ""
+	if _login_code != null:
+		_login_code.text = ""
+	if _login_msg != null:
+		_login_msg.text = ""
+	_sync_reg_channel_ui()
+
+
+## 展开注册字段时的步骤提示 —— 按渠道说，别写着"填好邮箱"却给个手机号输入框
+func _reg_hint() -> String:
+	if _reg_ch == CloudApi.CH_SMS:
+		return "填好手机号 → 点「获取验证码」→ 把收到的 6 位码填上 → 点「确认注册」。"
+	return "填好邮箱 → 点「获取验证码」→ 把收到的 6 位码填上 → 点「确认注册」。"
+
+
+## 「获取验证码」：只负责发码，真正的校验在服务端
+## ⚠️ `_cloud == null` 的检查放在**格式校验之后** —— "格式不对"比"组件没就绪"更可能是
+##    用户自己的问题，先报前者更有指导性（也让回归能在摘掉 CloudApi 后照测格式分支）。
+func _on_send_code() -> void:
+	var c := "" if _login_contact == null else _login_contact.text.strip_edges()
+	if _reg_ch == CloudApi.CH_SMS:
+		if not _looks_like_phone(c):
+			_login_msg.text = "先填一个大陆手机号（11 位）"
+			return
+		if _cloud == null:
+			_login_msg.text = "云端组件没就绪，稍后再试"
+			return
+		_login_msg.text = "正在发送短信验证码…"
+		_reg_pending_ch = CloudApi.CH_SMS
+		_cloud.send_code_sms(_norm_phone(c))
+	else:
+		if not _looks_like_email(c):
+			_login_msg.text = "先填一个能收到信的邮箱"
+			return
+		if _cloud == null:
+			_login_msg.text = "云端组件没就绪，稍后再试"
+			return
+		_login_msg.text = "正在发送验证码…"
+		_reg_pending_ch = CloudApi.CH_EMAIL
+		_cloud.send_code(c)
 
 
 func _on_send_code_done(ok: bool, msg: String) -> void:
 	if not ok:
-		_login_msg.text = msg          # 服务端给的是中文原因（冷却 / 超上限 / SMTP 失败）
+		_login_msg.text = msg          # 服务端给的是中文原因（冷却 / 超上限 / SMTP 失败 / 短信额度）
 		return
-	_login_msg.text = "验证码已发到你的邮箱（5 分钟内有效）。"
+	# 文案跟**发出时**的渠道走，不跟"当前选中项"——玩家可能在等码期间切了渠道
+	if _reg_pending_ch == CloudApi.CH_SMS:
+		_login_msg.text = "验证码已发到你的手机（5 分钟内有效）。"
+	else:
+		_login_msg.text = "验证码已发到你的邮箱（5 分钟内有效）。"
 	_start_code_cooldown()
 
 
@@ -2943,12 +3116,12 @@ func _looks_like_email(s: String) -> bool:
 
 
 func _on_cloud_register() -> void:
-	# 第一次点：先展开邮箱/验证码两项（注册才需要），按钮改名再点一次才真提交
+	# 第一次点：先展开联系方式/验证码（注册才需要），按钮改名再点一次才真提交
 	if _reg_box != null and not _reg_box.visible:
 		_reg_box.visible = true
 		if _btn_register != null:
 			_btn_register.text = "确认注册"
-		_login_msg.text = "填好邮箱 → 点「获取验证码」→ 把收到的 6 位码填上 → 点「确认注册」。"
+		_login_msg.text = _reg_hint()
 		return
 	var nm := "" if _login_name == null else _login_name.text.strip_edges()
 	var pw := "" if _login_pass == null else _login_pass.text
@@ -2958,16 +3131,30 @@ func _on_cloud_register() -> void:
 	if pw.length() < 6:
 		_login_msg.text = "密码至少 6 位"
 		return
-	var em := "" if _login_email == null else _login_email.text.strip_edges()
-	if not _looks_like_email(em):
-		_login_msg.text = "请填一个能收到信的邮箱"
-		return
+	var c := "" if _login_contact == null else _login_contact.text.strip_edges()
 	var cd := "" if _login_code == null else _login_code.text.strip_edges()
 	if cd.length() != 6 or not cd.is_valid_int():
 		_login_msg.text = "请填 6 位数字验证码"
 		return
-	_login_msg.text = "正在注册…"
-	_cloud.register(nm, pw, em, cd)
+	# `_cloud == null` 的检查放在**格式校验之后**（理由同 `_on_send_code`）
+	if _reg_ch == CloudApi.CH_SMS:
+		if not _looks_like_phone(c):
+			_login_msg.text = "请填一个大陆手机号（11 位）"
+			return
+		if _cloud == null:
+			_login_msg.text = "云端组件没就绪，稍后再试"
+			return
+		_login_msg.text = "正在注册…"
+		_cloud.register_sms(nm, pw, _norm_phone(c), cd)
+	else:
+		if not _looks_like_email(c):
+			_login_msg.text = "请填一个能收到信的邮箱"
+			return
+		if _cloud == null:
+			_login_msg.text = "云端组件没就绪，稍后再试"
+			return
+		_login_msg.text = "正在注册…"
+		_cloud.register(nm, pw, c, cd)
 
 
 func _on_cloud_login_done(ok: bool, account: Dictionary, error: String) -> void:

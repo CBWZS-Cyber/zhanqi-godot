@@ -97,8 +97,16 @@ if (flag('--manifest-only')) {
   const manifest = {
     latest: VER,
     releasedAt: todayDash,
-    downloads: { win64: url },
+    downloads: {
+      win64: url,
+      // 🔴 **安卓 APK 直链**（2026-10-10 加）：手机端「去下载新版本」靠它打开浏览器。
+      //    **绝不能让手机端去下 win64 的 exe/zip** —— 那是 Windows 更新链，手机装不了。
+      //    缺省空 = 手机端显示"清单里还没有安卓安装包地址"。
+      //    用法：--android-url "<APK 签名直链>" --android-size "297.3 MB"
+      android: opt('--android-url', ''),
+    },
     sizeWin64: size,
+    sizeAndroid: opt('--android-size', ''),
     update: { win64: opt('--update-url', '') },   // 缺省空 —— 补清单时用 --update-url <zip 直链>
     sizeUpdateWin64: opt('--update-size', ''),
     notes: releaseNotes(),
@@ -187,7 +195,13 @@ function releaseNotes() {
             [path.join(__dirname, 'cloud-service', 'push_update_pkg.js'), exePath, VER, '--clean-old'],
             { encoding: 'utf8' });
           process.stdout.write(out.split('\n').map(l => (l ? '  ' + l : l)).join('\n'));
-          const um = out.match(/(https:\/\/\S+?\.zip\?\S+)/);
+          // 🔴 **必须排除引号**（2026-10-09 修）：`push_update_pkg.js` 打印的是 **JSON 片段**
+          //    （`"update": { "win64": "https://…zip?…" }`），链接被一对引号包着；
+          //    而 `\S+`（"非空白"）**把引号也算进去** ⇒ 抓到的 URL 末尾多一个 `"`
+          //    ⇒ 客户端下载 **403 `SignatureDoesNotMatch`**（签名里带了个引号）。
+          //    ⚠️ 这个 bug 藏了很久：前几次更新包都因 `spawnSync EBUSY` 失败、改由手工补链接，
+          //    2026-10-09 首次自动成功，反而把它抓了出来。
+          const um = out.match(/(https:\/\/[^\s"]+\.zip\?[^\s"]+)/);
           if (um) {
             updateUrl = um[1];
             const zp = path.join(ROOT, 'build', `zhanqi-update-v${VER}.zip`);

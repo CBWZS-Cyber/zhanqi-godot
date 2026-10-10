@@ -48,12 +48,49 @@ func _ready() -> void:
 
 ## 本环境能否**自动**下载并替换：只有独立运行的桌面版可以。
 ## 编辑器里跑会指向 Godot 安装目录；无头是回归测试，都不该动盘。
+## 🔴 **安卓也不行**（2026-10-10 修，玩家实测）：整条链是 Windows 专属 ——
+##    更新脚本是 `.bat`、拉起靠 `cmd.exe`、替换的是 exe，安卓上一个都不成立；
+##    而且 `update_dir()` 取的是 `OS.get_executable_path()` 下的 `_update/`，
+##    在安卓上那是 **APK 包内部（只读）**，连下载文件都写不进去 —— 玩家一开下载就
+##    "下载中断 result=10"（那是 `RESULT_DOWNLOAD_FILE_CANT_OPEN`：打不开下载目标文件）。
+##    安卓走「打开浏览器下载新 APK」的路径（见 main_ui 的更新面板）。
 static func can_auto() -> bool:
 	if OS.has_feature("editor"):
 		return false
 	if DisplayServer.get_name() == "headless":
 		return false
+	if OS.has_feature("android"):
+		return false
 	return true
+
+
+## 下载错误码 → 给玩家看的中文。
+## 🔴 **绝不把 `result=N` 这种内部码怼给玩家**（2026-10-10 用户点名）：
+##    玩家看到"下载中断（result=10）"完全无法行动 —— 他需要的是"下一步做什么"。
+static func human_error(result: int) -> String:
+	match result:
+		HTTPRequest.RESULT_CANT_CONNECT:
+			return "连不上更新服务器，请检查网络后重试"
+		HTTPRequest.RESULT_CANT_RESOLVE:
+			return "找不到更新服务器，请检查网络后重试"
+		HTTPRequest.RESULT_CONNECTION_ERROR:
+			return "网络连接中断了，请稍后重试"
+		HTTPRequest.RESULT_TLS_HANDSHAKE_ERROR:
+			return "安全连接建立失败，请稍后重试"
+		HTTPRequest.RESULT_NO_RESPONSE:
+			return "更新服务器没有响应，请稍后重试"
+		HTTPRequest.RESULT_BODY_SIZE_LIMIT_EXCEEDED:
+			return "下载的数据异常，请重试"
+		HTTPRequest.RESULT_DOWNLOAD_FILE_CANT_OPEN:
+			return "存储写入失败（设备空间可能不足），清理一下空间再试"
+		HTTPRequest.RESULT_DOWNLOAD_FILE_WRITE_ERROR:
+			return "下载写入中断，请检查设备存储空间后重试"
+		HTTPRequest.RESULT_REDIRECT_LIMIT_REACHED:
+			return "下载地址跳转次数过多，请稍后重试"
+		HTTPRequest.RESULT_TIMEOUT:
+			return "下载超时了，请检查网络后重试"
+		_:
+			return "下载没有成功（可能是网络波动），请稍后重试"
 
 
 ## 游戏目录下的 `_update/`（新 exe 与更新脚本都放这）
@@ -120,10 +157,10 @@ func _on_downloaded(result: int, code: int, _h: PackedStringArray, _body: Packed
 	_polling = false
 	set_process(false)
 	if result != HTTPRequest.RESULT_SUCCESS:
-		failed.emit("下载中断（result=%d）" % result)
+		failed.emit(human_error(result))   # 🔴 只给人话，不暴露内部错误码（2026-10-10 用户点名）
 		return
 	if code != 200:
-		failed.emit("下载失败：服务器返回 %d" % code)
+		failed.emit("下载失败：服务器暂时不可用（%d），请稍后重试" % code)
 		return
 	var zip_path: String = update_dir().path_join(ZIP_NAME)
 	var f := FileAccess.open(zip_path, FileAccess.READ)

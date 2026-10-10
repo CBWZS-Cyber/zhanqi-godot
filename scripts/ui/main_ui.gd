@@ -2906,10 +2906,13 @@ func _on_update_checked(res: Dictionary) -> void:
 		_update_note.visible = true
 	if _update_btn != null:
 		_update_btn.visible = true
+		# 安卓不走"后台替换"，按钮语义不同（2026-10-10）
+		_update_btn.text = "去下载新版本" if OS.has_feature("android") else "立即更新"
 	if _update_body != null:
 		_update_body.text = _update_text(res)
 	# 上次已下好却没重启 → 直接亮出「重启更新」，别让玩家白下第二遍（上百 MB）
-	if _auto != null:
+	# ⚠️ 桌面专属：安卓没有"下好待重启"这回事（它是浏览器下载 + 手动安装）
+	if _auto != null and not OS.has_feature("android"):
 		var prepared := _auto.prepared_version()
 		if prepared != "" and prepared == latest:
 			_on_update_ready(prepared)
@@ -2918,9 +2921,6 @@ func _on_update_checked(res: Dictionary) -> void:
 func _update_text(res: Dictionary) -> String:
 	var lines := PackedStringArray()
 	lines.append("本机版本：v%s　　最新版本：v%s" % [str(res.get("current", "")), str(res.get("latest", ""))])
-	var size := str(res.get("size", ""))
-	if size != "":
-		lines.append("安装包大小：%s" % size)
 	var notes: Variant = res.get("notes", PackedStringArray())
 	if typeof(notes) == TYPE_ARRAY and (notes as Array).size() > 0:
 		lines.append("")
@@ -2928,6 +2928,22 @@ func _update_text(res: Dictionary) -> String:
 		for n in (notes as Array):
 			lines.append("　· " + str(n))
 	lines.append("")
+	# 🔴 **安卓分支**（2026-10-10 修，玩家实测）：「下载 zip → 换 exe → .bat 重启替换」
+	#    整条链在安卓上不成立 —— APK 包内部只读（下载一开就失败）、没有 cmd.exe、
+	#    也没有"替换 exe"这回事。安卓的正确路径：**打开浏览器下载新 APK → 玩家手动安装**。
+	if OS.has_feature("android"):
+		var au := str(res.get("android_url", ""))
+		if au != "":
+			var sa := str(res.get("size_android", ""))
+			var st := ("（约 %s）" % sa) if sa != "" else ""
+			lines.append("点「去下载新版本」会打开浏览器下载新的手机安装包%s。" % st)
+			lines.append("下载完成后点开它安装；若系统提示「未知来源」，允许一次即可。")
+		else:
+			lines.append("版本清单里还没有安卓安装包地址 —— 去群里要最新的手机版吧。")
+		return "\n".join(lines)
+	var size := str(res.get("size", ""))
+	if size != "":
+		lines.append("安装包大小：%s" % size)
 	if not AutoUpdate.can_auto():
 		lines.append("当前环境（编辑器 / 无头模式）不支持自动更新，请用安装包手动升级。")
 	elif str(res.get("pkg_url", "")) != "":
@@ -2943,6 +2959,20 @@ func _update_text(res: Dictionary) -> String:
 
 ## 开始下载（玩家点了「立即更新」，也用于失败后重试）
 func _on_update_download() -> void:
+	# 🔴 **安卓分支**（2026-10-10 修）：不走"后台下载替换"——那条链是 Windows 专属
+	#    （详见 _update_text 的安卓注释）。打开浏览器下载新 APK，交给玩家安装。
+	if OS.has_feature("android"):
+		var au := str(_update_info.get("android_url", ""))
+		if au == "":
+			au = str(_update_info.get("url", ""))   # 兜底：清单没给安卓包时退回安装包地址
+		if au == "":
+			if _update_body != null:
+				_update_body.text = "版本清单里还没有安卓安装包地址 —— 去群里要最新的手机版吧。"
+			return
+		if _update_body != null:
+			_update_body.text = "已打开浏览器开始下载，下载完成后点开安装包安装。\n（浏览器若提示不是常用文件，选「仍要下载」；安装时提示「未知来源」允许一次即可。）"
+		OS.shell_open(au)
+		return
 	var pkg := str(_update_info.get("pkg_url", ""))
 	if pkg == "":
 		# 清单里没有自动更新包（update.win64）→ 退回"打开浏览器下载安装包"的老行为

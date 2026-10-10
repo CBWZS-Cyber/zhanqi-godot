@@ -58,6 +58,46 @@ func _initialize() -> void:
 	ck(UpdateCheck.compare_versions("9.20", "10.4.0") < 0, "9.20 < 10.4.0（按数字段比，非字符串）")
 	ck(UpdateCheck.compare_versions("1.2.2", "1.2.10") < 0, "1.2.2 < 1.2.10（位数对齐，非字典序）")
 
+	# ⑤b 错误码 → 人话（2026-10-10 加，用户点名）：**绝不把 result=N 怼给玩家**。
+	#    起因：手机端显示"下载中断（result=10）"——那是 RESULT_DOWNLOAD_FILE_CANT_OPEN
+	#    （安卓上 _update/ 在 APK 包内部，写不进去），玩家完全没法行动。
+	ck(AutoUpdate.human_error(HTTPRequest.RESULT_DOWNLOAD_FILE_CANT_OPEN).find("存储") >= 0,
+		"result=10（写不进文件）翻成「存储写入失败」")
+	ck(AutoUpdate.human_error(HTTPRequest.RESULT_TIMEOUT).find("超时") >= 0, "超时码翻成「下载超时」")
+	ck(AutoUpdate.human_error(HTTPRequest.RESULT_CANT_CONNECT).find("连不上") >= 0, "连不上翻成人话")
+	ck(AutoUpdate.human_error(HTTPRequest.RESULT_CONNECTION_ERROR).find("网络") >= 0, "连接中断翻成人话")
+	ck(AutoUpdate.human_error(999).find("网络波动") >= 0, "未知码也有兜底人话（不输出内部码）")
+	ck(AutoUpdate.human_error(HTTPRequest.RESULT_DOWNLOAD_FILE_CANT_OPEN).find("result=") < 0
+		and AutoUpdate.human_error(999).find("result=") < 0, "人话里**不含**内部错误码字样")
+
+	# ⑤c 清单解析：安卓段（2026-10-10 加）—— 手机端「去下载新版本」靠它拿 APK 直链
+	var uc := UpdateCheck.new()
+	root.add_child(uc)
+	var got_res: Array = []
+	uc.finished.connect(func(r: Dictionary) -> void: got_res.append(r))
+	uc._finish_ok({
+		"latest": "10.5.4", "sizeWin64": "159.4 MB", "sizeAndroid": "300 MB",
+		"downloads": {"win64": "https://x/zhanqi-install.exe", "android": "https://x/zhanqi.apk"},
+		"update": {"win64": "https://x/zhanqi-update.zip"},
+		"notes": ["n1"],
+	})
+	await process_frame
+	var res: Dictionary = got_res[0] if got_res.size() > 0 else {}
+	ck(str(res.get("android_url", "")) == "https://x/zhanqi.apk", "清单解析：android_url 取自 downloads.android")
+	ck(str(res.get("size_android", "")) == "300 MB", "清单解析：size_android")
+	ck(str(res.get("pkg_url", "")) == "https://x/zhanqi-update.zip", "清单解析：pkg_url 照旧（Windows zip）")
+	ck(str(res.get("url", "")) == "https://x/zhanqi-install.exe", "清单解析：url 照旧（Windows 安装包）")
+	# 顶层 android 兜底（清单偶尔把地址放顶层）
+	var got_res2: Array = []
+	uc.finished.connect(func(r: Dictionary) -> void: got_res2.append(r))
+	uc._done = false
+	uc._finish_ok({"latest": "10.5.5", "android": "https://x/top.apk"})
+	await process_frame
+	ck(got_res2.size() > 0 and str(got_res2[0].get("android_url", "")) == "https://x/top.apk",
+		"清单解析：顶层 android 字段可兜底")
+	uc.queue_free()
+	await process_frame
+
 	# ⑥ 真实解压：用 Godot 自带 ZIPPacker 现造一个 zip 再解，验证「下载下来的包能不能
 	#    正确抠出 exe」这一段。写的是系统临时目录，**不碰 Godot 安装目录**。
 	var tmp := OS.get_temp_dir().path_join("zhanqi_upd_test")

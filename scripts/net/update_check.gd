@@ -23,6 +23,8 @@ signal finished(result: Dictionary)
 ##   "latest": String,            # 远端版本（失败时为空）
 ##   "url": String,               # **安装包**下载地址（手动装的 .exe；失败时为空）
 ##   "pkg_url": String,           # **自动更新包**地址（2026-10-04 新增：zip，内含单文件 exe）
+##   "android_url": String,       # **安卓 APK** 直链（2026-10-10 加；手机端「去下载新版本」用）
+##   "size_android": String,      # 安卓 APK 大小（人读）
 ##   "notes": PackedStringArray,  # 更新说明
 ##   "size": String,              # 安装包大小（人读，如 "82.4 MB"）
 ##   "size_pkg": String,          # 自动更新包大小（人读）
@@ -89,7 +91,7 @@ func _on_completed(result: int, code: int, _headers: PackedStringArray, body: Pa
 	if _done:
 		return
 	if result != HTTPRequest.RESULT_SUCCESS:
-		_finish_fail("网络不可达（result=%d）" % result)
+		_finish_fail("网络不可达，请检查网络后重试")
 		return
 	if code != 200:
 		# 404 = 还没发布过版本清单，这不是错误
@@ -112,10 +114,16 @@ func _finish_ok(data: Dictionary) -> void:
 			notes.append(str(item))
 	# 手动下载用的**安装包**地址（原有语义，指向 *.exe）
 	var url := ""
+	var android_url := ""
 	var downloads: Variant = data.get("downloads", {})
 	if typeof(downloads) == TYPE_DICTIONARY:
 		var d: Dictionary = downloads
 		url = str(d.get("win64", d.get("win", "")))
+		# 🔴 **安卓安装包**地址（2026-10-10 加）：手机端「去下载新版本」用它打开浏览器。
+		#    安卓**绝不能**用 win64 的 exe/zip —— 那是 Windows 的更新链，在手机上装不了。
+		android_url = str(d.get("android", ""))
+	if android_url == "":
+		android_url = str(data.get("android", ""))   # 兼容：清单偶尔把地址放顶层
 	# 自动更新用的**增量包**地址（2026-10-04 新增：zip，内含单文件 exe）
 	# 没有 update.win64 时回退 downloads.win64 —— 但**必须是 .zip 才敢用于自动替换**，
 	# 否则 AutoUpdate 会拿安装包当 zip 解，必然报"压缩包打不开"。
@@ -132,6 +140,8 @@ func _finish_ok(data: Dictionary) -> void:
 		"latest": latest,
 		"url": url,
 		"pkg_url": pkg_url,
+		"android_url": android_url,
+		"size_android": str(data.get("sizeAndroid", "")),
 		"notes": notes,
 		"size": str(data.get("sizeWin64", "")),
 		"size_pkg": str(data.get("sizeUpdateWin64", "")),
@@ -142,7 +152,8 @@ func _finish_ok(data: Dictionary) -> void:
 func _finish_fail(reason: String) -> void:
 	_finish({
 		"ok": false, "has_update": false, "current": current_version(),
-		"latest": "", "url": "", "pkg_url": "", "notes": PackedStringArray(),
+		"latest": "", "url": "", "pkg_url": "", "android_url": "", "size_android": "",
+		"notes": PackedStringArray(),
 		"size": "", "size_pkg": "", "reason": reason,
 	})
 

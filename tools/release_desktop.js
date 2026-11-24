@@ -302,41 +302,55 @@ function releaseNotes() {
     console.warn(`⚠ 清理 installer/ 旧包失败（不影响本次发版）：${e.message}`);
   }
 
-  // ── 9. 同步安装包到桌面（2026-10-05 用户立的规矩：「桌面那个安装包每次要更新一下」）──
+  // ── 9. 同步安装包到「交付目录」（规矩位置：`桌面\一些程序包\`）────────────────
+  //
+  // 🔴 **2026-11-24 纠正**：上一版这里往**桌面根目录**放 `战棋安装包_最新.exe`，是错的。
+  //    用户明确定位：「安装包放哪是有规定的，不要乱放桌面上」。规定位置是
+  //    **`<桌面>\一些程序包\`** —— 本机各项目的安装包都集中在这一层
+  //    （超清转化 / 右键菜单管理器 / 文旅黑星 / A2兴海智学 / 数学资料整理系统 / 战棋…），
+  //    桌面根目录只放快捷方式，不放几百 MB 的二进制。
+  //    ⚠️ 老规矩（README 注意点 37，2026-10-05 立）写的就是"桌面"，今天按用户口径改到子目录，
+  //       README 同步改了 —— 两处必须保持一致。
   //
   // 🔴 **用固定文件名覆盖，不做任何删除**。理由（本机实测）：
   //    在这台机器的沙箱里，`execFileSync` 去 spawn `.workbuddy/binaries/` 下的 exe 会
   //    **间歇性**报 `spawnSync … EBUSY`（node.exe 与 python.exe 都撞过，ISCC 却不撞）。
-  //    而"清掉桌面旧版"按规矩必须**送回收站**（桌面是个人目录，不能 `fs.unlinkSync`），
+  //    而"清掉旧版"按规矩必须**送回收站**（桌面是个人目录，不能 `fs.unlinkSync`），
   //    回收站又只能靠那个 python 脚本 ⇒ 一旦 EBUSY，"清理"就变成"报错"。
   //    ⇒ 改成固定名 `战棋安装包_最新.exe` 覆盖：**零删除、零 spawn**，问题整体消失；
-  //      桌面上永远只有一份最新的，比"每次换名字再删旧的"更省心。
+  //      目录里永远只有一份最新的，比"每次换名字再删旧的"更省心。
   //      具体版本号仍能在文件属性的「详细信息」里看到（Inno 已写 VersionInfo）。
   if (!flag('--no-desktop')) {
     const desktop = path.join(os.homedir(), 'Desktop');
+    const dropDir = path.join(desktop, '一些程序包');
     const DESKTOP_NAME = '战棋安装包_最新.exe';
     if (!fs.existsSync(desktop)) {
       console.log('（没找到桌面目录，跳过同步）');
     } else {
-      console.log('\n▸ 同步安装包到桌面…');
+      console.log('\n▸ 同步安装包到交付目录…');
       try {
-        fs.copyFileSync(installerPath, path.join(desktop, DESKTOP_NAME));
-        console.log(`✓ 已覆盖桌面：${DESKTOP_NAME}（v${VER} · ${(pkgBytes / 1048576).toFixed(1)} MB）`);
+        if (!fs.existsSync(dropDir)) fs.mkdirSync(dropDir, { recursive: true });
+        fs.copyFileSync(installerPath, path.join(dropDir, DESKTOP_NAME));
+        console.log(`✓ 已覆盖：一些程序包\\${DESKTOP_NAME}（v${VER} · ${(pkgBytes / 1048576).toFixed(1)} MB）`);
       } catch (e) {
-        console.error(`⚠ 拷贝到桌面失败：${e.message}`);
+        console.error(`⚠ 拷贝到交付目录失败：${e.message}`);
       }
-      // 只提示、不删：桌面上若还留着**带版本号的旧命名**（历史遗留），列出来由人自己处理。
+      // 只提示、不删：交付目录里若还留着**带版本号的旧命名**（历史遗留），列出来由人自己处理。
       let legacy = [];
       try {
-        legacy = fs.readdirSync(desktop).filter((n) => n.endsWith('.exe') && /^战棋安装包_(?!最新)/.test(n));
+        legacy = fs.readdirSync(dropDir).filter((n) => n.endsWith('.exe') && /^战棋安装包_(?!最新)/.test(n));
       } catch (_) { /* 读不到就算了，不影响发版 */ }
       if (legacy.length) {
-        console.log('  提示：桌面上还有带版本号的旧包（我没动，要清理请手动送回收站）：');
+        console.log('  提示：交付目录里还有带版本号的旧包（我没动，要清理请手动送回收站）：');
         legacy.forEach((n) => console.log(`    ${n}`));
+      }
+      // 桌面根目录若残留旧写法留下的同名文件，也提醒一句（不自动删）。
+      if (fs.existsSync(path.join(desktop, DESKTOP_NAME))) {
+        console.log(`  提示：桌面根目录还有一份旧位置的 ${DESKTOP_NAME}，建议送回收站（我没动）。`);
       }
     }
   } else {
-    console.log('（--no-desktop：不往桌面放）');
+    console.log('（--no-desktop：不往交付目录放）');
   }
 
   // ── 10. 源码同步到 Gitee（2026-10-07 新增）──────────────────────────────

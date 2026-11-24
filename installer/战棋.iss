@@ -1,7 +1,7 @@
 ﻿[Setup]
 AppName=战棋
-AppVersion=10.5.4
-AppVerName=战棋 10.5.4
+AppVersion=10.5.5
+AppVerName=战棋 10.5.5
 AppPublisher=CBW工作室
 ; 2026-10-04 起装到**用户可写**目录（原来是 {autopf} = C:\Program Files\战棋）。
 ; 原因：自动更新要往游戏目录写 _update/ 并替换 exe，而 Program Files 下
@@ -11,10 +11,10 @@ AppPublisher=CBW工作室
 ; 两者不冲突 —— 提权安装，但文件落到当前用户的 LocalAppData（不需要额外授权即可改）。
 DefaultDirName={localappdata}\Programs\战棋
 DefaultGroupName=战棋
-UninstallDisplayName=战棋 10.5.4
+UninstallDisplayName=战棋 10.5.5
 UninstallDisplayIcon={app}\战棋.exe
 OutputDir=C:\Users\Caobo\WorkBuddy\2026-08-27-18-06-41\godot-chess-tactics/installer
-OutputBaseFilename=战棋安装包_10.5.4_20261010
+OutputBaseFilename=战棋安装包_10.5.5_20261124
 Compression=lzma2/max
 SolidCompression=yes
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -22,11 +22,11 @@ WizardStyle=modern
 ; 免杀软加固：安装时要把 CBW 证书写进「受信任的根证书颁发机构」(HKLM)，
 ; 因此必须管理员权限 —— 安装时会弹一次 UAC，这是预期行为。
 PrivilegesRequired=admin
-VersionInfoVersion=10.5.4.0
+VersionInfoVersion=10.5.5.0
 VersionInfoCompany=CBW工作室
-VersionInfoDescription=战棋 10.5.4 安装程序
+VersionInfoDescription=战棋 10.5.5 安装程序
 VersionInfoProductName=战棋
-VersionInfoProductVersion=10.5.4
+VersionInfoProductVersion=10.5.5
 VersionInfoCopyright=CBW工作室
 
 [Languages]

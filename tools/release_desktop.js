@@ -246,7 +246,15 @@ function releaseNotes() {
   const manifest = {
     latest: VER,
     releasedAt: todayDash,
-    downloads: { win64: downloadUrl },        // 安装包 .exe —— 玩家手动下载安装
+    downloads: {
+      win64: downloadUrl,                       // 安装包 .exe —— 玩家手动下载安装
+      // 🔴 **安卓 APK 直链**（2026-10-10 加，与 --manifest-only 分支同语义）：
+      //    手机端「去下载新版本」靠它打开浏览器；**绝不能让手机去下 win64 的 exe/zip**。
+      //    ⚠️ 这里是**完整发版分支**的另一份 manifest 构造 —— 两处必须同步改
+      //    （2026-10-10 实测：只改 --manifest-only 那份，完整发版的清单里 android 段就是空的）。
+      android: opt('--android-url', ''),
+    },
+    sizeAndroid: opt('--android-size', ''),
     sizeWin64: `${(pkgBytes / 1048576).toFixed(1)} MB`,
     update: { win64: updateUrl },             // 更新包 .zip —— 客户端自动下载替换（2026-10-04）
     sizeUpdateWin64: updateSize,

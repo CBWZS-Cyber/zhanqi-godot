@@ -2936,8 +2936,13 @@ func _update_text(res: Dictionary) -> String:
 		if au != "":
 			var sa := str(res.get("size_android", ""))
 			var st := ("（约 %s）" % sa) if sa != "" else ""
-			lines.append("点「去下载新版本」会打开浏览器下载新的手机安装包%s。" % st)
-			lines.append("下载完成后点开它安装；若系统提示「未知来源」，允许一次即可。")
+			lines.append("点「去下载新版本」会打开浏览器下载新版安装包%s。" % st)
+			# ⚠️ 分发的其实是个压缩包（后缀 .zip），原因见 README 注意点 39：
+			#    阿里云 OSS 默认 endpoint **禁止分发 .apk**（ApkDownloadForbidden），
+			#    而给 OSS 绑自定义域名需要已备案的域名 —— 所以改成 .zip 后缀分发，
+			#    玩家用文件管理解压一次即可。这里必须如实说明步骤，否则玩家会懵。
+			lines.append("下载完成后：用手机「文件管理」找到它 → 解压 → 点里面的安装包安装。")
+			lines.append("（若系统提示「未知来源」，允许一次即可。）")
 		else:
 			lines.append("版本清单里还没有安卓安装包地址 —— 去群里要最新的手机版吧。")
 		return "\n".join(lines)
@@ -2970,7 +2975,7 @@ func _on_update_download() -> void:
 				_update_body.text = "版本清单里还没有安卓安装包地址 —— 去群里要最新的手机版吧。"
 			return
 		if _update_body != null:
-			_update_body.text = "已打开浏览器开始下载，下载完成后点开安装包安装。\n（浏览器若提示不是常用文件，选「仍要下载」；安装时提示「未知来源」允许一次即可。）"
+			_update_body.text = "已打开浏览器开始下载。\n下载完成后：用手机「文件管理」找到它 → 解压 → 点里面的安装包安装。\n（浏览器若提示不是常用文件，选「仍要下载」；安装时提示「未知来源」允许一次即可。）"
 		OS.shell_open(au)
 		return
 	var pkg := str(_update_info.get("pkg_url", ""))

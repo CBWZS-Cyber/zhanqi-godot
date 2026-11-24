@@ -201,7 +201,10 @@ if (flag('--no-oss')) {
 }
 
 async function uploadSourceToOss(zipBuf) {
-  const oss = require('../cloud-service/oss');
+  // ⚠️ 本文件在 tools/ 下，oss 模块在 tools/cloud-service/ ⇒ 是 `./cloud-service/oss`
+  //    （2026-11-24 修：原写 `../cloud-service/oss` 解析到工程根，发版日志里
+  //     `Cannot find module '../cloud-service/oss'`，源码留存 OSS 一直静默失败）
+  const oss = require('./cloud-service/oss');
   const KEY = 'game/zhanqi-source.zip';
   const r = await oss.putObject(zipBuf, KEY, { ctype: 'application/zip' });
   if (!r.ok) throw new Error(r.error || 'putObject 未成功');

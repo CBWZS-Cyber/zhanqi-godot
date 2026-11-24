@@ -37,6 +37,9 @@ const http = require("node:http");
 const crypto = require("node:crypto");
 
 const PORT = Number(process.env.PORT || process.argv[2] || 8787);
+// 2026-11-24：默认只听本机，公网入口走 nginx（https://game.learnest.cn/room-service）。
+//   局域网手机调试时用 `BIND_HOST=0.0.0.0 node server.js`。
+const BIND_HOST = process.env.BIND_HOST || '127.0.0.1';
 const TTL_SEC = Number(process.env.TTL_SEC || 600);
 const CODE_LEN = Number(process.env.CODE_LEN || 4);
 const RATE_PER_MIN = Number(process.env.RATE_PER_MIN || 60);
@@ -186,7 +189,7 @@ const server = http.createServer(async (req, res) => {
 
 setInterval(sweep, 30_000).unref();
 
-server.listen(PORT, () => {
-  log(`房间号目录服务已启动 http://0.0.0.0:${PORT}  CODE_LEN=${CODE_LEN} TTL=${TTL_SEC}s`);
+server.listen(PORT, BIND_HOST, () => {
+  log(`房间号目录服务已启动 http://${BIND_HOST}:${PORT}  CODE_LEN=${CODE_LEN} TTL=${TTL_SEC}s`);
   log("自检: curl http://127.0.0.1:" + PORT + "/health");
 });

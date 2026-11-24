@@ -62,6 +62,10 @@ const sms = require('./sms');       // 短信通道（阿里云 dypns 短信认�
 
 // ── 配置 ──────────────────────────────────────────────────────────────────
 const PORT = Number(process.env.PORT || 8789);
+// 2026-11-24：**默认只监听本机**。公网入口统一走 nginx（https://game.learnest.cn），
+//   裸 IP:8789 已关闭 —— 之前的 `0.0.0.0` 让密码在明文 HTTP 上裸奔过一段时间。
+//   要在局域网里用手机直连调试：`BIND_HOST=0.0.0.0 node server.js`（明确写出来才算许可）。
+const BIND_HOST = process.env.BIND_HOST || '127.0.0.1';
 const PREFIX = 'zhanqi';
 const VERSION_KEY = `${PREFIX}/version.json`;
 const TOKEN_TTL_SEC = 30 * 24 * 3600;      // token 有效期 30 天
@@ -1833,7 +1837,7 @@ const server = http.createServer(async (req, res) => {
   return sendJson(res, 404, { ok: false, error: '没有这个接口' });
 });
 
-server.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, BIND_HOST, () => {
   const info = oss.bucketInfo();
   const st = store.stats();
   console.log(`[zhanqi-cloud] 监听 0.0.0.0:${PORT}`);

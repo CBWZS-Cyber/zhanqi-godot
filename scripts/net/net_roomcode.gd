@@ -27,7 +27,8 @@ signal failed(reason: String)
 
 ## 兜底服务地址（正常路径是由调用方注入 `Global.net_room_service`，见 main_ui._init_roomcode）。
 ## 2026-10-03 起指向**自有云服务器**上的部署 —— 原先默认 127.0.0.1 等于要求房主在自己电脑上起服务。
-const DEFAULT_SERVICE := "http://39.105.223.8:8787"
+## 2026-11-24：换成域名 + HTTPS（不走裸 IP:8787 了），与 Global.net_room_service 保持一致。
+const DEFAULT_SERVICE := "https://game.learnest.cn/room-service"
 const TIMEOUT_SEC := 6.0
 const CODE_LEN := 4
 

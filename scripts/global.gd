@@ -22,13 +22,18 @@ var net_transport := "ws"   # "ws"=公网（走自研反向隧道，**输房间�
 ## 换部署点只改这一处；留空则回落到 NetRoomCode.DEFAULT_SERVICE。
 ## ⚠️ 本地自测想用本机实例时，临时改成 "http://127.0.0.1:8787"。
 ## 参见 tools/room-service/server.js
-var net_room_service := "http://39.105.223.8:8787"
+## 2026-11-24：切到自有域名 game.learnest.cn（Let's Encrypt 证书）。
+##   `/room-service` 前缀由 nginx 反代到 127.0.0.1:8787 并剥掉前缀，
+##   所以服务端路由不变（仍是 /room、/health）。
+var net_room_service := "https://game.learnest.cn/room-service"
 
 ## 反向隧道中继地址（2026-10-03 新增）—— 与房间服务同一台机器，但走 TCP 长连接。
 ## 房主建房时主动连它（NAT 无关），换回一个公网端口，再把「公网地址」拿去换房间号。
 ## 这样**任何网络环境下，对方只要有房间号就能加入**，房主不用装 cpolar 之类的东西。
 ## 参见 tools/relay-service/relay-service.js
-var net_relay_host := "39.105.223.8"
+## 2026-11-24：换成域名。**裸 TCP 长连接不走 nginx**，DNS 解析到同一台机器后
+##   客户端直连 game.learnest.cn:19001；换 IP 时只改 A 记录，客户端不用重发版。
+var net_relay_host := "game.learnest.cn"
 var net_relay_port := 19001
 
 # ---------- 云端服务（2026-10-04 新增）----------
@@ -36,9 +41,9 @@ var net_relay_port := 19001
 ## 部署在 /opt/zhanqi-cloud（systemd 单元 `zhanqi-cloud`，端口 8789）。
 ## 换部署点只改这一处。参见 tools/cloud-service/server.js
 ##
-## ⚠️ 明文 HTTP（没有域名就签不了证书）。密码在链路上是明文，
-##    内测/朋友之间可接受，公开运营前必须上 HTTPS。
-var cloud_service := "http://39.105.223.8:8789"
+## 2026-11-24：已上 HTTPS（原为明文 HTTP + 裸 IP，密码在链路上可见）。
+##   一个域名承载两个服务：/room-service → 8787，其余 → 8789。
+var cloud_service := "https://game.learnest.cn"
 ## 本局是否处于"已登录云端"状态。false = **离线游玩**（进度只在这台电脑，见 `ProgressStore`）。
 var cloud_online := false
 

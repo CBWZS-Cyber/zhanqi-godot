@@ -26,7 +26,7 @@ signal peer_arrived                    ## 有玩家连进来了（UI 可以据�
 signal failed(reason: String)          ## 建隧道失败（中继不可达 / 端口池满 / 本机 server 没开）
 signal closed                          ## 隧道断开（房主关房或中继断了）
 
-const DEFAULT_RELAY_HOST := "39.105.223.8"
+const DEFAULT_RELAY_HOST := "game.learnest.cn"
 const DEFAULT_RELAY_PORT := 19001
 const CONNECT_TIMEOUT_MS := 12000
 const LOCAL_CONNECT_TIMEOUT_MS := 8000

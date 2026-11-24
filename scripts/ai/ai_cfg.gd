@@ -15,7 +15,9 @@ extends RefCounted
 
 ## 云端战术模型端点（兜底值）。
 ## 正常路径：进对局前由调用方设成 `Global.cloud_service + "/llm"`。
-const DEFAULT_ENDPOINT := "http://39.105.223.8:8789/llm"
+## 2026-11-24：裸 IP:端口 → 域名 + HTTPS。IP 直连的 http:// 端点已不再需要：
+##   game.learnest.cn 由 nginx 终结 TLS 后反代到 127.0.0.1:8789。
+const DEFAULT_ENDPOINT := "https://game.learnest.cn/llm"
 
 ## ⚠️ 本文件**不引用 `Global` 或任何 autoload** —— `-s 脚本`模式下 autoload 名解析不了，
 ##    依赖链上出现它，那个测试就整个编不过（NetRoomCode / CloudApi 同一条教训）。

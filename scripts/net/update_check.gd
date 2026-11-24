@@ -37,7 +37,7 @@ signal finished(result: Dictionary)
 
 const TIMEOUT_SEC := 6.0
 ## 兜底地址：正常路径由调用方注入 Global.cloud_service + "/version.json"
-const DEFAULT_URL := "http://39.105.223.8:8789/version.json"
+const DEFAULT_URL := "https://game.learnest.cn/version.json"
 
 var _http: HTTPRequest = null
 var _timer: Timer = null

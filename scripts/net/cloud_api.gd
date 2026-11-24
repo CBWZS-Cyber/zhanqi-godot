@@ -52,7 +52,7 @@ const CH_SMS := "sms"
 
 const TIMEOUT_SEC := 8.0
 ## 兜底地址；正常路径由 main_ui 注入 Global.cloud_service
-const DEFAULT_SERVICE := "http://39.105.223.8:8789"
+const DEFAULT_SERVICE := "https://game.learnest.cn"
 
 var service_url := DEFAULT_SERVICE
 var token := ""

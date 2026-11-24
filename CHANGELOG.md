@@ -29,6 +29,38 @@
 - 电脑版不变：还是点「立即更新」后台下载，下好点「重启更新」
 <!-- RELEASE-NOTES-END -->
 
+## [10.5.5 未发包] — 2026-11-24
+
+> 主题：**服务端从「裸 IP + 明文 HTTP」迁到「自有域名 + HTTPS」，同时开源。**
+
+### Changed
+- **服务端地址全部换成 `game.learnest.cn`**（原为 `39.105.223.8` 裸 IP + 明文 HTTP，密码在链路上可见）：
+  - `Global.net_room_service` → `https://game.learnest.cn/room-service`
+  - `Global.cloud_service` → `https://game.learnest.cn`
+  - `Global.net_relay_host` → `game.learnest.cn`（**裸 TCP 19001 不经 nginx**，DNS 直连）
+  - `AICfg.DEFAULT_ENDPOINT` → `https://game.learnest.cn/llm`
+  - 三处模块级兜底同步：`CloudApi.DEFAULT_SERVICE`、`NetRoomCode.DEFAULT_SERVICE`、`UpdateCheck.DEFAULT_URL`
+- **nginx 反代**（新站点 `game.learnest.cn`）：`/room-service/*` → `127.0.0.1:8787`（剥前缀，服务端路由不变），其余 → `127.0.0.1:8789`
+- **证书**：Let's Encrypt，webroot 签发，续期钩子 `/etc/letsencrypt/renewal-hooks/deploy/50-game-deploy.sh`（照现有 `20-`/`30-`/`40-` 的写法，只管自己的域名）
+- 端到端实测（curl + Godot 双验证）：`/health`、`/room-service/health`、`/version.json`、`/llm/ping` 全 200；HTTP → 301 跳 HTTPS
+
+### Added
+- `tests/_probes/https_probe.gd` —— 验证 **Godot 引擎自身 TLS 栈**能走通域名。
+  存在理由：`curl` 通 ≠ 引擎通（mbedtls/系统 CA/SNI 任一不对都会在引擎里失败，curl 照样 200）。
+- 开源配置：`LICENSE`（GPL-3.0 全文）+ `LICENSE-CONTENT.md`（代码与创作内容分开授权）
+- README 顶部加「许可」段
+
+### Verified
+- Godot `--headless --import` + `--quit-after 180`：**0 SCRIPT/Parse/Compile ERROR**
+- `cloud_auth_smoke`：**PASS 116 / FAIL 0**
+- `combat_regression`：**PASS 113 / FAIL 0**
+- `https_probe`：4/4 OK，`exit=0`
+
+### 备注
+- 裸 IP 端口（8787 / 8789 / 19001）**暂时保留**，给已发包的 10.5.4 老客户端留退路；
+  下个版本全面切域名后可关。
+- CHANGELOG 里历史段落的旧 IP **刻意不改** —— 那是当时的事实记录，不属于本次变更。
+
 ## [10.5.4 发包版] — 2026-10-10
 
 ### Fixed
@@ -54,6 +86,18 @@
   （`downloads.android` 缺省时回退顶层 `android` 字段）。
 - 手机端更新面板：按钮改「去下载新版本」，说明文案按手机场景写（浏览器下载 / 未知来源授权提示）。
 
+### 平台限制（本次实测，必须知道）
+- 🔴 **阿里云 OSS 默认公网 endpoint 禁止分发 `.apk` 文件**：实测返回
+  `ApkDownloadForbidden`（「The APK file is not allowed to be distributed in a public network
+  using the OSS endpoint, please use CNAME instead」）。放行条件是给 bucket 绑**已备案的自定义域名**
+  —— 当前服务器是 IP 直连、没有域名，所以 **`.apk` 直链一律被拦**（签名 URL 也一样拦，与签名无关）。
+- **绕行**：APK 本质就是 zip（文件头同为 `PK`，而政策按**后缀**拦），改用
+  **`game/zhanqi-android-v10.5.4.zip`** 分发 —— 实测 **206 + PK 魔数** 可下载，
+  同一份字节换成 `.apk` 后缀就 400。代价：手机端多一步「用文件管理解压」，
+  客户端文案已按此写（`main_ui._update_text` 的安卓分支）。
+- 若将来要"下载即装"的体验，两条路：① 给 OSS 绑**已备案域名**（一劳永逸）；
+  ② 服务器中转（出口仅 3 Mbps，297 MB ≈ 13 分钟，不推荐）。
+
 ### 兼容性说明（要如实知道的事）
 - **已装 10.5.2 的手机拿不到这次的修复**（旧代码已打包）——它们点更新仍会失败。
   这批设备需要**手动安装本次的 APK**；从 10.5.4 起，手机端的更新提示才真正可用。
@@ -64,6 +108,26 @@
 - 安卓副本：同步 755 文件 → 重放安卓层（触摸补丁 `replaced: True`）→ 重导入 →
   `combat_regression` 与 `update_smoke` 在副本上全绿。
 - 全量回归 13 条：见下方发版记录。
+
+### 发版记录（2026-10-10）
+
+| 产物 | 大小 | 位置 |
+|---|---|---|
+| Windows 安装包 `战棋安装包_10.5.4_20261010.exe` | 159.4 MB | OSS `game/zhanqi-install-v10.5.4.exe` |
+| Windows 更新包 `zhanqi-update-v10.5.4.zip` | **169.7 MB**（源 238.1 MB，省 28.7%） | OSS `game/zhanqi-update-v10.5.4.zip` |
+| **安卓包** `战棋_android.apk`（debug） | **297.3 MB** | OSS **`game/zhanqi-android-v10.5.4.zip`**（**必须 .zip 后缀**，见上方「平台限制」） |
+| 版本清单 `version.json` | 1130 字节 | OSS `zhanqi/version.json`（新含 `downloads.android`；三条直链实测 **206**） |
+| 版本存档 `10.10整合版_手机版更新修复.zip` | — | `cbw\战棋\战棋版本存档\` |
+| 桌面 | `战棋安装包_最新.exe`（10.5.4）+ `战棋手机版_最新.apk`（10.5.4） | `C:\Users\Caobo\Desktop\` |
+
+- 全量回归 13 条 **rc 全 0 / FAIL 0**（`update_smoke` **30/30**，其中错误码→人话、清单 android 段解析为本版新增）。
+- 安卓副本：同步 755 文件 → 重放安卓层（触摸补丁 `replaced: True`）→ 重导入（exit=0）→
+  回归 `update_smoke` **30/30** → 导出 **exit=0**（`.tmp` 并行清理 10 个、残余 0）→
+  `aapt` 复核 **`versionCode='10504'` / `versionName='10.5.4'`**（旧 APK 是 1，可覆盖安装）。
+- ⚠️ 两个发版脚本自身的坑（本次踩到并已修/绕过）：
+  1. 更新包那步**又踩 `spawnSync EBUSY`**（从 shell 补跑解决，老坑，见 `godot-pack` skill 第 4 条）；
+  2. **完整发版分支的 manifest 是另一份构造**（246 行），只改 `--manifest-only` 那份时
+     `--android-url` 不会生效 —— 已补进 246 行那份并加注释标明"两处必须同步"。
 
 ## [10.5.3 发包版] — 2026-10-09
 

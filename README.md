@@ -1,5 +1,11 @@
 # 战棋（Godot 4.7）项目说明
 
+> **许可 / License**
+> 代码 [GPL-3.0](LICENSE) —— 可自由使用/修改/分发，**衍生作品须同样以 GPL-3.0 开源**；作者保留另行商业授权的权利。
+> 剧情、人设、世界观等创作内容 [CC BY-NC-ND 4.0](LICENSE-CONTENT.md) —— 署名、非商业、禁止演绎。
+> **美术资源与字体不在本仓库内，保留所有权利**。第三方组件（Godot / Noto / Ma Shan Zheng / DragonBones）
+> 的许可与归属见 [LICENSE-CONTENT.md](LICENSE-CONTENT.md)。
+
 > 📌 **文档纪律（先读这条）**：包内文档**只有 `README.md` + `CHANGELOG.md` 两份**。
 > **禁止新建任何 `9.xx说明.md` / `*_说明.txt` 单版说明** —— 一个版本 = CHANGELOG 里的一段，不是一个新文件。
 > 本版改了什么 → 写 `CHANGELOG.md` 顶部；进度 / 注意点 / 设计约束 → 写本文件对应章节。
@@ -925,6 +931,13 @@ godot --headless --path . --check-only -s res://scripts/ui/xxx.gd
       安卓走 **「去下载新版本」→ `OS.shell_open(清单 downloads.android)` 打开浏览器下载 APK → 手动安装**。
     - 🔴 **清单必须带 `downloads.android`**（`release_desktop.js --android-url`），否则手机端提示
       「清单里还没有安卓安装包地址」。发版时**双端一起发**（先传 APK 拿直链，再跑 Windows 流水线）。
+      ⚠️ 该参数在 `release_desktop.js` 里**有两份 manifest 构造**（`--manifest-only` 分支与完整发版分支），
+      改一处不够 —— 2026-10-10 实测踩过。
+    - 🔴 **安卓包在 OSS 上必须以 `.zip` 后缀存放**（2026-10-10 实测）：阿里云 OSS 默认公网 endpoint
+      **禁止分发 `.apk`**（返回 `ApkDownloadForbidden`，官方要求改用 CNAME/备案域名）——
+      同一份字节，`.apk` 后缀 400、`.zip` 后缀 **206 正常下载**（APK 本质就是 zip，政策按**后缀**拦，
+      签名 URL 一样拦、与签名无关）。所以对象名是 `game/zhanqi-android-v<版本>.zip`，
+      手机端文案按「下载 → 文件管理解压 → 安装」来写。想要"下载即装"，只能等绑了备案域名。
     - 🔴 **下载/更新失败的提示一律走 `AutoUpdate.human_error()`**（错误码 → 可行动的中文），
       **绝不把 `result=N` 这种内部码怼给玩家**（有回归断言钉着，见 `tests/update_smoke.gd` ⑤b）。
     - 安卓 `versionCode` 必须随版本递增（现在 `= 10504`，在 `export_presets.cfg` 的安卓 preset 里），
